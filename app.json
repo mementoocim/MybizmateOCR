@@ -33,7 +33,8 @@
           }
         }
       ],
-      "./plugins/with-windows-native-paths"
+      "./plugins/with-windows-native-paths",
+      "expo-asset"
     ],
     "scheme": "mybizmatescan"
   }
