@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mybizmate-scan",
+    "name": "MyBizMate Scan",
     "slug": "mybizmate-scan",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,10 +16,25 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.mybizmate.scan"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
+      "./plugins/with-windows-native-paths"
+    ],
+    "scheme": "mybizmatescan"
   }
 }
