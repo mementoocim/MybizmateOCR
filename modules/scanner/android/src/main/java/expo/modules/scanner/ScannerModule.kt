@@ -15,11 +15,24 @@ internal class UnreadablePhotoException :
   CodedException("ERR_UNREADABLE_IMAGE", "This file isn't a photo the scanner can open.", null)
 
 class ScannerModule : Module() {
-  private val lock = Any()
-  private var handle = 0L
-
   private val context: Context
     get() = appContext.reactContext ?: throw IllegalStateException("The scanner needs the app's context")
+
+  /** The one scanner, created on first use from the module's assets (assets/scanner). */
+  private val scanner = ScannerHolder(
+    create = {
+      val assets = context.assets
+      fun bytes(name: String) = assets.open("scanner/$name").use { it.readBytes() }
+      NativeScanner.create(
+        bytes("inference_latin.onnx"),
+        String(bytes("dict.txt"), Charsets.UTF_8),
+        String(bytes("field_map.json"), Charsets.UTF_8),
+        bytes("form_small.png"),
+        4,
+      )
+    },
+    destroy = { NativeScanner.destroy(it) },
+  )
 
   override fun definition() = ModuleDefinition {
     Name("Scanner")
@@ -27,44 +40,22 @@ class ScannerModule : Module() {
     Function("coreInfo") { NativeScanner.coreInfo() }
 
     AsyncFunction("preload") {
-      scanner()
+      scanner.use { }
       Unit
     }
 
     AsyncFunction("scanPhoto") { uri: String -> scan(uri) }
 
-    OnDestroy {
-      synchronized(lock) {
-        if (handle != 0L) {
-          NativeScanner.destroy(handle)
-          handle = 0L
-        }
-      }
-    }
+    // Waits for a scan in flight, then frees the native scanner (ScannerHolder).
+    OnDestroy { scanner.close() }
   }
 
-  /** The one scanner, created on first use from the module's assets (assets/scanner). */
-  private fun scanner(): Long = synchronized(lock) {
-    if (handle == 0L) {
-      val assets = context.assets
-      fun bytes(name: String) = assets.open("scanner/$name").use { it.readBytes() }
-      handle = NativeScanner.create(
-        bytes("inference_latin.onnx"),
-        String(bytes("dict.txt"), Charsets.UTF_8),
-        String(bytes("field_map.json"), Charsets.UTF_8),
-        bytes("form_small.png"),
-        4,
-      )
-    }
-    handle
-  }
-
-  private fun scan(uri: String): String {
+  private fun scan(uri: String): String = scanner.use { handle ->
     val scans = File(context.cacheDir, "scans")
     val outDir = File(scans, System.currentTimeMillis().toString()).apply { mkdirs() }
     val path = localPath(Uri.parse(uri), outDir)
     val json = try {
-      NativeScanner.scanPhoto(scanner(), path, outDir.absolutePath)
+      NativeScanner.scanPhoto(handle, path, outDir.absolutePath)
     } catch (e: IOException) {
       // OpenCV can't open it (HEIC, for one): let Android decode it, then scan that.
       val bitmap = BitmapFactory.decodeFile(path) ?: throw UnreadablePhotoException()
@@ -72,13 +63,13 @@ class ScannerModule : Module() {
       FileOutputStream(png).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
       bitmap.recycle()
       try {
-        NativeScanner.scanPhoto(scanner(), png.absolutePath, outDir.absolutePath)
+        NativeScanner.scanPhoto(handle, png.absolutePath, outDir.absolutePath)
       } catch (again: IOException) {
         throw UnreadablePhotoException()
       }
     }
     keepNewest(scans, 10)
-    return json
+    json
   }
 
   /** A file path for the photo: file:// as is, content:// copied into the scan's folder first. */

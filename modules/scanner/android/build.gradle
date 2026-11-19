@@ -53,6 +53,7 @@ dependencies {
   implementation "org.opencv:opencv:${opencvVersion}"
   implementation "com.microsoft.onnxruntime:onnxruntime-android:${ortVersion}"
   ortAar "com.microsoft.onnxruntime:onnxruntime-android:${ortVersion}@aar"
+  testImplementation "junit:junit:4.13.2"
 }
 
 def extractOrt = tasks.register("extractOrt", Sync) {
