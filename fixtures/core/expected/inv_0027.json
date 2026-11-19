@@ -1,0 +1,354 @@
+{
+ "photo": "inv_0027.jpg",
+ "aligned": true,
+ "form": "sales_invoice",
+ "photoSize": [
+  1887,
+  2200
+ ],
+ "turned": false,
+ "corners": [
+  [
+   235.69052124023438,
+   199.67025756835938
+  ],
+  [
+   1653.79736328125,
+   221.07394409179688
+  ],
+  [
+   1735.6395263671875,
+   2035.52099609375
+  ],
+  [
+   278.1289367675781,
+   2021.6798095703125
+  ]
+ ],
+ "sharpness": 2.579571040267074,
+ "sharpMin": 1.0,
+ "light": 239.0,
+ "terms": "account",
+ "blanks": 36,
+ "reads": [
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "0008490",
+   "conf": 0.9999936648777553,
+   "alts": [],
+   "cropSize": [
+    149,
+    39
+   ]
+  },
+  {
+   "name": "date",
+   "type": "date",
+   "text": "Oct 23, 2026",
+   "conf": 0.9693012634913126,
+   "alts": [],
+   "cropSize": [
+    229,
+    45
+   ]
+  },
+  {
+   "name": "customer_name",
+   "type": "text",
+   "text": "Villanueya Bakeshop",
+   "conf": 0.9945247643872311,
+   "alts": [],
+   "cropSize": [
+    292,
+    45
+   ]
+  },
+  {
+   "name": "customer_tin",
+   "type": "tin",
+   "text": "890123456",
+   "conf": 0.9999802509943644,
+   "alts": [],
+   "cropSize": [
+    166,
+    43
+   ]
+  },
+  {
+   "name": "customer_address",
+   "type": "text",
+   "text": "Brgy. Minante 1, Cauayan City",
+   "conf": 0.9757795703822169,
+   "alts": [],
+   "cropSize": [
+    496,
+    48
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "Eight thousand three hundred twenty-five pesos only",
+   "conf": 0.9988832310134289,
+   "alts": [],
+   "cropSize": [
+    874,
+    48
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "7,433.04",
+   "conf": 0.999864898622036,
+   "alts": [],
+   "cropSize": [
+    119,
+    35
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "891.96",
+   "conf": 0.9998348355293274,
+   "alts": [],
+   "cropSize": [
+    78,
+    36
+   ]
+  },
+  {
+   "name": "vat_exempt",
+   "type": "amount",
+   "text": "0.00",
+   "conf": 0.9999535977840424,
+   "alts": [],
+   "cropSize": [
+    60,
+    33
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "8,325",
+   "conf": 0.9998750209808349,
+   "alts": [],
+   "cropSize": [
+    75,
+    37
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "891.96",
+   "conf": 0.9991920590400696,
+   "alts": [],
+   "cropSize": [
+    91,
+    38
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "7,433.04",
+   "conf": 0.9997691363096237,
+   "alts": [],
+   "cropSize": [
+    110,
+    32
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "891.96",
+   "conf": 0.9998659988244375,
+   "alts": [],
+   "cropSize": [
+    94,
+    38
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "8,325",
+   "conf": 0.9994470477104187,
+   "alts": [],
+   "cropSize": [
+    78,
+    36
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "5",
+   "conf": 0.9999985694885254,
+   "alts": [],
+   "cropSize": [
+    26,
+    36
+   ]
+  },
+  {
+   "name": "item1_unit",
+   "type": "text",
+   "text": "pc",
+   "conf": 0.7889022827148438,
+   "alts": [],
+   "cropSize": [
+    42,
+    34
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Alaska Evap 370ml",
+   "conf": 0.9992114901542664,
+   "alts": [],
+   "cropSize": [
+    262,
+    43
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "45",
+   "conf": 0.9999691843986511,
+   "alts": [],
+   "cropSize": [
+    44,
+    40
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "225",
+   "conf": 0.9999975363413492,
+   "alts": [],
+   "cropSize": [
+    70,
+    39
+   ]
+  },
+  {
+   "name": "item2_qty",
+   "type": "number",
+   "text": "20",
+   "conf": 0.9999901652336121,
+   "alts": [],
+   "cropSize": [
+    41,
+    36
+   ]
+  },
+  {
+   "name": "item2_unit",
+   "type": "text",
+   "text": "baq",
+   "conf": 0.971020499865214,
+   "alts": [],
+   "cropSize": [
+    60,
+    38
+   ]
+  },
+  {
+   "name": "item2_description",
+   "type": "text",
+   "text": "Cement40kg",
+   "conf": 0.9991776943206787,
+   "alts": [],
+   "cropSize": [
+    189,
+    40
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "270",
+   "conf": 0.9999656279881796,
+   "alts": [],
+   "cropSize": [
+    65,
+    38
+   ]
+  },
+  {
+   "name": "item2_amount",
+   "type": "amount",
+   "text": "5,400",
+   "conf": 0.9999252796173096,
+   "alts": [],
+   "cropSize": [
+    90,
+    37
+   ]
+  },
+  {
+   "name": "item3_qty",
+   "type": "number",
+   "text": "2",
+   "conf": 0.9999977350234985,
+   "alts": [],
+   "cropSize": [
+    29,
+    37
+   ]
+  },
+  {
+   "name": "item3_unit",
+   "type": "text",
+   "text": "sack",
+   "conf": 0.9999562799930573,
+   "alts": [],
+   "cropSize": [
+    74,
+    39
+   ]
+  },
+  {
+   "name": "item3_description",
+   "type": "text",
+   "text": "Rice",
+   "conf": 0.9999383985996246,
+   "alts": [],
+   "cropSize": [
+    67,
+    38
+   ]
+  },
+  {
+   "name": "item3_unit_price",
+   "type": "amount",
+   "text": "1,350",
+   "conf": 0.9999631643295288,
+   "alts": [],
+   "cropSize": [
+    84,
+    40
+   ]
+  },
+  {
+   "name": "item3_amount",
+   "type": "amount",
+   "text": "2,700",
+   "conf": 0.9995853662490845,
+   "alts": [],
+   "cropSize": [
+    78,
+    37
+   ]
+  }
+ ]
+}

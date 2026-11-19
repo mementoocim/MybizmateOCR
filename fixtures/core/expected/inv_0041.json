@@ -1,0 +1,272 @@
+{
+ "photo": "inv_0041.jpg",
+ "aligned": true,
+ "form": "sales_invoice",
+ "photoSize": [
+  1535,
+  1924
+ ],
+ "turned": false,
+ "corners": [
+  [
+   152.50601196289062,
+   193.3514404296875
+  ],
+  [
+   1433.9556884765625,
+   247.27145385742188
+  ],
+  [
+   1347.9892578125,
+   1735.7930908203125
+  ],
+  [
+   118.97251892089844,
+   1697.6365966796875
+  ]
+ ],
+ "sharpness": 1.9143014002145762,
+ "sharpMin": 1.0,
+ "light": 255.0,
+ "terms": "account",
+ "blanks": 45,
+ "reads": [
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "0007562",
+   "conf": 0.9999924898147583,
+   "alts": [],
+   "cropSize": [
+    149,
+    39
+   ]
+  },
+  {
+   "name": "date",
+   "type": "date",
+   "text": "Nov 03, 2026",
+   "conf": 0.976487343509992,
+   "alts": [],
+   "cropSize": [
+    214,
+    45
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "One thousand three hundred fifty-three pesos and 75/100",
+   "conf": 0.9939864711327986,
+   "alts": [],
+   "cropSize": [
+    918,
+    48
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "1,208.71",
+   "conf": 0.9893276244401932,
+   "alts": [
+    "7,208.71"
+   ],
+   "cropSize": [
+    122,
+    38
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "145.04",
+   "conf": 0.9776024222373962,
+   "alts": [
+    "745.04"
+   ],
+   "cropSize": [
+    99,
+    34
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "1,353.75",
+   "conf": 0.9994171112775803,
+   "alts": [],
+   "cropSize": [
+    116,
+    38
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "745.04",
+   "conf": 0.9223885436852773,
+   "alts": [
+    "145.04"
+   ],
+   "cropSize": [
+    85,
+    30
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "7,208.71",
+   "conf": 0.9135938361287117,
+   "alts": [
+    "7,208.77",
+    "1,208.71"
+   ],
+   "cropSize": [
+    115,
+    36
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "145.04",
+   "conf": 0.9897719422976176,
+   "alts": [
+    "745.04"
+   ],
+   "cropSize": [
+    90,
+    34
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "7,353.75",
+   "conf": 0.9395698457956314,
+   "alts": [
+    "1,353.75",
+    "7.353.75"
+   ],
+   "cropSize": [
+    109,
+    35
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "5",
+   "conf": 0.9746127724647522,
+   "alts": [],
+   "cropSize": [
+    24,
+    34
+   ]
+  },
+  {
+   "name": "item1_unit",
+   "type": "text",
+   "text": "pc",
+   "conf": 0.9867497682571411,
+   "alts": [],
+   "cropSize": [
+    41,
+    31
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Alaska Evap 370ml",
+   "conf": 0.9748896535705117,
+   "alts": [],
+   "cropSize": [
+    243,
+    41
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "42.75",
+   "conf": 0.9928519129753113,
+   "alts": [],
+   "cropSize": [
+    78,
+    38
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "213.75",
+   "conf": 0.9998917480309805,
+   "alts": [],
+   "cropSize": [
+    101,
+    37
+   ]
+  },
+  {
+   "name": "item2_qty",
+   "type": "number",
+   "text": "12",
+   "conf": 0.9903997480869293,
+   "alts": [],
+   "cropSize": [
+    43,
+    34
+   ]
+  },
+  {
+   "name": "item2_unit",
+   "type": "text",
+   "text": "pack",
+   "conf": 0.9999366700649261,
+   "alts": [],
+   "cropSize": [
+    79,
+    43
+   ]
+  },
+  {
+   "name": "item2_description",
+   "type": "text",
+   "text": "Bear Brand",
+   "conf": 0.9538396060466766,
+   "alts": [],
+   "cropSize": [
+    176,
+    42
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "95.00",
+   "conf": 0.9999367356300354,
+   "alts": [],
+   "cropSize": [
+    91,
+    39
+   ]
+  },
+  {
+   "name": "item2_amount",
+   "type": "amount",
+   "text": "1,140.00",
+   "conf": 0.9745189175009727,
+   "alts": [
+    "7,140.00",
+    "1,740.00"
+   ],
+   "cropSize": [
+    119,
+    33
+   ]
+  }
+ ]
+}

@@ -1,0 +1,276 @@
+{
+ "invoice_no": {
+  "type": "printed_digits",
+  "text": "0007655",
+  "conf": 0.9999944993427822,
+  "alts": []
+ },
+ "date": {
+  "type": "date",
+  "text": "Sep 20, 2026",
+  "conf": 0.9990361630916595,
+  "alts": []
+ },
+ "customer_name": {
+  "type": "text",
+  "text": "TorresConstruction Supply",
+  "conf": 0.9902282404899597,
+  "alts": []
+ },
+ "customer_tin": {
+  "type": "tin",
+  "text": "223-344-556",
+  "conf": 0.9999915144660256,
+  "alts": []
+ },
+ "customer_address": {
+  "type": "text",
+  "text": "Diversion Rd., Ilagan City",
+  "conf": 0.9826998252135056,
+  "alts": []
+ },
+ "amount_words": {
+  "type": "text",
+  "text": "Twenty-four thousand three hundred seventy-seven pesos only",
+  "conf": 0.9987451919054581,
+  "alts": []
+ },
+ "vatable_sales": {
+  "type": "amount",
+  "text": "21,765.18",
+  "conf": 0.9997159507539537,
+  "alts": []
+ },
+ "vat": {
+  "type": "amount",
+  "text": "2,611.82",
+  "conf": 0.9997087717056274,
+  "alts": []
+ },
+ "zero_rated": {
+  "type": "amount",
+  "text": "0.00",
+  "conf": 0.9989973604679108,
+  "alts": []
+ },
+ "vat_exempt": {
+  "type": "amount",
+  "text": "0.00",
+  "conf": 0.9999792575836182,
+  "alts": []
+ },
+ "total_sales": {
+  "type": "amount",
+  "text": "24,377",
+  "conf": 0.9991177221139272,
+  "alts": []
+ },
+ "less_vat": {
+  "type": "amount",
+  "text": "2,611.82",
+  "conf": 0.9998417347669601,
+  "alts": []
+ },
+ "net_of_vat": {
+  "type": "amount",
+  "text": "21,765.18",
+  "conf": 0.9909132520357767,
+  "alts": [
+   "21.765.18"
+  ]
+ },
+ "add_vat": {
+  "type": "amount",
+  "text": "2,611.82",
+  "conf": 0.9996839985251427,
+  "alts": []
+ },
+ "total_due": {
+  "type": "amount",
+  "text": "24,377",
+  "conf": 0.957238088051478,
+  "alts": [
+   "24.377"
+  ]
+ },
+ "item1_qty": {
+  "type": "number",
+  "text": "24",
+  "conf": 0.9999830722808838,
+  "alts": []
+ },
+ "item1_unit": {
+  "type": "text",
+  "text": "kg",
+  "conf": 0.9996648728847504,
+  "alts": []
+ },
+ "item1_description": {
+  "type": "text",
+  "text": "Sugar",
+  "conf": 0.9999645233154297,
+  "alts": []
+ },
+ "item1_unit_price": {
+  "type": "amount",
+  "text": "85",
+  "conf": 0.9999968409538269,
+  "alts": []
+ },
+ "item1_amount": {
+  "type": "amount",
+  "text": "2,040",
+  "conf": 0.9996091485023498,
+  "alts": []
+ },
+ "item2_qty": {
+  "type": "number",
+  "text": "3",
+  "conf": 0.9999988079071045,
+  "alts": []
+ },
+ "item2_unit": {
+  "type": "text",
+  "text": "pc",
+  "conf": 0.9973736107349396,
+  "alts": []
+ },
+ "item2_description": {
+  "type": "text",
+  "text": "Alaskg Evap370ml",
+  "conf": 0.9889310859143734,
+  "alts": []
+ },
+ "item2_unit_price": {
+  "type": "amount",
+  "text": "45",
+  "conf": 0.9999879598617554,
+  "alts": []
+ },
+ "item2_amount": {
+  "type": "amount",
+  "text": "135",
+  "conf": 0.999984343846639,
+  "alts": []
+ },
+ "item3_qty": {
+  "type": "number",
+  "text": "3",
+  "conf": 0.9999991655349731,
+  "alts": []
+ },
+ "item3_unit": {
+  "type": "text",
+  "text": "can",
+  "conf": 0.8752788305282593,
+  "alts": []
+ },
+ "item3_description": {
+  "type": "text",
+  "text": "Sardines",
+  "conf": 0.9997346699237823,
+  "alts": []
+ },
+ "item3_unit_price": {
+  "type": "amount",
+  "text": "24",
+  "conf": 0.9999387264251709,
+  "alts": []
+ },
+ "item3_amount": {
+  "type": "amount",
+  "text": "72",
+  "conf": 0.8329597413539886,
+  "alts": []
+ },
+ "item4_qty": {
+  "type": "number",
+  "text": "75",
+  "conf": 0.9999896287918091,
+  "alts": []
+ },
+ "item4_unit": {
+  "type": "text",
+  "text": "tray",
+  "conf": 0.9999003708362579,
+  "alts": []
+ },
+ "item4_description": {
+  "type": "text",
+  "text": "Egqs",
+  "conf": 0.9950291365385056,
+  "alts": []
+ },
+ "item4_unit_price": {
+  "type": "amount",
+  "text": "260",
+  "conf": 0.9999965826670328,
+  "alts": []
+ },
+ "item4_amount": {
+  "type": "amount",
+  "text": "19,500",
+  "conf": 0.9999544123808543,
+  "alts": []
+ },
+ "item5_qty": {
+  "type": "number",
+  "text": "24",
+  "conf": 0.9999914765357971,
+  "alts": []
+ },
+ "item5_unit": {
+  "type": "text",
+  "text": "pc",
+  "conf": 0.9986023008823395,
+  "alts": []
+ },
+ "item5_description": {
+  "type": "text",
+  "text": "Bread Loaf",
+  "conf": 0.9525136291980744,
+  "alts": []
+ },
+ "item5_unit_price": {
+  "type": "amount",
+  "text": "70",
+  "conf": 0.9999533295631409,
+  "alts": []
+ },
+ "item5_amount": {
+  "type": "amount",
+  "text": "1,680",
+  "conf": 0.9996530294418335,
+  "alts": []
+ },
+ "item6_qty": {
+  "type": "number",
+  "text": "10",
+  "conf": 0.9999613165855408,
+  "alts": []
+ },
+ "item6_unit": {
+  "type": "text",
+  "text": "kg",
+  "conf": 0.9999192357063293,
+  "alts": []
+ },
+ "item6_description": {
+  "type": "text",
+  "text": "Ngils 2in",
+  "conf": 0.9361800816324022,
+  "alts": []
+ },
+ "item6_unit_price": {
+  "type": "amount",
+  "text": "95",
+  "conf": 0.9999477863311768,
+  "alts": []
+ },
+ "item6_amount": {
+  "type": "amount",
+  "text": "950",
+  "conf": 0.9999823172887167,
+  "alts": []
+ }
+}

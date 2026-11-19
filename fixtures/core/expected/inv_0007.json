@@ -1,0 +1,534 @@
+{
+ "photo": "inv_0007.jpg",
+ "aligned": true,
+ "form": "sales_invoice",
+ "photoSize": [
+  1730,
+  2179
+ ],
+ "turned": false,
+ "corners": [
+  [
+   173.7530059814453,
+   134.78814697265625
+  ],
+  [
+   1564.9400634765625,
+   82.97109985351562
+  ],
+  [
+   1606.393798828125,
+   1977.3243408203125
+  ],
+  [
+   184.39202880859375,
+   2082.432373046875
+  ]
+ ],
+ "sharpness": 2.298307408946149,
+ "sharpMin": 1.0,
+ "light": 255.0,
+ "terms": "account",
+ "blanks": 20,
+ "reads": [
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "0007655",
+   "conf": 0.9999944993427822,
+   "alts": [],
+   "cropSize": [
+    149,
+    39
+   ]
+  },
+  {
+   "name": "date",
+   "type": "date",
+   "text": "Sep 20, 2026",
+   "conf": 0.9990361630916595,
+   "alts": [],
+   "cropSize": [
+    215,
+    48
+   ]
+  },
+  {
+   "name": "customer_name",
+   "type": "text",
+   "text": "TorresConstruction Supply",
+   "conf": 0.9902282404899597,
+   "alts": [],
+   "cropSize": [
+    456,
+    44
+   ]
+  },
+  {
+   "name": "customer_tin",
+   "type": "tin",
+   "text": "223-344-556",
+   "conf": 0.9999915144660256,
+   "alts": [],
+   "cropSize": [
+    217,
+    44
+   ]
+  },
+  {
+   "name": "customer_address",
+   "type": "text",
+   "text": "Diversion Rd., Ilagan City",
+   "conf": 0.9826998252135056,
+   "alts": [],
+   "cropSize": [
+    373,
+    46
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "Twenty-four thousand three hundred seventy-seven pesos only",
+   "conf": 0.9987451919054581,
+   "alts": [],
+   "cropSize": [
+    1059,
+    48
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "21,765.18",
+   "conf": 0.9997159507539537,
+   "alts": [],
+   "cropSize": [
+    126,
+    36
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "2,611.82",
+   "conf": 0.9997087717056274,
+   "alts": [],
+   "cropSize": [
+    111,
+    37
+   ]
+  },
+  {
+   "name": "zero_rated",
+   "type": "amount",
+   "text": "0.00",
+   "conf": 0.9989973604679108,
+   "alts": [],
+   "cropSize": [
+    69,
+    38
+   ]
+  },
+  {
+   "name": "vat_exempt",
+   "type": "amount",
+   "text": "0.00",
+   "conf": 0.9999792575836182,
+   "alts": [],
+   "cropSize": [
+    63,
+    36
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "24,377",
+   "conf": 0.9991177221139272,
+   "alts": [],
+   "cropSize": [
+    97,
+    38
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "2,611.82",
+   "conf": 0.9998417347669601,
+   "alts": [],
+   "cropSize": [
+    117,
+    38
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "21,765.18",
+   "conf": 0.9909132520357767,
+   "alts": [
+    "21.765.18"
+   ],
+   "cropSize": [
+    126,
+    34
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "2,611.82",
+   "conf": 0.9996839985251427,
+   "alts": [],
+   "cropSize": [
+    106,
+    37
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "24,377",
+   "conf": 0.957238088051478,
+   "alts": [
+    "24.377"
+   ],
+   "cropSize": [
+    105,
+    36
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "24",
+   "conf": 0.9999830722808838,
+   "alts": [],
+   "cropSize": [
+    41,
+    37
+   ]
+  },
+  {
+   "name": "item1_unit",
+   "type": "text",
+   "text": "kg",
+   "conf": 0.9996648728847504,
+   "alts": [],
+   "cropSize": [
+    42,
+    36
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Sugar",
+   "conf": 0.9999645233154297,
+   "alts": [],
+   "cropSize": [
+    89,
+    40
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "85",
+   "conf": 0.9999968409538269,
+   "alts": [],
+   "cropSize": [
+    43,
+    40
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "2,040",
+   "conf": 0.9996091485023498,
+   "alts": [],
+   "cropSize": [
+    90,
+    39
+   ]
+  },
+  {
+   "name": "item2_qty",
+   "type": "number",
+   "text": "3",
+   "conf": 0.9999988079071045,
+   "alts": [],
+   "cropSize": [
+    26,
+    36
+   ]
+  },
+  {
+   "name": "item2_unit",
+   "type": "text",
+   "text": "pc",
+   "conf": 0.9973736107349396,
+   "alts": [],
+   "cropSize": [
+    39,
+    34
+   ]
+  },
+  {
+   "name": "item2_description",
+   "type": "text",
+   "text": "Alaskg Evap370ml",
+   "conf": 0.9889310859143734,
+   "alts": [],
+   "cropSize": [
+    280,
+    38
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "45",
+   "conf": 0.9999879598617554,
+   "alts": [],
+   "cropSize": [
+    40,
+    36
+   ]
+  },
+  {
+   "name": "item2_amount",
+   "type": "amount",
+   "text": "135",
+   "conf": 0.999984343846639,
+   "alts": [],
+   "cropSize": [
+    63,
+    42
+   ]
+  },
+  {
+   "name": "item3_qty",
+   "type": "number",
+   "text": "3",
+   "conf": 0.9999991655349731,
+   "alts": [],
+   "cropSize": [
+    28,
+    35
+   ]
+  },
+  {
+   "name": "item3_unit",
+   "type": "text",
+   "text": "can",
+   "conf": 0.8752788305282593,
+   "alts": [],
+   "cropSize": [
+    55,
+    32
+   ]
+  },
+  {
+   "name": "item3_description",
+   "type": "text",
+   "text": "Sardines",
+   "conf": 0.9997346699237823,
+   "alts": [],
+   "cropSize": [
+    129,
+    42
+   ]
+  },
+  {
+   "name": "item3_unit_price",
+   "type": "amount",
+   "text": "24",
+   "conf": 0.9999387264251709,
+   "alts": [],
+   "cropSize": [
+    42,
+    38
+   ]
+  },
+  {
+   "name": "item3_amount",
+   "type": "amount",
+   "text": "72",
+   "conf": 0.8329597413539886,
+   "alts": [],
+   "cropSize": [
+    48,
+    38
+   ]
+  },
+  {
+   "name": "item4_qty",
+   "type": "number",
+   "text": "75",
+   "conf": 0.9999896287918091,
+   "alts": [],
+   "cropSize": [
+    47,
+    37
+   ]
+  },
+  {
+   "name": "item4_unit",
+   "type": "text",
+   "text": "tray",
+   "conf": 0.9999003708362579,
+   "alts": [],
+   "cropSize": [
+    65,
+    38
+   ]
+  },
+  {
+   "name": "item4_description",
+   "type": "text",
+   "text": "Egqs",
+   "conf": 0.9950291365385056,
+   "alts": [],
+   "cropSize": [
+    82,
+    43
+   ]
+  },
+  {
+   "name": "item4_unit_price",
+   "type": "amount",
+   "text": "260",
+   "conf": 0.9999965826670328,
+   "alts": [],
+   "cropSize": [
+    68,
+    43
+   ]
+  },
+  {
+   "name": "item4_amount",
+   "type": "amount",
+   "text": "19,500",
+   "conf": 0.9999544123808543,
+   "alts": [],
+   "cropSize": [
+    100,
+    42
+   ]
+  },
+  {
+   "name": "item5_qty",
+   "type": "number",
+   "text": "24",
+   "conf": 0.9999914765357971,
+   "alts": [],
+   "cropSize": [
+    44,
+    38
+   ]
+  },
+  {
+   "name": "item5_unit",
+   "type": "text",
+   "text": "pc",
+   "conf": 0.9986023008823395,
+   "alts": [],
+   "cropSize": [
+    41,
+    35
+   ]
+  },
+  {
+   "name": "item5_description",
+   "type": "text",
+   "text": "Bread Loaf",
+   "conf": 0.9525136291980744,
+   "alts": [],
+   "cropSize": [
+    172,
+    42
+   ]
+  },
+  {
+   "name": "item5_unit_price",
+   "type": "amount",
+   "text": "70",
+   "conf": 0.9999533295631409,
+   "alts": [],
+   "cropSize": [
+    49,
+    41
+   ]
+  },
+  {
+   "name": "item5_amount",
+   "type": "amount",
+   "text": "1,680",
+   "conf": 0.9996530294418335,
+   "alts": [],
+   "cropSize": [
+    79,
+    39
+   ]
+  },
+  {
+   "name": "item6_qty",
+   "type": "number",
+   "text": "10",
+   "conf": 0.9999613165855408,
+   "alts": [],
+   "cropSize": [
+    39,
+    39
+   ]
+  },
+  {
+   "name": "item6_unit",
+   "type": "text",
+   "text": "kg",
+   "conf": 0.9999192357063293,
+   "alts": [],
+   "cropSize": [
+    42,
+    42
+   ]
+  },
+  {
+   "name": "item6_description",
+   "type": "text",
+   "text": "Ngils 2in",
+   "conf": 0.9361800816324022,
+   "alts": [],
+   "cropSize": [
+    139,
+    35
+   ]
+  },
+  {
+   "name": "item6_unit_price",
+   "type": "amount",
+   "text": "95",
+   "conf": 0.9999477863311768,
+   "alts": [],
+   "cropSize": [
+    41,
+    33
+   ]
+  },
+  {
+   "name": "item6_amount",
+   "type": "amount",
+   "text": "950",
+   "conf": 0.9999823172887167,
+   "alts": [],
+   "cropSize": [
+    57,
+    39
+   ]
+  }
+ ]
+}

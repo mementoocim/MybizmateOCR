@@ -1,0 +1,1 @@
+Synthetic fixtures for the C++ scanner core's tests: photos of made-up MyBizMate Sales Invoices written in handwriting fonts, their variants, and what the Python reference (prototype/benchmark) reads in them. No client data. Regenerate from prototype/benchmark with the project's venv: `python export_core_fixtures.py`.

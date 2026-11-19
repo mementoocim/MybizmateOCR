@@ -1,0 +1,383 @@
+{
+ "photo": "inv_0051_shake.jpg",
+ "aligned": true,
+ "form": "sales_invoice",
+ "photoSize": [
+  1736,
+  2201
+ ],
+ "turned": false,
+ "corners": [
+  [
+   154.87730407714844,
+   226.32862854003906
+  ],
+  [
+   1611.65234375,
+   189.95249938964844
+  ],
+  [
+   1556.3316650390625,
+   1972.4385986328125
+  ],
+  [
+   172.97030639648438,
+   1961.9737548828125
+  ]
+ ],
+ "sharpness": 0.473204397575685,
+ "sharpMin": 1.0,
+ "light": 253.0,
+ "terms": "account",
+ "blanks": 36,
+ "reads": [
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "0008869",
+   "conf": 0.999858592237745,
+   "alts": [],
+   "cropSize": [
+    150,
+    38
+   ]
+  },
+  {
+   "name": "date",
+   "type": "date",
+   "text": "21 0ct 2026",
+   "conf": 0.9597042582251809,
+   "alts": [
+    "21 Oct 2026"
+   ],
+   "cropSize": [
+    218,
+    43
+   ]
+  },
+  {
+   "name": "customer_name",
+   "type": "text",
+   "text": "Flores Gracery",
+   "conf": 0.965998147215162,
+   "alts": [],
+   "cropSize": [
+    229,
+    48
+   ]
+  },
+  {
+   "name": "customer_tin",
+   "type": "tin",
+   "text": "555577889",
+   "conf": 0.9406422509087456,
+   "alts": [],
+   "cropSize": [
+    168,
+    37
+   ]
+  },
+  {
+   "name": "customer_address",
+   "type": "text",
+   "text": "CentroEast. Aticia, Isabela",
+   "conf": 0.8943946957588196,
+   "alts": [],
+   "cropSize": [
+    430,
+    42
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "Twp thousand tue handred fifty-ome pesos omly",
+   "conf": 0.8996698545085059,
+   "alts": [],
+   "cropSize": [
+    700,
+    48
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "2.007.22",
+   "conf": 0.7515207268297672,
+   "alts": [
+    "2.001.22",
+    "2.007.72",
+    "2,007.22"
+   ],
+   "cropSize": [
+    113,
+    31
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "24113",
+   "conf": 0.9222591280937195,
+   "alts": [
+    "24118"
+   ],
+   "cropSize": [
+    92,
+    31
+   ]
+  },
+  {
+   "name": "vat_exempt",
+   "type": "amount",
+   "text": "101",
+   "conf": 0.020409697977205116,
+   "alts": [],
+   "cropSize": [
+    59,
+    32
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "2,251",
+   "conf": 0.9131056308746338,
+   "alts": [
+    "2.251"
+   ],
+   "cropSize": [
+    80,
+    32
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "241.18",
+   "conf": 0.8819289108117422,
+   "alts": [
+    "291.18",
+    "241.11"
+   ],
+   "cropSize": [
+    103,
+    37
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "2,00182",
+   "conf": 0.8836039475032261,
+   "alts": [
+    "2,00982",
+    "2.00182"
+   ],
+   "cropSize": [
+    128,
+    38
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "241.18",
+   "conf": 0.9930021266142527,
+   "alts": [],
+   "cropSize": [
+    100,
+    34
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "2.251",
+   "conf": 0.936469841003418,
+   "alts": [
+    "2,251"
+   ],
+   "cropSize": [
+    89,
+    34
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "2",
+   "conf": 0.9995099306106567,
+   "alts": [],
+   "cropSize": [
+    31,
+    31
+   ]
+  },
+  {
+   "name": "item1_unit",
+   "type": "text",
+   "text": "p",
+   "conf": 0.9579184651374817,
+   "alts": [],
+   "cropSize": [
+    43,
+    35
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Plywand 1/4",
+   "conf": 0.8728625557639382,
+   "alts": [],
+   "cropSize": [
+    178,
+    38
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "545",
+   "conf": 0.9982637166976929,
+   "alts": [],
+   "cropSize": [
+    61,
+    32
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "1.092",
+   "conf": 0.8606054306030273,
+   "alts": [
+    "1.012",
+    "11092"
+   ],
+   "cropSize": [
+    88,
+    32
+   ]
+  },
+  {
+   "name": "item2_qty",
+   "type": "number",
+   "text": "2",
+   "conf": 0.9977211356163025,
+   "alts": [],
+   "cropSize": [
+    31,
+    31
+   ]
+  },
+  {
+   "name": "item2_unit",
+   "type": "text",
+   "text": "saghet",
+   "conf": 0.8858727812767029,
+   "alts": [],
+   "cropSize": [
+    111,
+    38
+   ]
+  },
+  {
+   "name": "item2_description",
+   "type": "text",
+   "text": "Nescafe",
+   "conf": 0.7719491464751107,
+   "alts": [],
+   "cropSize": [
+    131,
+    39
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "9.50",
+   "conf": 0.8420929312705994,
+   "alts": [
+    "1.50"
+   ],
+   "cropSize": [
+    68,
+    36
+   ]
+  },
+  {
+   "name": "item2_amount",
+   "type": "amount",
+   "text": "19",
+   "conf": 0.9759467244148254,
+   "alts": [
+    "10"
+   ],
+   "cropSize": [
+    46,
+    24
+   ]
+  },
+  {
+   "name": "item3_qty",
+   "type": "number",
+   "text": "12",
+   "conf": 0.9980500042438507,
+   "alts": [],
+   "cropSize": [
+    50,
+    37
+   ]
+  },
+  {
+   "name": "item3_unit",
+   "type": "text",
+   "text": "paak",
+   "conf": 0.8012337982654572,
+   "alts": [],
+   "cropSize": [
+    74,
+    34
+   ]
+  },
+  {
+   "name": "item3_description",
+   "type": "text",
+   "text": "Bear Braind",
+   "conf": 0.8499500209634955,
+   "alts": [],
+   "cropSize": [
+    157,
+    37
+   ]
+  },
+  {
+   "name": "item3_unit_price",
+   "type": "amount",
+   "text": "95",
+   "conf": 0.8857536911964417,
+   "alts": [
+    "15"
+   ],
+   "cropSize": [
+    46,
+    37
+   ]
+  },
+  {
+   "name": "item3_amount",
+   "type": "amount",
+   "text": "1,140",
+   "conf": 0.9874350070953369,
+   "alts": [
+    "1,190"
+   ],
+   "cropSize": [
+    99,
+    43
+   ]
+  }
+ ]
+}
