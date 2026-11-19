@@ -21,6 +21,7 @@ std::optional<cv::Mat> findMarkers(const cv::Mat& gray, const FormTemplate& form
   cv::Mat blur, th;
   cv::GaussianBlur(gray, blur, cv::Size(5, 5), 0);
   const int block = static_cast<int>(mn * 0.06) | 1;
+  if (block < 3) return std::nullopt;  // an image this small (short side under 34 px) can't show the corner squares
   cv::adaptiveThreshold(blur, th, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY_INV, block, 25);
   std::vector<std::vector<cv::Point>> contours;
   cv::findContours(th, contours, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);

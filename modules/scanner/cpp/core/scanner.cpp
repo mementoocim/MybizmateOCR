@@ -33,8 +33,10 @@ cv::Mat decodePhoto(const std::string& path) {
   const int longSide = std::max(img.cols, img.rows);
   if (longSide > MAX_SIDE) {
     const double s = MAX_SIDE / static_cast<double>(longSide);
+    // Python's round() (the reference's cap) rounds halves to even, as std::nearbyint does; std::lround wouldn't.
     cv::Mat small;
-    cv::resize(img, small, cv::Size(static_cast<int>(std::lround(img.cols * s)), static_cast<int>(std::lround(img.rows * s))),
+    cv::resize(img, small,
+               cv::Size(static_cast<int>(std::nearbyint(img.cols * s)), static_cast<int>(std::nearbyint(img.rows * s))),
                0, 0, cv::INTER_AREA);
     img = small;
   }

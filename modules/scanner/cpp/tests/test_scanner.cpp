@@ -80,7 +80,15 @@ TEST_CASE("parity on every fixture photo") {
     checkParity(scanFixture(stem), expected(stem));
     photos++;
   }
-  CHECK(photos == 14);
+  CHECK(photos == 16);
+}
+
+TEST_CASE("a tiny image finds no form instead of failing") {
+  cv::Mat tiny(30, 30, CV_8UC3, cv::Scalar(245, 245, 245));  // too small for the corner squares' threshold block
+  mbm::ScanResult r;
+  CHECK_NOTHROW(r = scanner().scanImage(tiny, tmpDir()));
+  CHECK_FALSE(r.aligned);
+  CHECK(r.reads.empty());
 }
 
 TEST_CASE("the 8 samples read 243 boxes") {
