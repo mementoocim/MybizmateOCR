@@ -42,7 +42,7 @@ std::string toJson(const ScanResult& r) {
                  {"cropMs", r.timing.cropMs},
                  {"readMs", r.timing.readMs},
                  {"totalMs", r.timing.totalMs}};
-  return j.dump();
+  return j.dump(-1, ' ', true);  // ASCII only (\u escapes), safe for JNI's NewStringUTF
 }
 
 }  // namespace mbm
