@@ -14,9 +14,22 @@ internal class ScannerHolder<H : Any>(private val create: () -> H, private val d
   private var handle: H? = null
   private var closed = false
 
+  /** How long creating the scanner took (ms), once it has been created: the speed test's "Starting the scanner". */
+  @Volatile
+  var loadMs: Double? = null
+    private set
+
   fun <T> use(block: (H) -> T): T = synchronized(lock) {
     if (closed) throw ScannerClosedException()
-    block(handle ?: create().also { handle = it })
+    block(
+      handle ?: run {
+        val t0 = System.nanoTime()
+        create().also {
+          handle = it
+          loadMs = (System.nanoTime() - t0) / 1e6
+        }
+      },
+    )
   }
 
   fun close() = synchronized(lock) {

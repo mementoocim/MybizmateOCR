@@ -31,7 +31,7 @@ export default function Result() {
       <Text style={styles.note}>{`Read in ${Math.round(r.timing.totalMs)} ms`}</Text>
       {r.reads.map((b) => (
         <View key={b.name} style={styles.row}>
-          <Image source={{ uri: b.cropUri }} style={styles.crop} resizeMode="contain" />
+          <Image source={{ uri: b.cropUri ?? undefined }} style={styles.crop} resizeMode="contain" />
           <Text style={styles.name}>{b.name}</Text>
           <View style={styles.reading}>
             <Text style={styles.text}>{b.text}</Text>
