@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Alert, type AlertButton } from 'react-native';
 
 import SavedScreen from '../app/saved';
+import { addParty, clearParties, markPartiesExported, type Party } from '../lib/lists';
 import { loadSaved, type SavedSummary } from '../lib/saved';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
@@ -52,10 +53,86 @@ const answer = (text: string) =>
     buttons.find((b) => b.text === text)?.onPress?.();
   });
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
   memoryFs.reset();
+  await clearParties('customer');
+  await clearParties('supplier');
   alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+});
+
+/** A customer added from a scan: not in MyBizMate yet. */
+const addFromScan = (name: string): Promise<Party> =>
+  addParty({
+    code: '',
+    type: 'customer',
+    entity: 'company',
+    registeredName: name,
+    lastName: '',
+    firstName: '',
+    middleName: '',
+    tradeName: '',
+    tin: '900-000-003',
+    address: '',
+    vatStatus: '',
+    terms: '',
+    fromScan: true,
+  });
+
+test('export new customers and suppliers', async () => {
+  await addFromScan('Bagong Tindahan');
+  await showSaved([]);
+  await press(screen.getByText('Export new customers and suppliers'));
+  expect(screen.getByText("A file in MyBizMate's Parties import format, with the customers and suppliers you added from scans.")).toBeTruthy();
+  expect(screen.getByText('1 party')).toBeTruthy();
+  expect(
+    screen.getByText(
+      "Before you import, fill in each one's City / Municipality, Province and ZIP, and its TIN where it's blank: MyBizMate needs them. Import this file before the sales and purchases that name them.",
+    ),
+  ).toBeTruthy();
+  await press(screen.getByText('Share the file'));
+  expect(mockShare).toHaveBeenCalledWith(expect.stringMatching(/Parties import .*\.xlsx$/), {
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    dialogTitle: 'Send the file',
+  });
+  expect(alertSpy).toHaveBeenCalledWith(
+    'Did the file go where you wanted?',
+    'Mark this party as exported, so the next file leaves it out.',
+    expect.anything(),
+  );
+  await answer('Mark as exported');
+  expect(mockToast).toHaveBeenCalledWith('Marked 1 party as exported.');
+});
+
+test('marked parties leave the next Parties file', async () => {
+  await addFromScan('Bagong Tindahan');
+  await showSaved([]);
+  await press(screen.getByText('Export new customers and suppliers'));
+  await press(screen.getByText('Share the file'));
+  await answer('Mark as exported');
+  expect(screen.getByText('Nothing to export for this choice.')).toBeTruthy();
+  await press(screen.getByText('All added from scans'));
+  expect(screen.getByText('1 party')).toBeTruthy();
+  expect(screen.getByText('1 of them was exported before. Importing it again adds it to MyBizMate twice.')).toBeTruthy();
+});
+
+test('the sales sheet says to send new parties first', async () => {
+  const p = await addFromScan('Bagong Tindahan');
+  await showSaved([summary('a', '2026-10-05', { listed: false, partyName: 'Bagong Tindahan', partyId: p.id })]);
+  await press(screen.getByText('Export sales'));
+  expect(
+    screen.getByText(
+      'Check that these are in MyBizMate before you import: Bagong Tindahan. Export new customers and suppliers first: they go in before this file.',
+    ),
+  ).toBeTruthy();
+});
+
+test('a party that went out is no longer a name to check', async () => {
+  const p = await addFromScan('Bagong Tindahan');
+  await markPartiesExported([p.id], new Date(2026, 10, 19));
+  await showSaved([summary('a', '2026-10-05', { listed: false, partyName: 'Bagong Tindahan', partyId: p.id })]);
+  await press(screen.getByText('Export sales'));
+  expect(screen.queryByText(/Check that these are in MyBizMate/)).toBeNull();
 });
 
 test('no saved invoices', async () => {

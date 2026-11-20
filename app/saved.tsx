@@ -2,9 +2,10 @@ import { useRouter } from 'expo-router';
 import { useState, useSyncExternalStore } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { OutlinedButton } from '../components/Buttons';
+import { OutlinedButton, TextButton } from '../components/Buttons';
 import { ExportSheet } from '../components/ExportSheet';
 import { peso, prettyDate } from '../lib/format';
+import { lists, newParties, subscribeLists } from '../lib/lists';
 import { deleteSaved, openSaved, savedList, subscribeSaved } from '../lib/saved';
 import type { Kind } from '../lib/scans';
 import { bold, colors } from '../lib/theme';
@@ -14,7 +15,9 @@ import { toast } from '../lib/toast';
 export default function SavedScreen() {
   const router = useRouter();
   const all = useSyncExternalStore(subscribeSaved, savedList);
-  const [exporting, setExporting] = useState<Kind | null>(null);
+  const theLists = useSyncExternalStore(subscribeLists, lists);
+  const [exporting, setExporting] = useState<Kind | 'parties' | null>(null);
+  const fromScans = newParties(theLists, true).length > 0;
 
   async function open(id: string) {
     const scan = await openSaved(id);
@@ -61,6 +64,11 @@ export default function SavedScreen() {
           </View>
         )}
       </ScrollView>
+      {fromScans && (
+        <View style={styles.parties}>
+          <TextButton label="Export new customers and suppliers" onPress={() => setExporting('parties')} />
+        </View>
+      )}
       {all.length > 0 && (
         <View style={styles.bottom}>
           <View style={styles.button}>
@@ -104,4 +112,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.panel,
   },
   button: { flex: 1 },
+  parties: { alignItems: 'center', paddingVertical: 4, backgroundColor: colors.panel },
 });

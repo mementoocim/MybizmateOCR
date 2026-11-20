@@ -288,6 +288,20 @@ export async function addItem(i: Omit<ListItem, 'id'>): Promise<ListItem> {
   return item;
 }
 
+/** The parties added from scans with no MyBizMate code yet (for a Parties import file); those sent only when asked. */
+export function newParties(l: Lists, includeSent: boolean): Party[] {
+  return l.parties.filter((p) => p.fromScan && p.code === '' && (includeSent || p.exportedAt === null));
+}
+
+/** Notes that these parties went out in a Parties import file. */
+export function markPartiesExported(ids: readonly string[], at: Date): Promise<void> {
+  const when = at.toISOString();
+  return commit(
+    current.parties.map((p) => (ids.includes(p.id) ? { ...p, exportedAt: when } : p)),
+    current.items,
+  );
+}
+
 /** Removes that type's parties; a party that is both keeps its other side. */
 export function clearParties(type: 'customer' | 'supplier'): Promise<void> {
   const other: PartyType = type === 'customer' ? 'supplier' : 'customer';

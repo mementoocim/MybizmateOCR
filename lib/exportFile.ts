@@ -1,8 +1,8 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
 import { localIsoDate } from './checks/dates';
-import { PURCHASE_COLUMNS, SALES_COLUMNS } from './exportRows';
-import type { Lists } from './lists';
+import { PARTIES_COLUMNS, partyRow, PURCHASE_COLUMNS, SALES_COLUMNS } from './exportRows';
+import { type Lists, newParties, type Party } from './lists';
 import { type SavedSummary, savedList } from './saved';
 import type { Kind } from './scans';
 import { workbook } from './xlsx';
@@ -52,6 +52,16 @@ export async function writeExportBytes(name: string, bytes: Uint8Array): Promise
   const file = new File(folder, name);
   await file.write(bytes);
   return file.uri;
+}
+
+/** True when a row names a party added from a scan that hasn't gone out in a Parties import file yet. */
+export function newPartiesFirst(rows: readonly SavedSummary[], l: Lists): boolean {
+  const waiting = new Set(newParties(l, false).map((p) => p.id));
+  return rows.some((r) => r.partyId !== null && waiting.has(r.partyId));
+}
+
+export function writePartiesExport(parties: readonly Party[], now: Date): Promise<string> {
+  return writeExportBytes(exportFileName('parties', now), workbook('Import', PARTIES_COLUMNS, parties.map(partyRow), now));
 }
 
 export function writeExport(kind: Kind, rows: readonly SavedSummary[], now: Date): Promise<string> {
