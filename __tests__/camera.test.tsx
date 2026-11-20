@@ -14,6 +14,7 @@ const mockTakePhoto = jest.fn(async () => {});
 const mockToast = jest.fn();
 const mockGetPermission = jest.fn();
 const mockRequestPermission = jest.fn();
+const mockLibrary = jest.fn();
 const mockDeleted: string[] = [];
 
 jest.mock('expo-router', () => ({
@@ -38,7 +39,7 @@ jest.mock('expo-image-picker', () => ({
   getCameraPermissionsAsync: () => mockGetPermission(),
   requestCameraPermissionsAsync: () => mockRequestPermission(),
   launchCameraAsync: jest.fn(async () => ({ canceled: true })),
-  launchImageLibraryAsync: jest.fn(async () => ({ canceled: true })),
+  launchImageLibraryAsync: () => mockLibrary(),
 }));
 jest.mock('../lib/toast', () => ({ toast: (message: string) => mockToast(message) }));
 jest.mock('react-native-safe-area-context', () => ({
@@ -82,6 +83,7 @@ beforeEach(() => {
   mockDeleted.length = 0;
   mockGetPermission.mockResolvedValue(granted);
   mockRequestPermission.mockResolvedValue(granted);
+  mockLibrary.mockResolvedValue({ canceled: true });
   mockScanPhoto.mockResolvedValue(parseScanResult(coreJson('inv_0007')));
 });
 
@@ -267,6 +269,25 @@ test("leaving while a photo is read keeps the scan but doesn't open its result",
   await act(async () => finish(parseScanResult(coreJson('inv_0007'))));
   expect(mockRouter.replace).not.toHaveBeenCalled();
   expect(mockRouter.push).not.toHaveBeenCalled();
+});
+
+test('the camera stops while the gallery is open, and looks again when it closes', async () => {
+  let close: (v: unknown) => void = () => {};
+  mockLibrary.mockImplementation(() => new Promise((resolve) => (close = resolve)));
+  await open();
+  await act(async () => fireEvent.press(screen.getByLabelText('Choose a photo from the gallery instead')));
+  expect(camera().props.active).toBe(false);
+  await act(async () => close({ canceled: true }));
+  expect(camera().props.active).toBe(true);
+});
+
+test('a photo that arrives while the gallery is open is deleted, not read', async () => {
+  mockLibrary.mockImplementation(() => new Promise(() => {}));
+  await open();
+  await act(async () => fireEvent.press(screen.getByLabelText('Choose a photo from the gallery instead')));
+  await send('photo', { uri: 'file:///cache/camera/racing.jpg' });
+  expect(mockScanPhoto).not.toHaveBeenCalled();
+  expect(mockDeleted).toEqual(['file:///cache/camera/racing.jpg']);
 });
 
 test('the development test hook: a sample stands in for the camera, with no permission asked', async () => {

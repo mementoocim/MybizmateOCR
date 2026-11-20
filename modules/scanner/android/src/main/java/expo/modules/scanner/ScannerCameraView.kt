@@ -268,7 +268,7 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
       if (capturing || !running.get()) return@post
       capturing = true
       setStatus(CameraStatus.CAPTURE, lastStatus?.second)
-      val dir = File(context.cacheDir, "camera").apply { mkdirs() }
+      val dir = File(context.cacheDir, CAPTURE_DIR).apply { mkdirs() }
       val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
       val source = testSource
       if (source != null) {
@@ -286,6 +286,10 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
         ContextCompat.getMainExecutor(context),
         object : ImageCapture.OnImageSavedCallback {
           override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+            if (!running.get()) {  // the camera stopped (the screen was left) while the photo was saved: nobody reads it
+              file.delete()
+              return
+            }
             onPhoto(mapOf("uri" to Uri.fromFile(file).toString()))  // EXIF holds the turn; the core applies it
           }
 

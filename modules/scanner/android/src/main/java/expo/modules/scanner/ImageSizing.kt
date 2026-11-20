@@ -24,6 +24,22 @@ private val RESOURCE_NAME = Regex("[a-z0-9_]+")
  */
 internal fun bundledImageName(uri: String): String? = uri.takeIf { RESOURCE_NAME.matches(it) }
 
+/** The camera's photos wait in cacheDir/camera until they are read. */
+internal const val CAPTURE_DIR = "camera"
+
+/** Runs a read of a photo; afterwards, read or not, the photo is deleted when deletePhoto asks for it. */
+internal inline fun <T> readThenDelete(deletePhoto: Boolean, delete: () -> Unit, read: () -> T): T =
+  try {
+    read()
+  } finally {
+    if (deletePhoto) delete()
+  }
+
+/** Deletes every camera photo still waiting in the cache. Called at start, when none can be in use. */
+internal fun clearCaptures(cacheDir: File) {
+  File(cacheDir, CAPTURE_DIR).deleteRecursively()
+}
+
 /** True when file is inside dir once both are resolved (no "..", no links), so nothing outside it gets deleted. */
 internal fun isInside(file: File, dir: File): Boolean =
   file.canonicalFile.toPath().startsWith(dir.canonicalFile.toPath())

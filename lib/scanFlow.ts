@@ -11,11 +11,12 @@ type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean
 
 /**
  * Getting a photo read: from the camera, the phone's camera app, the gallery or a sample, then on to its result. One
- * scan at a time: a second tap while one reads does nothing.
+ * at a time: while one is being picked or read (busy), another does nothing.
  */
 export function useScanFlow() {
   const router = useRouter();
-  const busy = useRef(false);
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [reading, setReading] = useState(false);
   // false once the screen is left: a read that ends after that is kept in Recent scans, and nothing opens.
   const focused = useIsFocused();
@@ -30,24 +31,26 @@ export function useScanFlow() {
     [],
   );
 
+  /** False when another photo was being picked or read, so this one wasn't taken. */
   async function run(getUri: () => Promise<string | null>, label: string, source: ScanSource, opts: ReadOptions,
-                     openError: string): Promise<void> {
-    if (busy.current) return;
-    busy.current = true;
+                     openError: string): Promise<boolean> {
+    if (busyRef.current) return false;
+    busyRef.current = true;
+    setBusy(true);
     try {
       let uri: string | null;
       try {
         uri = await getUri();
       } catch {
         toast(openError);
-        return;
+        return true;
       }
-      if (!uri) return;
+      if (!uri) return true;
       setReading(true);
       try {
         const result = await scanPhoto(uri, { deletePhoto: opts.deletePhoto ?? false });
         const id = addScan({ label, source, sampleId: opts.sampleId, result });
-        if (!here.current) return;
+        if (!here.current) return true;
         const target = { pathname: '/result', params: { id } } as const;
         if (opts.replace) router.replace(target);
         else router.push(target);
@@ -61,29 +64,32 @@ export function useScanFlow() {
       }
     } finally {
       setReading(false);
-      busy.current = false;
+      setBusy(false);
+      busyRef.current = false;
     }
+    return true;
   }
 
-  function scanUri(uri: string, label: string, source: ScanSource, opts: ReadOptions = {}): Promise<void> {
+  /** Reads a photo the app already has; false when another one was being picked or read, so this one wasn't. */
+  function scanUri(uri: string, label: string, source: ScanSource, opts: ReadOptions = {}): Promise<boolean> {
     return run(async () => uri, label, source, opts, "Couldn't open the photo.");
   }
 
-  function fromGallery(opts: { replace?: boolean } = {}): Promise<void> {
-    return run(
+  async function fromGallery(opts: { replace?: boolean } = {}): Promise<void> {
+    await run(
       async () => {
         const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
         return picked.canceled ? null : picked.assets[0].uri;
       },
       'Photo from gallery',
       'gallery',
-      opts,
+      { ...opts, deletePhoto: true }, // the picker's copy in the app's cache; the person's photo is never deleted
       "Couldn't open that photo.",
     );
   }
 
-  function fromCameraApp(opts: { replace?: boolean } = {}): Promise<void> {
-    return run(
+  async function fromCameraApp(opts: { replace?: boolean } = {}): Promise<void> {
+    await run(
       async () => {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
@@ -100,9 +106,9 @@ export function useScanFlow() {
     );
   }
 
-  function fromSample(id: string): Promise<void> {
+  async function fromSample(id: string): Promise<void> {
     const label = SAMPLES.find((s) => s.id === id)?.label ?? id;
-    return run(() => sampleUri(id), label, 'sample', { sampleId: id }, "Couldn't open that sample.");
+    await run(() => sampleUri(id), label, 'sample', { sampleId: id }, "Couldn't open that sample.");
   }
 
   /** Retake: the same source again; back Home after a sample or a scan opened from Recent scans. */
@@ -119,5 +125,5 @@ export function useScanFlow() {
     return fromGallery({ replace: true });
   }
 
-  return { reading, scanUri, fromGallery, fromCameraApp, fromSample, retake };
+  return { busy, reading, scanUri, fromGallery, fromCameraApp, fromSample, retake };
 }

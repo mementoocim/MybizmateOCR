@@ -81,7 +81,9 @@ test('Take photo opens the camera', async () => {
 test('Choose from gallery reads the photo and opens its result', async () => {
   await render(<Home />);
   await act(async () => fireEvent.press(screen.getByText('Choose from gallery')));
-  expect(mockScanPhoto).toHaveBeenCalledWith('content://media/1', { deletePhoto: false });
+  // The picker hands over its own copy in the app's cache; the scanner deletes only files inside the cache, never the
+  // person's photo.
+  expect(mockScanPhoto).toHaveBeenCalledWith('content://media/1', { deletePhoto: true });
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
 });
 

@@ -68,6 +68,9 @@ class ScannerModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("Scanner")
 
+    // Camera photos left from before (the app was closed during a read): none can be in use yet.
+    OnCreate { appContext.reactContext?.let { clearCaptures(it.cacheDir) } }
+
     Function("coreInfo") { NativeScanner.coreInfo() }
 
     AsyncFunction("preload") Coroutine { ->
@@ -121,19 +124,21 @@ class ScannerModule : Module() {
     val outDir = if (options.keepFiles) File(scans, System.currentTimeMillis().toString()).apply { mkdirs() } else null
     val out = outDir?.absolutePath ?: ""
     try {
-      val path = localPath(uri, work)
-      val json = try {
-        NativeScanner.scanPhoto(handle, path, out)
-      } catch (e: IOException) {
-        // OpenCV can't open it (HEIC, for one): let Android decode it, at most 2400 px on its long side, then scan that.
-        val png = decodeWithAndroid(path, work) ?: throw UnreadablePhotoException()
+      // a photo to delete goes even when it can't be read: nobody would read it again
+      val json = readThenDelete(options.deletePhoto, delete = { runCatching { deletePhoto(uri) } }) {
+        val path = localPath(uri, work)
         try {
-          NativeScanner.scanPhoto(handle, png.absolutePath, out)
-        } catch (again: IOException) {
-          throw UnreadablePhotoException()
+          NativeScanner.scanPhoto(handle, path, out)
+        } catch (e: IOException) {
+          // OpenCV can't open it (HEIC, for one): let Android decode it, at most 2400 px on its long side, then scan that.
+          val png = decodeWithAndroid(path, work) ?: throw UnreadablePhotoException()
+          try {
+            NativeScanner.scanPhoto(handle, png.absolutePath, out)
+          } catch (again: IOException) {
+            throw UnreadablePhotoException()
+          }
         }
       }
-      if (options.deletePhoto) deletePhoto(uri)
       if (outDir != null) keepNewest(scans, KEEP_SCANS)
       json
     } catch (e: Throwable) {

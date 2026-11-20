@@ -37,6 +37,37 @@ class ImageSizingTest {
   }
 
   @Test
+  fun `a photo to delete is deleted whether or not it could be read`() {
+    var deleted = 0
+    assertEquals("read", readThenDelete(deletePhoto = true, delete = { deleted++ }) { "read" })
+    assertEquals(1, deleted)
+    try {
+      readThenDelete(deletePhoto = true, delete = { deleted++ }) { throw IllegalStateException("unreadable") }
+    } catch (e: IllegalStateException) {
+      // the failure still reaches the caller
+    }
+    assertEquals(2, deleted)
+    readThenDelete(deletePhoto = false, delete = { deleted++ }) { "kept" }
+    assertEquals(2, deleted)
+  }
+
+  @Test
+  fun `clearing the captures empties the camera folder and nothing else in the cache`() {
+    val cache = kotlin.io.path.createTempDirectory("cache").toFile()
+    try {
+      File(cache, "camera").mkdirs()
+      File(cache, "camera/capture_1.jpg").writeText("photo")
+      File(cache, "ExponentAsset-1.jpg").writeText("sample")
+      clearCaptures(cache)
+      assertFalse(File(cache, "camera/capture_1.jpg").exists())
+      assertTrue(File(cache, "ExponentAsset-1.jpg").exists())
+      clearCaptures(cache)  // nothing to clear is fine
+    } finally {
+      cache.deleteRecursively()
+    }
+  }
+
+  @Test
   fun `only files inside the folder count as inside it`() {
     val cache = File("cache")
     assertTrue(isInside(File("cache/scans/x.jpg"), cache))

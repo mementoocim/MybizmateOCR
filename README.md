@@ -25,8 +25,11 @@ cut to 98 Latin characters) inside a local Expo module, so Android and iPhone wi
 - **Recent scans:** the newest 6, kept on the phone between launches; each opens its result again.
 - **Samples:** 8 synthetic sample invoices to try without a form.
 - **Brand splash:** the logo while the scanner loads and reads one sample, so the first real scan is quick.
-- **Privacy:** nothing leaves the phone and nothing is logged. Camera photos are deleted once read; each kept scan's
-  files (its page, crops and original) live in the app's own storage, the newest 6 only.
+- **Privacy:** nothing leaves the phone and nothing is logged. The app's files are kept out of Android's backups. A
+  camera photo, or the gallery's copy of one, is deleted once read, whether or not it could be; any left by a closed
+  app are cleared at the next start. Each kept scan's files (its page, crops and original) live in the app's own
+  storage, the newest 6 only. A JPEG over twice the 2400 px cap is decoded smaller first, so a 50 MP photo doesn't
+  need 150 MB.
 
 ## Team builds
 

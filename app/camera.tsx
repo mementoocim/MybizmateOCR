@@ -137,17 +137,24 @@ export default function CameraScreen() {
     else setProblem({ code, message });
   }
 
+  /** A photo that won't be read isn't kept either. */
+  function discard(uri: string) {
+    try {
+      new File(uri).delete();
+    } catch {
+      // already gone
+    }
+  }
+
   function onPhoto(uri: string) {
     if (!focusedRef.current) {
-      // taken as the screen was left: not read, and not kept
-      try {
-        new File(uri).delete();
-      } catch {
-        // already gone
-      }
+      discard(uri); // taken as the screen was left
       return;
     }
-    void flow.scanUri(uri, 'Camera photo', 'camera', { deletePhoto: true, replace: true });
+    // taken just as the gallery opened: the scan flow is busy and doesn't take it
+    void flow
+      .scanUri(uri, 'Camera photo', 'camera', { deletePhoto: true, replace: true })
+      .then((taken) => taken || discard(uri));
   }
 
   const panel: 'permission' | Problem['code'] | null =
@@ -201,7 +208,7 @@ export default function CameraScreen() {
             key={mount}
             ref={camera}
             style={styles.fill}
-            active={focused && !flow.reading}
+            active={focused && !flow.busy}
             auto={auto}
             torch={torch}
             testImage={testImage}
