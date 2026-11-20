@@ -59,6 +59,14 @@ struct ScanResult {
   Timing timing;
 };
 
+// What the live camera finds in one grey, upright frame: which form, the whole sheet's outline, and how sharp the
+// frame is (straightened onto the form's page) against that form's live minimum.
+struct FrameDetection {
+  std::string form;                         // "sales_invoice" or "service_invoice"
+  std::array<cv::Point2f, 4> outline{};     // the sheet in the frame: tl, tr, br, bl
+  double sharpness = 0, sharpMin = 0;
+};
+
 // The file isn't a photo OpenCV can open (missing, broken, not an image, or a format like HEIC).
 struct UnreadableImage : std::runtime_error {
   using std::runtime_error::runtime_error;
@@ -81,6 +89,11 @@ class Scanner {
 
   // An already decoded and capped photo (BGR). Scans run one at a time.
   ScanResult scanImage(const cv::Mat& bgr, const std::string& outDir);
+
+  // The live camera's check of one frame (grey, upright; see frame_input.h): the corner squares first, else the
+  // Service Invoice's border without its corner refit (the test app's OcrEngine.detect). Reads only what the scanner
+  // loaded, so it never waits for a scan.
+  std::optional<FrameDetection> detectFrame(const cv::Mat& gray) const;
 
  private:
   struct Impl;

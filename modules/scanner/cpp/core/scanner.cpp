@@ -390,4 +390,35 @@ ScanResult Scanner::scanImage(const cv::Mat& bgr, const std::string& outDir) {
   return r;
 }
 
+std::optional<FrameDetection> Scanner::detectFrame(const cv::Mat& gray) const {
+  const Impl& im = *impl_;
+  // The sheet's corners on the page, the page's size and the live minimum, once the form is known.
+  auto detection = [&](const std::string& form, const cv::Mat& H, const std::vector<cv::Point2f>& sheet, cv::Size page,
+                       double sharpMin) {
+    std::vector<cv::Point2f> outline;
+    cv::perspectiveTransform(sheet, outline, H.inv());
+    cv::Mat straight;  // how sharp the form is in this frame: the frame straightened onto its page, then measured
+    cv::warpPerspective(gray, straight, H, page, cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(255));
+    FrameDetection d;
+    d.form = form;
+    std::copy(outline.begin(), outline.end(), d.outline.begin());
+    d.sharpness = quality::sharpness(straight);
+    d.sharpMin = sharpMin;
+    return d;
+  };
+  if (auto H = findMarkers(gray, im.form)) {
+    const auto w = static_cast<float>(PAGE_W), h = static_cast<float>(PAGE_H);
+    return detection("sales_invoice", *H, {{0, 0}, {w, 0}, {w, h}, {0, h}}, cv::Size(PAGE_W, PAGE_H),
+                     quality::SALES_LIVE_MIN);
+  }
+  if (auto found = im.aligner.find(gray, false)) {  // the live outline skips the corner refit
+    const cv::Rect& p = im.service.paper;
+    const auto x0 = static_cast<float>(p.x), y0 = static_cast<float>(p.y);
+    const auto x1 = static_cast<float>(p.x + p.width), y1 = static_cast<float>(p.y + p.height);
+    return detection("service_invoice", cv::Mat(found->H), {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}, im.service.page,
+                     quality::SERVICE_LIVE_MIN);
+  }
+  return std::nullopt;
+}
+
 }  // namespace mbm
