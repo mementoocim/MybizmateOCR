@@ -13,6 +13,13 @@ set_target_properties(scanner::onnxruntime PROPERTIES
   IMPORTED_LOCATION ${ORT_DIR}/jni/${ANDROID_ABI}/libonnxruntime.so
   INTERFACE_INCLUDE_DIRECTORIES ${ORT_DIR}/headers)
 
+# pdfium chromium/8125, no V8: headers and library for each ABI, fetched and checked by the fetchPdfium task
+# (scripts/fetch-pdfium.mjs) into PDFIUM_DIR. Linked as an imported library, it is packaged into the APK by AGP.
+add_library(scanner::pdfium SHARED IMPORTED)
+set_target_properties(scanner::pdfium PROPERTIES
+  IMPORTED_LOCATION ${PDFIUM_DIR}/${ANDROID_ABI}/lib/libpdfium.so
+  INTERFACE_INCLUDE_DIRECTORIES ${PDFIUM_DIR}/${ANDROID_ABI}/include)
+
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../cpp scanner_core)
 
 add_library(scanner SHARED src/main/cpp/scanner_jni.cpp)

@@ -13,6 +13,13 @@ def opencvVersion = '5.1.0'
 def ortVersion = '1.32.0'
 def cameraxVersion = '1.7.0'  // the scanner camera (ScannerCameraView.kt)
 def ortDir = layout.buildDirectory.dir('ort').get().asFile
+// pdfium (bblanchon/pdfium-binaries chromium/8125, no V8): the fetchPdfium task runs scripts/fetch-pdfium.mjs, which
+// downloads its Android builds once, checks each against its pinned SHA-256 and unpacks one folder per ABI into a cache
+// folder outside the repo. This is the script's own default folder, so `npm run test:core` shares the download.
+def pdfiumDir = System.getProperty('os.name').toLowerCase().contains('windows')
+  ? new File(System.getenv('LOCALAPPDATA') ?: System.getProperty('user.home'), 'mbs-cxx/pdfium/chromium-8125')
+  : new File(System.getProperty('user.home'), '.cache/mbs-pdfium/chromium-8125')
+def fetchPdfiumScript = file('../../../scripts/fetch-pdfium.mjs')
 
 android {
   namespace "expo.modules.scanner"
@@ -21,7 +28,8 @@ android {
     versionName "0.1.0"
     externalNativeBuild {
       cmake {
-        arguments "-DANDROID_STL=c++_shared", "-DORT_DIR=${ortDir.absolutePath.replace('\\', '/')}"
+        arguments "-DANDROID_STL=c++_shared", "-DORT_DIR=${ortDir.absolutePath.replace('\\', '/')}",
+          "-DPDFIUM_DIR=${pdfiumDir.absolutePath.replace('\\', '/')}"
       }
     }
   }
@@ -68,10 +76,15 @@ def extractOrt = tasks.register("extractOrt", Sync) {
   it.into(ortDir)
 }
 
+// The script checks what is already unpacked and downloads only what is missing, so it runs on every build.
+def fetchPdfium = tasks.register("fetchPdfium", Exec) {
+  it.commandLine "node", fetchPdfiumScript.absolutePath, pdfiumDir.absolutePath
+}
+
 // CMake needs the headers and libraries on disk before it configures, not just before it builds.
 tasks.matching {
   it.name.startsWith("configureCMake") || it.name.startsWith("buildCMake")
 }.configureEach {
-  it.dependsOn(extractOrt)
+  it.dependsOn(extractOrt, fetchPdfium)
 }
-preBuild.dependsOn(extractOrt)
+preBuild.dependsOn(extractOrt, fetchPdfium)
