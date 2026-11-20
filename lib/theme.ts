@@ -15,11 +15,13 @@ export const colors = {
   pineTint: '#E8F3EB',
   amber: '#8F5300',
   amberTint: '#FCEFD9',
-  scrim: '#CCFAF7F0',
+  // see-through colors are #RRGGBBAA here (colors.xml's #AARRGGBB, reordered for React Native)
+  scrim: '#FAF7F0CC',
   imageBg: '#F1EEE8',
   cropBg: '#F4F1EB',
   fullScreen: '#161310',
-  pill: '#B3201913',
+  pill: '#201913B3',
+  backdrop: '#00000066',
 } as const;
 
 /** Bold text: Android's sans-serif-medium, as the test app uses. */

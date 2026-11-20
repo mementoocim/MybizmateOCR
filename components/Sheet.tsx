@@ -25,7 +25,7 @@ export function Sheet({ visible, title, subtitle, onClose, children }: {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: '#66000000' },
+  backdrop: { flex: 1, backgroundColor: colors.backdrop },
   sheet: {
     backgroundColor: colors.panel,
     borderTopLeftRadius: 18,
