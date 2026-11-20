@@ -1,4 +1,16 @@
-import { FORMS, fieldLabel } from '../lib/forms';
+import { FORMS, fieldLabel, formFields } from '../lib/forms';
+
+test("each form's boxes, in the template's order, without the ticks", () => {
+  const sales = formFields('sales_invoice');
+  expect(sales).toHaveLength(65);
+  expect(sales[0]).toBe('invoice_no');
+  expect(sales).not.toContain('terms_cash');
+  const service = formFields('service_invoice');
+  expect(service).toHaveLength(39);
+  expect(service[0]).toBe('date');
+  expect(service).not.toContain('amount_words2');
+  expect(service).toContain('withholding');
+});
 
 test("each form's words", () => {
   expect(FORMS.sales_invoice).toEqual({ title: 'MyBizMate Sales Invoice', cash: 'Cash', account: 'On account', number: 'SI no.' });

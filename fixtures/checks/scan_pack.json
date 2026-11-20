@@ -1,0 +1,234 @@
+{
+ "customers": [
+  {
+   "id": "C001",
+   "name": "Sample Company",
+   "tin": "123-456-789-00000",
+   "address": "106 Burgos St., Cabatuan, Isabela"
+  },
+  {
+   "id": "C002",
+   "name": "Dela Cruz Hardware",
+   "tin": "234-567-890-00000",
+   "address": "12 Rizal Ave., Cauayan City"
+  },
+  {
+   "id": "C003",
+   "name": "Santos General Merchandise",
+   "tin": "345-678-901-00000",
+   "address": "Purok 3, San Mateo, Isabela"
+  },
+  {
+   "id": "C004",
+   "name": "Santos Merchandise",
+   "tin": "345-678-901-00001",
+   "address": "Brgy. District 2, Cauayan City"
+  },
+  {
+   "id": "C005",
+   "name": "Reyes Sari-Sari Store",
+   "tin": "456-789-012-00000",
+   "address": "45 Mabini St., Alicia, Isabela"
+  },
+  {
+   "id": "C006",
+   "name": "Mendoza Trading",
+   "tin": "567-890-123-00000",
+   "address": "Maharlika Hwy., Cauayan City"
+  },
+  {
+   "id": "C007",
+   "name": "Garcia Agri Supply",
+   "tin": "678-901-234-00000",
+   "address": "Public Market, Roxas, Isabela"
+  },
+  {
+   "id": "C008",
+   "name": "Bautista Pharmacy",
+   "tin": "789-012-345-00000",
+   "address": "88 Quezon St., Santiago City"
+  },
+  {
+   "id": "C009",
+   "name": "Villanueva Bakeshop",
+   "tin": "890-123-456-00000",
+   "address": "Brgy. Minante 1, Cauayan City"
+  },
+  {
+   "id": "C010",
+   "name": "Ramos Auto Parts",
+   "tin": "901-234-567-00000",
+   "address": "National Rd., Echague, Isabela"
+  },
+  {
+   "id": "C011",
+   "name": "Aquino Rice Dealer",
+   "tin": "112-233-445-00000",
+   "address": "Brgy. Sillawit, Cauayan City"
+  },
+  {
+   "id": "C012",
+   "name": "Torres Construction Supply",
+   "tin": "223-344-556-00000",
+   "address": "Diversion Rd., Ilagan City"
+  },
+  {
+   "id": "C013",
+   "name": "Castillo Eatery",
+   "tin": "334-455-667-00000",
+   "address": "Rizal St., Reina Mercedes"
+  },
+  {
+   "id": "C014",
+   "name": "Navarro Water Refilling",
+   "tin": "445-566-778-00000",
+   "address": "Brgy. Tagaran, Cauayan City"
+  },
+  {
+   "id": "C015",
+   "name": "Flores Grocery",
+   "tin": "556-677-889-00000",
+   "address": "Centro East, Alicia, Isabela"
+  },
+  {
+   "id": "C016",
+   "name": "Cruz Enterprises",
+   "tin": "667-788-990-00000",
+   "address": "Burgos St., Santiago City"
+  },
+  {
+   "id": "C017",
+   "name": "Cruz Trading",
+   "tin": "667-788-990-00002",
+   "address": "Victory Norte, Santiago City"
+  },
+  {
+   "id": "C018",
+   "name": "Lopez Farm Supply",
+   "tin": "778-899-001-00000",
+   "address": "Brgy. Cabaruan, Cauayan City"
+  },
+  {
+   "id": "C019",
+   "name": "Pascual Lumber",
+   "tin": "889-900-112-00000",
+   "address": "Maharlika Hwy., Naguilian"
+  },
+  {
+   "id": "C020",
+   "name": "Fernandez Electrical",
+   "tin": "990-011-223-00000",
+   "address": "Mabini St., Ilagan City"
+  }
+ ],
+ "items": [
+  {
+   "id": "I001",
+   "description": "Alaska Evap 370ml",
+   "unit": "pc",
+   "price": 45.0
+  },
+  {
+   "id": "I002",
+   "description": "Bear Brand 300g",
+   "unit": "pack",
+   "price": 95.0
+  },
+  {
+   "id": "I003",
+   "description": "Lucky Me Pancit Canton",
+   "unit": "pack",
+   "price": 15.0
+  },
+  {
+   "id": "I004",
+   "description": "Nescafe 3in1",
+   "unit": "sachet",
+   "price": 9.5
+  },
+  {
+   "id": "I005",
+   "description": "Coke 1.5L",
+   "unit": "btl",
+   "price": 75.0
+  },
+  {
+   "id": "I006",
+   "description": "Rice 25kg",
+   "unit": "sack",
+   "price": 1350.0
+  },
+  {
+   "id": "I007",
+   "description": "Cement 40kg",
+   "unit": "bag",
+   "price": 270.0
+  },
+  {
+   "id": "I008",
+   "description": "Sugar 1kg",
+   "unit": "kg",
+   "price": 85.0
+  },
+  {
+   "id": "I009",
+   "description": "Cooking Oil 1L",
+   "unit": "btl",
+   "price": 120.0
+  },
+  {
+   "id": "I010",
+   "description": "Eggs",
+   "unit": "tray",
+   "price": 260.0
+  },
+  {
+   "id": "I011",
+   "description": "Bread Loaf",
+   "unit": "pc",
+   "price": 70.0
+  },
+  {
+   "id": "I012",
+   "description": "Sardines 155g",
+   "unit": "can",
+   "price": 24.0
+  },
+  {
+   "id": "I013",
+   "description": "Corned Beef 150g",
+   "unit": "can",
+   "price": 42.0
+  },
+  {
+   "id": "I014",
+   "description": "Detergent 1kg",
+   "unit": "pack",
+   "price": 110.0
+  },
+  {
+   "id": "I015",
+   "description": "Plywood 1/4",
+   "unit": "pc",
+   "price": 520.0
+  },
+  {
+   "id": "I016",
+   "description": "Nails 2in",
+   "unit": "kg",
+   "price": 95.0
+  },
+  {
+   "id": "I017",
+   "description": "Paint 1L",
+   "unit": "can",
+   "price": 350.0
+  },
+  {
+   "id": "I018",
+   "description": "Bottled Water 500ml",
+   "unit": "btl",
+   "price": 15.0
+  }
+ ]
+}

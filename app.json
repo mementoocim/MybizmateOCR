@@ -17,7 +17,9 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["android.permission.CAMERA"],
+      "permissions": [
+        "android.permission.CAMERA"
+      ],
       "predictiveBackGestureEnabled": false,
       "package": "com.mybizmate.scan"
     },
@@ -51,7 +53,8 @@
           "cameraPermission": "The scanner needs the camera to see the invoice. Nothing it sees leaves the phone.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "scheme": "mybizmatescan"
   }

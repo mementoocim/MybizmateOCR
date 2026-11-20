@@ -1,4 +1,19 @@
-import { formatClock, formatMs } from '../lib/format';
+import { formatClock, formatMs, peso, prettyDate, qty } from '../lib/format';
+
+test('pesos, quantities and dates as the test app writes them', () => {
+  expect(peso(1575)).toBe('₱1,575.00');
+  expect(peso(1234567.5)).toBe('₱1,234,567.50');
+  expect(peso(0.5)).toBe('₱0.50');
+  expect(peso(null)).toBe('—');
+  expect(qty(0.5)).toBe('0.5');
+  expect(qty(1500)).toBe('1,500');
+  expect(qty(1 / 3)).toBe('0.33');
+  expect(qty(10)).toBe('10');
+  expect(qty(null)).toBe('?');
+  expect(prettyDate('2026-10-21')).toBe('Oct 21, 2026');
+  expect(prettyDate('2026-01-05')).toBe('Jan 5, 2026');
+  expect(prettyDate(null)).toBeNull();
+});
 
 test('times under a second in ms, longer ones in seconds', () => {
   expect(formatMs(57)).toBe('57 ms');

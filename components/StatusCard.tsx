@@ -1,15 +1,17 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { formatMs } from '../lib/format';
-import { FLAG_TEXT, photoFlags } from '../lib/photoChecks';
 import { bold, colors } from '../lib/theme';
 import type { ScanResult } from '../modules/scanner';
 import { CheckCircle, ErrorCircle } from './icons';
 
-/** The result's first card: no form found, the photo checks that failed, or a photo that looks good. */
-export function StatusCard({ result }: { result: ScanResult }) {
+/**
+ * The result's first card (the test app's ResultActivity.showSale): no form found, the things the checks want a
+ * person to look at, or "Ready to post". problems is null when there's no sale (the form wasn't found).
+ */
+export function StatusCard({ result, problems }: { result: ScanResult; problems: string[] | null }) {
   const read = `Read on this phone in ${formatMs(result.timing.totalMs)}, offline.`;
-  if (!result.aligned) {
+  if (!result.aligned || problems === null) {
     return (
       <Card
         warn
@@ -18,12 +20,11 @@ export function StatusCard({ result }: { result: ScanResult }) {
       />
     );
   }
-  const flags = photoFlags(result);
-  if (flags.length > 0) {
-    const title = flags.length === 1 ? '1 thing to check' : `${flags.length} things to check`;
-    return <Card warn title={title} body={`Check: ${flags.map((f) => FLAG_TEXT[f]).join(', ')}.\n${read}`} />;
+  if (problems.length > 0) {
+    const title = problems.length === 1 ? '1 thing to check' : `${problems.length} things to check`;
+    return <Card warn title={title} body={`Check: ${problems.join(', ')}.\n${read}`} />;
   }
-  return <Card title="Photo looks good" body={read} />;
+  return <Card title="Ready to post" body={`Every check passed. ${read}`} />;
 }
 
 function Card({ warn, title, body }: { warn?: boolean; title: string; body: string }) {

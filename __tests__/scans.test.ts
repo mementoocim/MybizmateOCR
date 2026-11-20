@@ -1,38 +1,9 @@
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
+import { memoryFs } from '../test-utils/memoryFs';
 
-// expo-file-system, in memory: files by URI, and the folders that exist
-const mockFiles = new Map<string, string>();
-const mockDirs = new Set<string>();
-jest.mock('expo-file-system', () => {
-  const join = (parts: unknown[]) => parts.map((p) => (typeof p === 'string' ? p : (p as { uri: string }).uri)).join('/');
-  class Directory {
-    uri: string;
-    constructor(...parts: unknown[]) {
-      this.uri = join(parts);
-    }
-    get exists() {
-      return mockDirs.has(this.uri);
-    }
-  }
-  class File {
-    uri: string;
-    constructor(...parts: unknown[]) {
-      this.uri = join(parts);
-    }
-    get exists() {
-      return mockFiles.has(this.uri);
-    }
-    async text() {
-      return mockFiles.get(this.uri) ?? '';
-    }
-    async write(content: string) {
-      mockFiles.set(this.uri, content);
-    }
-  }
-  return { File, Directory, Paths: { document: new Directory('file:///docs') } };
-});
+jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 
 const flush = () => new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
 
@@ -41,8 +12,7 @@ function result(dir: string): ScanResult {
 }
 
 beforeEach(() => {
-  mockFiles.clear();
-  mockDirs.clear();
+  memoryFs.reset();
   jest.resetModules();
 });
 
@@ -57,13 +27,65 @@ test('keeps the newest 6, newest first', () => {
   expect(getScan(ids[6])?.label).toBe('Scan 7');
 });
 
+test('edits, terms, kind and party are kept, and come back after a restart', async () => {
+  const first = require('../lib/scans');
+  const listener = jest.fn();
+  first.subscribeRecent(listener);
+  const id = first.addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a') });
+  expect(first.getScan(id)).toMatchObject({ edits: {}, terms: null, kind: 'sale', party: null, saved: null });
+  first.setEdit(id, 'date', ' 10/21/2026 ');
+  first.updateScan(id, { terms: 'cash', kind: 'purchase', party: { name: 'Isabela Wholesale Trading' } });
+  expect(listener).toHaveBeenCalledTimes(3);
+  await flush();
+  memoryFs.dirs.add('file:///s/a');
+  jest.resetModules();
+  const second = require('../lib/scans');
+  await second.loadRecent();
+  expect(second.getScan(id)).toMatchObject({
+    edits: { date: '10/21/2026' },
+    terms: 'cash',
+    kind: 'purchase',
+    party: { name: 'Isabela Wholesale Trading' },
+    saved: null,
+  });
+});
+
+test('a scan saved by milestone 2 loads with no edits, as a sale', async () => {
+  const old = { id: 'old-1', label: 'Photo from gallery', source: 'gallery', at: '2026-11-20T01:00:00.000Z', result: result('/s/old') };
+  memoryFs.files.set('file:///docs/recent.json', JSON.stringify([old]));
+  memoryFs.dirs.add('file:///s/old');
+  const { loadRecent, getScan } = require('../lib/scans');
+  await loadRecent();
+  expect(getScan('old-1')).toMatchObject({ edits: {}, terms: null, kind: 'sale', party: null, saved: null });
+});
+
+test('the reading itself removes the edit', () => {
+  const { addScan, setEdit, getScan } = require('../lib/scans');
+  const id = addScan({ label: 'Sample 0007', source: 'sample', sampleId: 'inv_0007', result: result('/s/c') });
+  setEdit(id, 'invoice_no', '1234567');
+  expect(getScan(id).edits).toEqual({ invoice_no: '1234567' });
+  setEdit(id, 'invoice_no', ' 0007655 ');
+  expect(getScan(id).edits).toEqual({});
+  setEdit(id, 'withholding', ''); // a box that wasn't read: nothing typed is no edit
+  expect(getScan(id).edits).toEqual({});
+});
+
+test('a saved scan opened from Saved invoices can be found and changed', () => {
+  const { cacheScan, getScan, updateScan } = require('../lib/scans');
+  cacheScan({ id: 'saved-1', label: 'Camera photo', source: 'camera', at: new Date(), result: result('/s/d'), edits: {},
+    terms: null, kind: 'sale', party: null, saved: null });
+  expect(getScan('saved-1')?.label).toBe('Camera photo');
+  updateScan('saved-1', { kind: 'purchase' });
+  expect(getScan('saved-1')?.kind).toBe('purchase');
+});
+
 test('saves the list and loads it back, without scans whose folder is gone', async () => {
   const first = require('../lib/scans');
   first.addScan({ label: 'Photo from gallery', source: 'gallery', result: result('/s/a') });
   first.addScan({ label: 'Sample 0007', source: 'sample', sampleId: 'inv_0007', result: result('/s/b') });
   await flush();
-  expect(mockFiles.has('file:///docs/recent.json')).toBe(true);
-  mockDirs.add('file:///s/b'); // the system kept only b's folder
+  expect(memoryFs.files.has('file:///docs/recent.json')).toBe(true);
+  memoryFs.dirs.add('file:///s/b'); // the system kept only b's folder
   jest.resetModules();
   const second = require('../lib/scans');
   expect(second.recentScans()).toEqual([]);

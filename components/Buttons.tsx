@@ -47,7 +47,15 @@ export function OutlinedButton({ label, onPress, icon: Icon, disabled, testID }:
   );
 }
 
-export function TextButton({ label, onPress, icon: Icon, disabled, testID }: ButtonProps) {
+/** A text button, in coral unless a color is given (ember for one that removes things). */
+export function TextButton({
+  label,
+  onPress,
+  icon: Icon,
+  disabled,
+  testID,
+  color = colors.coralText,
+}: ButtonProps & { color?: string }) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -58,8 +66,8 @@ export function TextButton({ label, onPress, icon: Icon, disabled, testID }: But
       hitSlop={8}
       style={({ pressed }) => [styles.text, (pressed || disabled) && styles.dim]}>
       <View style={styles.row}>
-        {Icon && <Icon size={18} color={colors.coralText} />}
-        <Text style={styles.textText}>{label}</Text>
+        {Icon && <Icon size={18} color={color} />}
+        <Text style={[styles.textText, { color }]}>{label}</Text>
       </View>
     </Pressable>
   );

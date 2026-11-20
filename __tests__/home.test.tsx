@@ -1,9 +1,12 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 
 import Home from '../app/index';
+import { loadSaved } from '../lib/saved';
 import { addScan } from '../lib/scans';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
+import { memoryFs } from '../test-utils/memoryFs';
+import { pinToday } from '../test-utils/today';
 
 let mockTeam = false;
 const mockPush = jest.fn();
@@ -32,23 +35,15 @@ jest.mock('expo-image-picker', () => ({
 jest.mock('expo-asset', () => ({
   Asset: { fromModule: () => ({ downloadAsync: async () => ({ localUri: 'file:///bundle/sample.jpg' }) }) },
 }));
-jest.mock('expo-file-system', () => ({
-  File: class {
-    get exists() {
-      return false;
-    }
-    async write() {}
-    async text() {
-      return '';
-    }
-  },
-  Directory: class {
-    get exists() {
-      return true;
-    }
-  },
-  Paths: { document: {} },
-}));
+jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
+
+beforeAll(() => {
+  pinToday(new Date(2026, 10, 20, 9, 0)); // a gallery scan is checked as of the day it's read
+});
+
+afterAll(() => {
+  jest.useRealTimers();
+});
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -120,7 +115,7 @@ test('recent scans', async () => {
   expect(screen.getByText('RECENT SCANS')).toBeTruthy();
   expect(screen.getAllByText('Photo from gallery').length).toBeGreaterThan(0);
   // earlier tests' scans are in the list too (the store lives for the whole file)
-  expect(screen.getAllByText(/^Read · 0 ms · \d{1,2}:\d{2} (AM|PM)$/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/^Ready to post · 0 ms · \d{1,2}:\d{2} (AM|PM)$/).length).toBeGreaterThan(0);
 });
 
 test('a scan read on another screen shows in Recent scans at once', async () => {
@@ -131,12 +126,60 @@ test('a scan read on another screen shows in Recent scans at once', async () => 
   expect(screen.getAllByText('Camera photo').length).toBeGreaterThan(0);
 });
 
-test('the team menu', async () => {
+const press = (el: Parameters<typeof fireEvent.press>[0]) => act(async () => fireEvent.press(el));
+
+/** Opens the ⋮ menu and presses one of its items. */
+async function fromMenu(label: string) {
+  await press(screen.getByTestId('menu'));
+  await press(within(screen.getByTestId('menu-items')).getByText(label));
+}
+
+test('the menu in a client build', async () => {
   await render(<Home />);
-  expect(screen.queryByTestId('menu')).toBeNull();
+  await press(screen.getByTestId('menu'));
+  const items = within(screen.getByTestId('menu-items'));
+  expect(items.getByText('Saved invoices')).toBeTruthy();
+  expect(items.getByText('Your lists')).toBeTruthy();
+  expect(items.getByText('Settings')).toBeTruthy();
+  expect(items.queryByText('Speed test')).toBeNull();
+  await press(items.getByText('Saved invoices'));
+  expect(mockPush).toHaveBeenLastCalledWith('/saved');
+  await fromMenu('Your lists');
+  expect(mockPush).toHaveBeenLastCalledWith('/lists');
+  await fromMenu('Settings');
+  expect(mockPush).toHaveBeenLastCalledWith('/settings');
+});
+
+test('the menu in a team build', async () => {
   mockTeam = true;
   await render(<Home />);
-  await act(async () => fireEvent.press(screen.getByTestId('menu')));
-  await act(async () => fireEvent.press(screen.getByText('Speed test')));
-  expect(mockPush).toHaveBeenCalledWith('/speed');
+  await fromMenu('Speed test');
+  expect(mockPush).toHaveBeenLastCalledWith('/speed');
+});
+
+test('the saved invoices row', async () => {
+  await render(<Home />);
+  expect(screen.queryByText('1 to export')).toBeNull(); // nothing saved yet: no row
+  const saved = (id: string, exportedAt: string | null) => ({
+    id,
+    kind: 'sale',
+    label: 'Camera photo',
+    partyName: 'Store',
+    partyId: null,
+    date: '2026-11-18',
+    gross: 100,
+    row: {},
+    listed: true,
+    savedAt: '2026-11-19T01:00:00.000Z',
+    exportedAt,
+  });
+  memoryFs.files.set('file:///docs/saved.json', JSON.stringify([saved('a', null), saved('b', '2026-11-19T02:00:00.000Z')]));
+  await act(async () => loadSaved());
+  expect(screen.getByText('Saved invoices')).toBeTruthy();
+  await press(screen.getByText('1 to export'));
+  expect(mockPush).toHaveBeenLastCalledWith('/saved');
+
+  memoryFs.files.set('file:///docs/saved.json', JSON.stringify([saved('b', '2026-11-19T02:00:00.000Z')]));
+  await act(async () => loadSaved());
+  expect(screen.getByText('All exported')).toBeTruthy();
 });

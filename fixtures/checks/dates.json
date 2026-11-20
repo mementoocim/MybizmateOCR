@@ -1,0 +1,1134 @@
+{
+ "cases": [
+  {
+   "readings": [
+    "9/10/2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "09/10/26"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "9-10-2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "9.10.2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "9.10.26"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "9-10.2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "9,10,2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "9 10 2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "2026-09-10"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "13/10/2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-10-13"
+   ],
+   "repairs": [
+    {
+     "2026-10-13": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-10-13",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "Sept 10, 2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "Sep 10 2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "September 10, 2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "10 Sep 2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "10-Sep-2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "0ct 21, 2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-10-21"
+   ],
+   "repairs": [
+    {
+     "2026-10-21": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-10-21",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "9102026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 2,
+     "9102-02-06": 2
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": true,
+    "rebuilt": true,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "9/102026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 1
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": true,
+    "rebuilt": true,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "91026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 2
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": true,
+    "rebuilt": true,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "1010512026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {
+     "2026-10-05": 2
+    }
+   ],
+   "choice": {
+    "date": "2026-10-05",
+    "flagged": true,
+    "rebuilt": true,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "10107/2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {
+     "2026-10-10": 2,
+     "2026-10-07": 1
+    }
+   ],
+   "choice": {
+    "date": "2026-10-07",
+    "flagged": true,
+    "rebuilt": true,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "9l10l2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 2,
+     "2026-09-01": 4
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": true,
+    "rebuilt": true,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "9|10|2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 2,
+     "2026-09-01": 4
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": true,
+    "rebuilt": true,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "9/1O/2O26"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 2
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": true,
+    "rebuilt": true,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "1112026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {
+     "2026-01-11": 2,
+     "2026-11-01": 2,
+     "1112-02-06": 2,
+     "2026-01-01": 2,
+     "2026-11-20": 2,
+     "2026-01-20": 3
+    }
+   ],
+   "choice": {
+    "date": "2026-11-01",
+    "flagged": true,
+    "rebuilt": true,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "d-16-2021",
+    "9-16-2021",
+    "9-16-2026",
+    "9-11-2021"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    null,
+    "2021-09-16",
+    "2026-09-16",
+    "2021-09-11"
+   ],
+   "repairs": [
+    {},
+    {
+     "2021-09-16": 0,
+     "2021-09-06": 1
+    },
+    {
+     "2026-09-16": 0,
+     "2026-09-06": 1
+    },
+    {
+     "2021-09-11": 0,
+     "2021-09-01": 1,
+     "2021-09-20": 3
+    }
+   ],
+   "choice": {
+    "date": "2026-09-16",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "10-07-26",
+    "10-01-26",
+    "70-07-26"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-10-07",
+    "2026-10-01",
+    null
+   ],
+   "repairs": [
+    {
+     "2026-10-07": 0
+    },
+    {
+     "2026-10-01": 0
+    },
+    {}
+   ],
+   "choice": {
+    "date": "2026-10-07",
+    "flagged": true,
+    "rebuilt": false,
+    "other": "2026-10-01"
+   }
+  },
+  {
+   "readings": [
+    "Oct 9, 2026",
+    "Oct 19, 2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-10-09",
+    "2026-10-19"
+   ],
+   "repairs": [
+    {
+     "2026-10-09": 0
+    },
+    {
+     "2026-10-19": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-10-09",
+    "flagged": true,
+    "rebuilt": false,
+    "other": "2026-10-19"
+   }
+  },
+  {
+   "readings": [
+    "9/10/2026",
+    "09/10/2026",
+    "9/10/26"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-09-10",
+    "2026-09-10",
+    "2026-09-10"
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 0
+    },
+    {
+     "2026-09-10": 0
+    },
+    {
+     "2026-09-10": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "12/25/2026"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    "2026-12-25"
+   ],
+   "repairs": [
+    {
+     "2026-12-25": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-12-25",
+    "flagged": true,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    ""
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {}
+   ],
+   "choice": {
+    "date": null,
+    "flagged": true,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "hello"
+   ],
+   "today": "2026-11-19",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {}
+   ],
+   "choice": {
+    "date": null,
+    "flagged": true,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "10/22/2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-10-22"
+   ],
+   "repairs": [
+    {
+     "2026-10-22": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-10-22",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "Sep 20, 2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-09-20"
+   ],
+   "repairs": [
+    {
+     "2026-09-20": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-09-20",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "Nov 10, 2026",
+    "Nov 70, 2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-11-10",
+    null
+   ],
+   "repairs": [
+    {
+     "2026-11-10": 0
+    },
+    {}
+   ],
+   "choice": {
+    "date": "2026-11-10",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "11-18-26"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-11-18"
+   ],
+   "repairs": [
+    {
+     "2026-11-18": 0,
+     "2026-11-08": 1,
+     "2026-01-18": 1,
+     "2026-01-08": 2
+    }
+   ],
+   "choice": {
+    "date": "2026-11-18",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "Oct 23, 2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-10-23"
+   ],
+   "repairs": [
+    {
+     "2026-10-23": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-10-23",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "Nov 03, 2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-11-03"
+   ],
+   "repairs": [
+    {
+     "2026-11-03": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-11-03",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "21 0ct 2026",
+    "27 0ct 2026",
+    "21 Oct 2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-10-21",
+    "2026-10-27",
+    "2026-10-21"
+   ],
+   "repairs": [
+    {
+     "2026-10-21": 0
+    },
+    {
+     "2026-10-27": 0
+    },
+    {
+     "2026-10-21": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-10-21",
+    "flagged": true,
+    "rebuilt": false,
+    "other": "2026-10-27"
+   }
+  },
+  {
+   "readings": [
+    "21 0ct 2026",
+    "21 Oct 2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-10-21",
+    "2026-10-21"
+   ],
+   "repairs": [
+    {
+     "2026-10-21": 0
+    },
+    {
+     "2026-10-21": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-10-21",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "09-24-26",
+    "0q-24-26"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-09-24",
+    null
+   ],
+   "repairs": [
+    {
+     "2026-09-24": 0
+    },
+    {
+     "2026-09-24": 1
+    }
+   ],
+   "choice": {
+    "date": "2026-09-24",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "Oct 29, 2026",
+    "0 29, 2026",
+    "0ct 29, 2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-10-29",
+    null,
+    "2026-10-29"
+   ],
+   "repairs": [
+    {
+     "2026-10-29": 0
+    },
+    {},
+    {
+     "2026-10-29": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-10-29",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "Oct 29.2026",
+    "0 29.2026",
+    "0 29,2026",
+    "Oct 29,2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-10-29",
+    null,
+    null,
+    "2026-10-29"
+   ],
+   "repairs": [
+    {
+     "2026-10-29": 0
+    },
+    {},
+    {},
+    {
+     "2026-10-29": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-10-29",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "Oct 29, 2026",
+    "0 29, 2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-10-29",
+    null
+   ],
+   "repairs": [
+    {
+     "2026-10-29": 0
+    },
+    {}
+   ],
+   "choice": {
+    "date": "2026-10-29",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "11-05-"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {}
+   ],
+   "choice": {
+    "date": null,
+    "flagged": true,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "11/07/2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-11-07"
+   ],
+   "repairs": [
+    {
+     "2026-11-07": 0,
+     "2026-01-07": 1
+    }
+   ],
+   "choice": {
+    "date": "2026-11-07",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "10-26-26"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-10-26"
+   ],
+   "repairs": [
+    {
+     "2026-10-26": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-10-26",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "Feb 29, 2024"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2024-02-29"
+   ],
+   "repairs": [
+    {
+     "2024-02-29": 0
+    }
+   ],
+   "choice": {
+    "date": "2024-02-29",
+    "flagged": true,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "02/29/2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {}
+   ],
+   "choice": {
+    "date": null,
+    "flagged": true,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "Sep10 2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    null
+   ],
+   "repairs": [
+    {
+     "2026-09-10": 1
+    }
+   ],
+   "choice": {
+    "date": "2026-09-10",
+    "flagged": true,
+    "rebuilt": true,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "2026/10/21"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-10-21"
+   ],
+   "repairs": [
+    {
+     "2026-10-21": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-10-21",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  },
+  {
+   "readings": [
+    "0ct 21 2026"
+   ],
+   "today": "2026-11-18",
+   "parse": [
+    "2026-10-21"
+   ],
+   "repairs": [
+    {
+     "2026-10-21": 0
+    }
+   ],
+   "choice": {
+    "date": "2026-10-21",
+    "flagged": false,
+    "rebuilt": false,
+    "other": null
+   }
+  }
+ ]
+}

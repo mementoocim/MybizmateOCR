@@ -27,6 +27,22 @@ const LABELS: Record<string, string> = {
   total_due_2: 'Total due (left column)',
 };
 
+type Template = { fields: { name: string; type: string }[] };
+const FIELDS: Record<FormName, string[]> = {
+  sales_invoice: (require('../modules/scanner/assets/scanner/field_map.json') as Template).fields
+    .filter((f) => f.type !== 'checkbox')
+    .map((f) => f.name),
+  // amount_words2 is read into amount_words (the scanner merges the two lines)
+  service_invoice: (require('../modules/scanner/assets/scanner/service_invoice.json') as Template).fields
+    .filter((f) => f.type !== 'checkbox' && f.name !== 'amount_words2')
+    .map((f) => f.name),
+};
+
+/** A form's boxes in its template's order, without the tick boxes. */
+export function formFields(form: FormName): string[] {
+  return FIELDS[form];
+}
+
 const COLUMNS: Record<string, string> = {
   qty: 'Qty',
   unit: 'Unit',
