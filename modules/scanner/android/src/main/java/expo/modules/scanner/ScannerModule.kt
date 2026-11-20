@@ -1,5 +1,6 @@
 package expo.modules.scanner
 
+import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
@@ -120,7 +121,7 @@ class ScannerModule : Module() {
     val outDir = if (options.keepFiles) File(scans, System.currentTimeMillis().toString()).apply { mkdirs() } else null
     val out = outDir?.absolutePath ?: ""
     try {
-      val path = localPath(Uri.parse(uri), work)
+      val path = localPath(uri, work)
       val json = try {
         NativeScanner.scanPhoto(handle, path, out)
       } catch (e: IOException) {
@@ -143,16 +144,35 @@ class ScannerModule : Module() {
     }
   }
 
-  /** A file path for the photo: file:// as is, content:// copied into the work folder first. */
-  private fun localPath(uri: Uri, work: File): String = when (uri.scheme) {
-    "file", null -> uri.path ?: throw UnreadablePhotoException()
-    "content" -> {
-      val copy = File(work, "input")
-      val input = context.contentResolver.openInputStream(uri) ?: throw UnreadablePhotoException()
-      input.use { source -> FileOutputStream(copy).use { source.copyTo(it) } }
-      copy.absolutePath
+  /**
+   * A file path for the photo: file:// as is; content://, and an image bundled with the app (a sample, in a release
+   * build), copied into the work folder first.
+   */
+  private fun localPath(uri: String, work: File): String {
+    bundledImageName(uri)?.let { return copyBundledImage(it, work) }
+    val parsed = Uri.parse(uri)
+    return when (parsed.scheme) {
+      "file", null -> parsed.path ?: throw UnreadablePhotoException()
+      "content" -> {
+        val copy = File(work, "input")
+        val input = context.contentResolver.openInputStream(parsed) ?: throw UnreadablePhotoException()
+        input.use { source -> FileOutputStream(copy).use { source.copyTo(it) } }
+        copy.absolutePath
+      }
+      else -> throw UnreadablePhotoException()
     }
-    else -> throw UnreadablePhotoException()
+  }
+
+  /** A bundled image, copied out of the app's resources by its drawable name. */
+  @SuppressLint("DiscouragedApi")  // the name comes from React Native's asset registry, at run time
+  private fun copyBundledImage(name: String, work: File): String {
+    val res = context.resources
+    val id = res.getIdentifier(name, "drawable", context.packageName)
+      .takeIf { it != 0 } ?: res.getIdentifier(name, "raw", context.packageName)
+    if (id == 0) throw UnreadablePhotoException()
+    val copy = File(work, "input")
+    res.openRawResource(id).use { source -> FileOutputStream(copy).use { source.copyTo(it) } }
+    return copy.absolutePath
   }
 
   /** The photo decoded by Android (upright, at most 2400 px on its long side on Android 9+) as a PNG, or null. */

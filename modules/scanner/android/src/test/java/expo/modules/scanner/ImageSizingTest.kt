@@ -25,6 +25,18 @@ class ImageSizingTest {
   }
 
   @Test
+  fun `a bundled image's resource name is told apart from files and URIs`() {
+    // Release builds give a bundled image (a sample invoice) as its drawable's name, with no scheme.
+    assertEquals("assets_samples_inv_0001", bundledImageName("assets_samples_inv_0001"))
+    assertEquals(null, bundledImageName("file:///data/user/0/com.mybizmate.scan/cache/x.jpg"))
+    assertEquals(null, bundledImageName("/data/user/0/com.mybizmate.scan/cache/x.jpg"))
+    assertEquals(null, bundledImageName("content://media/external/images/media/46"))
+    assertEquals(null, bundledImageName("http://10.0.2.2:8081/assets/x.jpg"))
+    assertEquals(null, bundledImageName(""))
+    assertEquals(null, bundledImageName("x.jpg"))
+  }
+
+  @Test
   fun `only files inside the folder count as inside it`() {
     val cache = File("cache")
     assertTrue(isInside(File("cache/scans/x.jpg"), cache))
