@@ -1,0 +1,24 @@
+﻿Code,Type *,Entity type,Registered name,Last name,First name,Middle name,Trade name,TIN *,Sub-street †,Street †,Barangay †,City / Municipality *,Province *,ZIP *,Contact number,Email,VAT status,Payment terms
+C001,Customer,Company,Sample Company,,,,,123-456-789-00000,,"106 Burgos St., Cabatuan, Isabela",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C002,Customer,Company,Dela Cruz Hardware,,,,,234-567-890-00000,,"12 Rizal Ave., Cauayan City",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C003,Customer,Company,Santos General Merchandise,,,,,345-678-901-00000,,"Purok 3, San Mateo, Isabela",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C004,Customer,Company,Santos Merchandise,,,,,345-678-901-00001,,"Brgy. District 2, Cauayan City",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C005,Customer,Company,Reyes Sari-Sari Store,,,,,456-789-012-00000,,"45 Mabini St., Alicia, Isabela",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C006,Customer,Company,Mendoza Trading,,,,,567-890-123-00000,,"Maharlika Hwy., Cauayan City",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C007,Customer,Company,Garcia Agri Supply,,,,,678-901-234-00000,,"Public Market, Roxas, Isabela",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C008,Customer,Company,Bautista Pharmacy,,,,,789-012-345-00000,,"88 Quezon St., Santiago City",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C009,Customer,Company,Villanueva Bakeshop,,,,,890-123-456-00000,,"Brgy. Minante 1, Cauayan City",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C010,Customer,Company,Ramos Auto Parts,,,,,901-234-567-00000,,"National Rd., Echague, Isabela",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C011,Customer,Company,Aquino Rice Dealer,,,,,112-233-445-00000,,"Brgy. Sillawit, Cauayan City",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C012,Customer,Company,Torres Construction Supply,,,,,223-344-556-00000,,"Diversion Rd., Ilagan City",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C013,Customer,Company,Castillo Eatery,,,,,334-455-667-00000,,"Rizal St., Reina Mercedes",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C014,Customer,Company,Navarro Water Refilling,,,,,445-566-778-00000,,"Brgy. Tagaran, Cauayan City",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C015,Customer,Company,Flores Grocery,,,,,556-677-889-00000,,"Centro East, Alicia, Isabela",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C016,Customer,Company,Cruz Enterprises,,,,,667-788-990-00000,,"Burgos St., Santiago City",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C017,Customer,Company,Cruz Trading,,,,,667-788-990-00002,,"Victory Norte, Santiago City",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C018,Customer,Company,Lopez Farm Supply,,,,,778-899-001-00000,,"Brgy. Cabaruan, Cauayan City",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C019,Customer,Company,Pascual Lumber,,,,,889-900-112-00000,,"Maharlika Hwy., Naguilian",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+C020,Customer,Company,Fernandez Electrical,,,,,990-011-223-00000,,"Mabini St., Ilagan City",,Cauayan City,Isabela,3305,0917 000 0000,accounts@example.com,VAT-registered,Cash
+S001,Supplier,Company,Isabela Wholesale Trading,,,,,900-000-001-00000,,,,,,,,,,On Account
+B001,Customer and Supplier,Individual,,Reyes,Maria,Santos,Maria's Store,900-000-002-00000,,,,,,,,,,
+X001,Customer,,,,,,,,,,,,,,,,,
