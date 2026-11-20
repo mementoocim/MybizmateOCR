@@ -3,6 +3,8 @@ import ScannerModule from './src/ScannerModule';
 import type { CoreInfo, ScanOptions, ScanResult, ScannerStats } from './src/types';
 
 export { parseScanResult } from './src/parse';
+export { ScannerCameraView } from './src/ScannerCameraView';
+export type { CameraErrorCode, CameraStatus, ScannerCameraProps, ScannerCameraRef } from './src/ScannerCameraView';
 export type { BoxRead, CoreInfo, FieldType, FormName, ScanOptions, ScanResult, ScannerStats } from './src/types';
 
 /** The libraries the C++ scanner core was built with. */

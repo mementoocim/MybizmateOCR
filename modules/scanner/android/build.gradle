@@ -11,6 +11,7 @@ version = '0.1.0'
 // every module the app's NDK, so libc++_shared.so matches React Native's.
 def opencvVersion = '5.1.0'
 def ortVersion = '1.32.0'
+def cameraxVersion = '1.7.0'  // the scanner camera (ScannerCameraView.kt)
 def ortDir = layout.buildDirectory.dir('ort').get().asFile
 
 android {
@@ -53,6 +54,10 @@ dependencies {
   implementation "org.opencv:opencv:${opencvVersion}"
   implementation "com.microsoft.onnxruntime:onnxruntime-android:${ortVersion}"
   ortAar "com.microsoft.onnxruntime:onnxruntime-android:${ortVersion}@aar"
+  implementation "androidx.camera:camera-core:${cameraxVersion}"
+  implementation "androidx.camera:camera-camera2:${cameraxVersion}"
+  implementation "androidx.camera:camera-lifecycle:${cameraxVersion}"
+  implementation "androidx.camera:camera-view:${cameraxVersion}"
   testImplementation "junit:junit:4.13.2"
 }
 

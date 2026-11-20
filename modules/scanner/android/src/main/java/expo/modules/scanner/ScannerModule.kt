@@ -88,6 +88,18 @@ class ScannerModule : Module() {
 
     AsyncFunction("stats") { mapOf("loadMs" to scanner.loadMs, "peakKb" to peakKb()) }
 
+    // The scanner camera (ScannerCameraView.kt): the module's only view.
+    View(ScannerCameraView::class) {
+      Events("onReady", "onStatus", "onPhoto", "onCameraError")
+      Prop("active") { view: ScannerCameraView, active: Boolean -> view.setActive(active) }
+      Prop("auto") { view: ScannerCameraView, auto: Boolean -> view.setAuto(auto) }
+      Prop("torch") { view: ScannerCameraView, torch: Boolean -> view.setTorch(torch) }
+      Prop("testImage") { view: ScannerCameraView, uri: String? -> view.setTestImage(uri) }
+      OnViewDidUpdateProps { view: ScannerCameraView -> view.applyProps() }
+      AsyncFunction("takePhoto") { view: ScannerCameraView -> view.takePhoto() }
+      OnViewDestroys { view: ScannerCameraView -> view.release() }
+    }
+
     // Waits for a scan in flight, then frees the native scanner (ScannerHolder).
     OnDestroy {
       scanner.close()
