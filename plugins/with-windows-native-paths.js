@@ -13,7 +13,7 @@
 // configured before the block runs keeps its default folder and gets a warning instead of failing the build.
 const { withProjectBuildGradle } = require('expo/config-plugins');
 
-const MARKER = '// mybizmate-scan: short native build paths on Windows (plugins/with-windows-native-paths.js)';
+const MARKER = '// mybizmate-ocr: short native build paths on Windows (plugins/with-windows-native-paths.js)';
 const BLOCK = `${MARKER}
 if (System.getProperty('os.name').toLowerCase().contains('windows')) {
   def cxxRoot = new File(System.getenv('LOCALAPPDATA') ?: System.getProperty('user.home'), 'mbs-cxx')
@@ -24,7 +24,7 @@ if (System.getProperty('os.name').toLowerCase().contains('windows')) {
           sub.android.externalNativeBuild.cmake.buildStagingDirectory = new File(cxxRoot, sub.name)
           sub.android.defaultConfig.externalNativeBuild.cmake.arguments('-DCMAKE_OBJECT_PATH_MAX=250')
         } catch (Exception e) {
-          logger.warn("mybizmate-scan: kept the default native build folder for \${sub.name}: \${e.message}")
+          logger.warn("mybizmate-ocr: kept the default native build folder for \${sub.name}: \${e.message}")
         }
       }
     }
