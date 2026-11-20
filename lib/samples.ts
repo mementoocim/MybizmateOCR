@@ -1,5 +1,7 @@
 import { Asset } from 'expo-asset';
 
+import type { BoxRead } from '../modules/scanner';
+
 // The 8 synthetic sample invoices bundled with the app, each with what was written in its boxes and what the laptop
 // (the Python reference) read (written by prototype/benchmark/export_core_fixtures.py).
 export type SampleInfo = { font: string; truth: Record<string, string>; laptop: Record<string, string> };
@@ -47,4 +49,23 @@ export async function sampleUri(id: string): Promise<string> {
   if (!sample) throw new Error(`No sample ${id}`);
   const asset = await Asset.fromModule(sample.source).downloadAsync();
   return asset.localUri ?? asset.uri;
+}
+
+/**
+ * A scan of a sample against the sample: boxes read exactly as written (out of the boxes with writing), and boxes
+ * read the way the laptop read them (out of the laptop's reads).
+ */
+export function compareWithSample(
+  reads: readonly BoxRead[],
+  info: SampleInfo,
+): { exact: number; written: number; sameAsLaptop: number; laptopBoxes: number } {
+  const text = new Map(reads.map((b) => [b.name, b.text]));
+  const written = Object.entries(info.truth).filter(([, t]) => t !== '');
+  const laptop = Object.entries(info.laptop);
+  return {
+    exact: written.filter(([name, t]) => text.get(name) === t).length,
+    written: written.length,
+    sameAsLaptop: laptop.filter(([name, t]) => text.get(name) === t).length,
+    laptopBoxes: laptop.length,
+  };
 }

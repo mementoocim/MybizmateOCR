@@ -10,7 +10,7 @@ import { StatusCard } from '../components/StatusCard';
 import { TEAM_BUILD } from '../lib/build';
 import { formatMs } from '../lib/format';
 import { FORMS, fieldLabel } from '../lib/forms';
-import { sampleInfo } from '../lib/samples';
+import { compareWithSample, sampleInfo } from '../lib/samples';
 import { useScanFlow } from '../lib/scanFlow';
 import { getScan } from '../lib/scans';
 import { bold, colors, sectionLabel } from '../lib/theme';
@@ -40,9 +40,7 @@ export default function Result() {
       : `${boxes} read on this phone in ${total}. Nothing left the phone.`;
   let sampleLine: string | null = null;
   if (scan.sampleId && r.aligned) {
-    const { truth } = sampleInfo(scan.sampleId);
-    const written = Object.values(truth).filter((t) => t !== '').length;
-    const exact = r.reads.filter((b) => truth[b.name] !== undefined && truth[b.name] !== '' && truth[b.name] === b.text).length;
+    const { exact, written } = compareWithSample(r.reads, sampleInfo(scan.sampleId));
     sampleLine = `Sample invoice: ${exact} of ${written} boxes read exactly as written.`;
   }
 
