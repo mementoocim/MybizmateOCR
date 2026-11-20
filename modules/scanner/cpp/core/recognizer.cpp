@@ -41,6 +41,7 @@ std::map<std::string, std::vector<std::string>> charsets() {
   return {
       {"printed_digits", digits},
       {"date", join(join(digits, chars("/-., ")), letters)},
+      {"date_digits", join(digits, chars("/-., "))},  // a Service Invoice's date, read again without letters
       {"tin", join(digits, chars("-"))},
       {"amount", join(digits, chars(",.P"))},  // P: the peso sign people write before amounts ("P1,500.00")
       {"number", join(digits, chars(",./ "))},  // / and space: quantities like 1/2 and 1 1/2

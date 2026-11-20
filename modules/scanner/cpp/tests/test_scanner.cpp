@@ -22,7 +22,7 @@ const std::vector<std::string> kSamples = {"inv_0001", "inv_0007", "inv_0011", "
 mbm::Scanner& scanner() {
   static mbm::Scanner s(mbm::Assets{readBytes(assetsDir() + "/inference_latin.onnx"), readText(assetsDir() + "/dict.txt"),
                                     readText(assetsDir() + "/field_map.json"), readBytes(assetsDir() + "/form_small.png"),
-                                    4});
+                                    readText(assetsDir() + "/service_invoice.json"), 4});
   return s;
 }
 
@@ -67,6 +67,7 @@ void checkParity(const mbm::ScanResult& r, const nlohmann::json& exp) {
     CHECK(r.reads[i].text == e["text"].get<std::string>());
     CHECK(r.reads[i].alts == e["alts"].get<std::vector<std::string>>());
     CHECK(std::abs(r.reads[i].conf - e["conf"].get<float>()) <= 0.002f);
+    CHECK(r.reads[i].cropSize == cv::Size(e["cropSize"][0].get<int>(), e["cropSize"][1].get<int>()));
   }
 }
 
@@ -77,11 +78,41 @@ TEST_CASE("parity on every fixture photo") {
   for (const auto& entry : std::filesystem::directory_iterator(fixturesDir() + "/expected")) {
     const std::string stem = entry.path().stem().string();
     CAPTURE(stem);
-    if (expected(stem)["form"] == "service_invoice") continue;  // until Task 4
     checkParity(scanFixture(stem), expected(stem));
     photos++;
   }
-  CHECK(photos == 18);  // until Task 4
+  CHECK(photos == 27);
+}
+
+TEST_CASE("a Service Invoice's page is its paper") {
+  const auto r = scanFixture("svc_0000");
+  REQUIRE(r.aligned);
+  CHECK(r.form == "service_invoice");
+  const cv::Mat page = cv::imread(r.pageFile);
+  CHECK(page.cols == 1108);
+  CHECK(page.rows == 1618);
+}
+
+TEST_CASE("the original view is written, at most 900 px wide") {
+  for (const char* stem : {"inv_0007", "blank_page"}) {
+    CAPTURE(stem);
+    const auto r = scanFixture(stem);
+    REQUIRE_FALSE(r.originalFile.empty());
+    const cv::Mat img = cv::imread(r.originalFile);
+    REQUIRE_FALSE(img.empty());
+    CHECK(img.cols <= 900);
+  }
+}
+
+TEST_CASE("json version 2") {
+  const auto aligned = nlohmann::json::parse(mbm::toJson(scanFixture("inv_0007")));
+  CHECK(aligned["darkMax"] == 50);
+  CHECK(aligned["originalFile"].is_string());
+  CHECK(aligned["scanDir"].is_string());
+  const auto none = nlohmann::json::parse(mbm::toJson(scanFixture("blank_page")));
+  CHECK(none["darkMax"].is_null());
+  CHECK(none["originalFile"].is_string());
+  CHECK(none["scanDir"].is_string());
 }
 
 TEST_CASE("a tiny image finds no form instead of failing") {

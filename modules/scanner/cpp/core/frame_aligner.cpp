@@ -8,6 +8,8 @@
 #include <opencv2/geometry/2d.hpp>  // OpenCV 5: fitLine, contourArea, getPerspectiveTransform
 #include <opencv2/imgproc.hpp>
 
+#include "core/numpy_compat.h"
+
 // Parity notes (the Python is the arbiter):
 // - The Python's lines and crossings are float64 and its quads float32. numpy 2 keeps float32 when a Python float
 //   joins in (NEP 50), so the aspect check, the quad's bounds and the refit's crossings are float32 here too.
@@ -117,12 +119,12 @@ std::vector<Line> merge(const std::vector<cv::Vec4d>& segs, bool horizontal, cv:
       wts.push_back(i.n);
       wts.push_back(i.n);
     }
-    double sx = 0, sy = 0, wsum = 0;
+    double sx = 0, sy = 0;  // (pts * wts[:, None]).sum(0): left to right
     for (size_t k = 0; k < pts.size(); k++) {
       sx += pts[k][0] * wts[k];
       sy += pts[k][1] * wts[k];
     }
-    for (double w : wts) wsum += w;
+    const double wsum = npSum(wts);  // wts.sum(): numpy's pairwise sum
     const cv::Vec2d c(sx / wsum, sy / wsum);
     double cxx = 0, cyx = 0, cyy = 0;  // ((pts - c) * w).T @ (pts - c); eigh reads the lower triangle
     for (size_t k = 0; k < pts.size(); k++) {
@@ -329,6 +331,9 @@ std::optional<FrameFound> FrameAligner::find(const cv::Mat& gray, bool refit) co
                cv::INTER_AREA);
   }
   const int h = small.rows, w = small.cols, mn = std::min(h, w);
+  // Too small to hold a form: the threshold's block would be under 3 px, which OpenCV refuses (the Python would raise;
+  // the app says it found no form instead, as align.cpp does for the corner squares).
+  if ((static_cast<int>(mn * 0.04) | 1) < 3) return std::nullopt;
   const cv::Mat th = binarize(small);
   std::vector<cv::Vec4i> found;
   cv::HoughLinesP(th, found, 1, CV_PI / 180, static_cast<int>(mn * 0.08), static_cast<int>(mn * 0.12),

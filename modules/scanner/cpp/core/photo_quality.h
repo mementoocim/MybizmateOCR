@@ -6,8 +6,10 @@
 
 namespace mbm::quality {
 
-constexpr double SALES_SHARP_MIN = 1.0;  // a MyBizMate Sales Invoice scan below this is flagged "blurry"
-constexpr double SALES_LIVE_MIN = 1.2;   // the camera waits for this before its photo
+constexpr double SALES_SHARP_MIN = 1.0;    // a MyBizMate Sales Invoice scan below this is flagged "blurry"
+constexpr double SALES_LIVE_MIN = 1.2;     // the camera waits for this before its photo
+constexpr double SERVICE_SHARP_MIN = 0.5;  // the same for the Service Invoice (its page has more blank paper)
+constexpr double SERVICE_LIVE_MIN = 0.7;
 constexpr double DARK_MAX = 50;          // paper darker than this (0-255) is flagged "dark"
 constexpr double TURN_MARGIN = 0.15;     // turn when the page matches the form this much better upside down
 

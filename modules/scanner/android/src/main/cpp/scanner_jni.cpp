@@ -38,10 +38,12 @@ extern "C" JNIEXPORT jstring JNICALL Java_expo_modules_scanner_NativeScanner_cor
 
 extern "C" JNIEXPORT jlong JNICALL Java_expo_modules_scanner_NativeScanner_create(JNIEnv* env, jobject, jbyteArray model,
                                                                                   jstring dict, jstring fieldMap,
-                                                                                  jbyteArray formPng, jint threads) {
+                                                                                  jbyteArray formPng,
+                                                                                  jstring serviceJson, jint threads) {
   try {
     auto* scanner = new mbm::Scanner(mbm::Assets{toBytes(env, model), toString(env, dict), toString(env, fieldMap),
-                                                 toBytes(env, formPng), static_cast<int>(threads)});
+                                                 toBytes(env, formPng), toString(env, serviceJson),
+                                                 static_cast<int>(threads)});
     return reinterpret_cast<jlong>(scanner);
   } catch (const std::exception& e) {
     throwJava(env, "java/lang/RuntimeException", e.what());
