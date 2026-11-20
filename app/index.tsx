@@ -1,14 +1,15 @@
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { useState, useSyncExternalStore } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { OutlinedButton, PrimaryButton, TextButton } from '../components/Buttons';
-import { Camera, ImageIcon, Lock, More } from '../components/icons';
+import { Camera, ChevronRight, ImageIcon, Lock, More } from '../components/icons';
 import { ReadingOverlay } from '../components/ReadingOverlay';
 import { RecentRow } from '../components/RecentRow';
 import { ScanIllustration } from '../components/ScanIllustration';
 import { Sheet } from '../components/Sheet';
 import { TEAM_BUILD } from '../lib/build';
+import { savedList, subscribeSaved } from '../lib/saved';
 import { SAMPLES } from '../lib/samples';
 import { useScanFlow } from '../lib/scanFlow';
 import { recentScans, subscribeRecent } from '../lib/scans';
@@ -22,11 +23,20 @@ const TIPS = [
 
 const handwriting = (font: string) => `${font === 'PatrickHand' ? 'Patrick Hand' : font} handwriting`;
 
-// Home (the test app's activity_home.xml and HomeActivity.java).
+// Home (the test app's activity_home.xml and HomeActivity.java), with the menu to the saved invoices, the lists and
+// Settings, and a row for the saved invoices still to export.
 export default function Home() {
   const router = useRouter();
   const flow = useScanFlow();
   const recent = useSyncExternalStore(subscribeRecent, recentScans); // a scan read on any screen shows at once
+  const saved = useSyncExternalStore(subscribeSaved, savedList);
+  const toExport = saved.filter((s) => s.exportedAt === null).length;
+  const menu: { label: string; to: Href }[] = [
+    { label: 'Saved invoices', to: '/saved' },
+    { label: 'Your lists', to: '/lists' },
+    { label: 'Settings', to: '/settings' },
+    ...(TEAM_BUILD ? [{ label: 'Speed test', to: '/speed' as Href }] : []), // the team's own tool
+  ];
   const [samplesOpen, setSamplesOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -38,11 +48,9 @@ export default function Home() {
           mybizmate<Text style={styles.io}>.io</Text>
         </Text>
         <View style={styles.spacer} />
-        {TEAM_BUILD && (
-          <Pressable testID="menu" accessibilityLabel="More" hitSlop={8} onPress={() => setMenuOpen(true)}>
-            <More color={colors.ink} />
-          </Pressable>
-        )}
+        <Pressable testID="menu" accessibilityLabel="More" hitSlop={8} onPress={() => setMenuOpen(true)}>
+          <More color={colors.ink} />
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -64,6 +72,19 @@ export default function Home() {
             onPress={() => flow.fromGallery()}
           />
         </View>
+
+        {saved.length > 0 && (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/saved')}
+            style={({ pressed }) => [styles.savedRow, pressed && styles.pressed]}>
+            <View style={styles.savedWords}>
+              <Text style={styles.savedTitle}>Saved invoices</Text>
+              <Text style={styles.savedStatus}>{toExport > 0 ? `${toExport} to export` : 'All exported'}</Text>
+            </View>
+            <ChevronRight size={20} color={colors.mute} />
+          </Pressable>
+        )}
 
         <Text style={[sectionLabel, styles.section]}>FOR THE BEST SCAN</Text>
         {TIPS.map((tip, i) => (
@@ -125,16 +146,19 @@ export default function Home() {
 
       <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
         <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)}>
-          <View style={styles.menu}>
-            <Pressable
-              accessibilityRole="button"
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuOpen(false);
-                router.push('/speed');
-              }}>
-              <Text style={styles.menuText}>Speed test</Text>
-            </Pressable>
+          <View style={styles.menu} testID="menu-items">
+            {menu.map((item) => (
+              <Pressable
+                key={item.label}
+                accessibilityRole="button"
+                style={styles.menuItem}
+                onPress={() => {
+                  setMenuOpen(false);
+                  router.push(item.to);
+                }}>
+                <Text style={styles.menuText}>{item.label}</Text>
+              </Pressable>
+            ))}
           </View>
         </Pressable>
       </Modal>
@@ -171,6 +195,21 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   illustration: { alignItems: 'center', paddingVertical: 4 },
+  savedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+    backgroundColor: colors.panel,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  savedWords: { flex: 1 },
+  savedTitle: { ...bold, fontSize: 15, color: colors.ink },
+  savedStatus: { fontSize: 13, color: colors.mute, marginTop: 2 },
   section: { marginTop: 28, marginBottom: 8 },
   tip: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
   tipNumber: {

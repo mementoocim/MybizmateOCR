@@ -29,6 +29,7 @@ export default function RootLayout() {
         <Stack.Screen name="speed" options={{ title: 'Speed test' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         <Stack.Screen name="saved" options={{ title: 'Saved invoices' }} />
+        <Stack.Screen name="lists" options={{ title: 'Your lists' }} />
       </Stack>
       {!ready && <BrandSplash onReady={onReady} />}
     </View>

@@ -1,17 +1,36 @@
+import { useMemo, useSyncExternalStore } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatClock, formatMs } from '../lib/format';
-import { photoFlags } from '../lib/photoChecks';
+import { lists, subscribeLists } from '../lib/lists';
+import { saleOf } from '../lib/sale';
 import type { StoredScan } from '../lib/scans';
+import { settings, subscribeSettings } from '../lib/settings';
 import { bold, colors } from '../lib/theme';
 import { CheckCircle, ChevronRight, ErrorCircle } from './icons';
 
-/** One of Home's recent scans: how it went, how long it took, and when (the test app's HomeActivity.java:301-338). */
+/**
+ * One of Home's recent scans: where it stands (its form not found, saved, its things to check, or ready to post), how
+ * long it took, and when (the test app's HomeActivity.java:301-338). It runs the scan's own screen's checks, with the
+ * lists as they are now, so the two always agree.
+ */
 export function RecentRow({ scan, onPress }: { scan: StoredScan; onPress: () => void }) {
   const r = scan.result;
-  const flags = photoFlags(r);
-  const status = !r.aligned ? 'Form not found' : flags.length > 0 ? `${flags.length} to check` : 'Read';
-  const ok = r.aligned && flags.length === 0;
+  const theLists = useSyncExternalStore(subscribeLists, lists);
+  const theSettings = useSyncExternalStore(subscribeSettings, settings);
+  const sale = useMemo(
+    () => (r.aligned && r.form ? saleOf(scan, theLists, theSettings) : null),
+    [scan, r, theLists, theSettings],
+  );
+  const status =
+    sale === null
+      ? 'Form not found'
+      : scan.saved
+        ? `Saved as a ${scan.kind}`
+        : sale.problems.length > 0
+          ? `${sale.problems.length} to check`
+          : 'Ready to post';
+  const ok = sale !== null && (scan.saved !== null || sale.problems.length === 0);
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       {ok ? <CheckCircle size={24} color={colors.pine} /> : <ErrorCircle size={24} color={colors.ember} />}
