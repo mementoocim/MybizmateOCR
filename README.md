@@ -122,9 +122,14 @@ The emulator's times move with the laptop's load (this run came right after a 12
 numbers count.
 
 **Still open: a real arm64 phone.** No phone was connected for this milestone, so these still need checking with a
-team release: the speed test's numbers (the design's target is under 3 s from photo to result), peak memory after a
-50 MP gallery photo (and a HEIC one if the phone takes them), and the live camera on a printed form: the outline,
-the automatic photo, the torch and Manual mode.
+team release:
+- the speed test's numbers (the design's target is under 3 s from photo to result);
+- peak memory after 50 MP, 108 MP and 200 MP gallery photos (decoded smaller first now), and a HEIC one if the phone
+  takes them;
+- the live camera on a printed form: the outline sits on the sheet in the preview, the automatic photo, the torch
+  (also after leaving the app and coming back), and Manual mode;
+- how long a frame check takes on a cluttered desk;
+- in a release build, that a speed-test run keeps no scan folders and a camera photo is deleted once read.
 
 ## Fixtures and assets
 
