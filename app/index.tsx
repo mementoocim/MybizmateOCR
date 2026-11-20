@@ -19,7 +19,7 @@ export default function Home() {
     try {
       const uri = await photoUri();
       if (!uri) return;
-      const id = addScan(label, await scanPhoto(uri));
+      const id = addScan({ label, source: 'gallery', result: await scanPhoto(uri) });
       router.push(`/result?id=${id}`);
     } catch (e: any) {
       if (e?.code === 'ERR_UNREADABLE_IMAGE') {
