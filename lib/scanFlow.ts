@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useIsFocused, useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 
 import { scanPhoto } from '../modules/scanner';
 import { SAMPLES, sampleUri } from './samples';
@@ -17,6 +17,18 @@ export function useScanFlow() {
   const router = useRouter();
   const busy = useRef(false);
   const [reading, setReading] = useState(false);
+  // false once the screen is left: a read that ends after that is kept in Recent scans, and nothing opens.
+  const focused = useIsFocused();
+  const here = useRef(true);
+  useEffect(() => {
+    here.current = focused;
+  }, [focused]);
+  useEffect(
+    () => () => {
+      here.current = false;
+    },
+    [],
+  );
 
   async function run(getUri: () => Promise<string | null>, label: string, source: ScanSource, opts: ReadOptions,
                      openError: string): Promise<void> {
@@ -35,6 +47,7 @@ export function useScanFlow() {
       try {
         const result = await scanPhoto(uri, { deletePhoto: opts.deletePhoto ?? false });
         const id = addScan({ label, source, sampleId: opts.sampleId, result });
+        if (!here.current) return;
         const target = { pathname: '/result', params: { id } } as const;
         if (opts.replace) router.replace(target);
         else router.push(target);

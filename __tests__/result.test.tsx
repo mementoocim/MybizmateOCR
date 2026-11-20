@@ -19,6 +19,7 @@ const mockLibrary = jest.fn(async () => ({ canceled: true }));
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useRouter: () => mockRouter,
+  useIsFocused: () => true,
   Stack: {
     Screen: ({ options }: { options?: { headerTitle?: (p: object) => ReactElement } }) =>
       options?.headerTitle ? options.headerTitle({}) : null,

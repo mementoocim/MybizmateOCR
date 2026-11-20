@@ -12,6 +12,7 @@ const mockLibrary = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
   useFocusEffect: (effect: () => void) => require('react').useEffect(effect, []),
+  useIsFocused: () => true,
 }));
 jest.mock('../modules/scanner', () => ({
   scanPhoto: (uri: string, options: object) => mockScanPhoto(uri, options),

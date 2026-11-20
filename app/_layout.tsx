@@ -24,6 +24,7 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: colors.paper },
         }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="camera" options={{ headerShown: false, contentStyle: { backgroundColor: '#000000' } }} />
         <Stack.Screen name="result" options={{ title: 'Scan' }} />
       </Stack>
       {!ready && <BrandSplash onReady={onReady} />}
