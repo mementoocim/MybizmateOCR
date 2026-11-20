@@ -23,16 +23,20 @@ test('the settings show what the phone keeps', async () => {
   ).toBeTruthy();
 });
 
-test('a field is saved when it is left, and the VAT answer at once', async () => {
+test('a field is saved as it is typed, and the VAT answer at once', async () => {
   await render(<SettingsScreen />);
-  const expense = screen.getByLabelText('Expense account for purchases');
-  await act(async () => fireEvent.changeText(expense, '5010'));
-  expect(settings().expenseAccount).toBe('');
-  await act(async () => fireEvent(expense, 'blur'));
+  await act(async () => fireEvent.changeText(screen.getByLabelText('Expense account for purchases'), ' 5010 '));
   expect(settings().expenseAccount).toBe('5010');
   await act(async () => fireEvent.changeText(screen.getByLabelText('Withholding tax ATC'), 'wc158'));
-  await act(async () => fireEvent(screen.getByLabelText('Withholding tax ATC'), 'blur'));
+  expect(screen.getByLabelText('Withholding tax ATC').props.value).toBe('WC158');
   expect(settings().atc).toBe('WC158');
   await act(async () => fireEvent.press(screen.getByText('Not VAT-registered')));
   expect(settings().vatRegistered).toBe(false);
+});
+
+test('what was typed is kept when the screen is left from the field', async () => {
+  await render(<SettingsScreen />);
+  await act(async () => fireEvent.changeText(screen.getByLabelText('Revenue account for sales'), '4000 Sales Revenue'));
+  await screen.unmount(); // going back while the field still has the cursor: React Native doesn't blur it
+  expect(settings().revenueAccount).toBe('4000 Sales Revenue');
 });

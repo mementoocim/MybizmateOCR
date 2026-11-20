@@ -7,7 +7,9 @@ import { TextField } from '../components/TextField';
 import { settings, subscribeSettings, updateSettings } from '../lib/settings';
 import { colors, sectionLabel } from '../lib/theme';
 
-// Settings: the export defaults the phone keeps (lib/settings.ts). A text field is saved when it's left.
+// Settings: the export defaults the phone keeps (lib/settings.ts). A text field is saved as it's typed: going back
+// while a field still has the cursor doesn't blur it (React Native calls no onBlur on unmount), so saving when it's
+// left would lose the change.
 export default function SettingsScreen() {
   const s = useSyncExternalStore(subscribeSettings, settings);
   const [revenue, setRevenue] = useState(s.revenueAccount);
@@ -26,22 +28,28 @@ export default function SettingsScreen() {
         label="Revenue account for sales"
         placeholder="Code or name, as in MyBizMate"
         value={revenue}
-        onChangeText={setRevenue}
-        onBlur={() => void updateSettings({ revenueAccount: revenue.trim() })}
+        onChangeText={(t) => {
+          setRevenue(t);
+          void updateSettings({ revenueAccount: t.trim() });
+        }}
       />
       <TextField
         label="Expense account for purchases"
         placeholder="Code or name, as in MyBizMate"
         value={expense}
-        onChangeText={setExpense}
-        onBlur={() => void updateSettings({ expenseAccount: expense.trim() })}
+        onChangeText={(t) => {
+          setExpense(t);
+          void updateSettings({ expenseAccount: t.trim() });
+        }}
       />
       <TextField
         label="Withholding tax ATC"
         placeholder="e.g. WC158"
         value={atc}
-        onChangeText={(t) => setAtc(t.toUpperCase())}
-        onBlur={() => void updateSettings({ atc: atc.trim() })}
+        onChangeText={(t) => {
+          setAtc(t.toUpperCase());
+          void updateSettings({ atc: t.toUpperCase().trim() });
+        }}
         autoCapitalize="characters"
       />
       <Text style={styles.note}>
