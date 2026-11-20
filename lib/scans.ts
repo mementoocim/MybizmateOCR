@@ -106,6 +106,16 @@ export function cacheScan(scan: StoredScan): void {
   changed();
 }
 
+/** Forgets a scan (a saved invoice the person deleted): from the recent scans and the opened ones. */
+export function forgetScan(id: string): void {
+  if (recent.some((s) => s.id === id)) {
+    recent = recent.filter((s) => s.id !== id);
+    void save();
+  }
+  opened.delete(id);
+  changed();
+}
+
 /** Newest first, 6 at most; the same list until it changes. */
 export function recentScans(): readonly StoredScan[] {
   return recent;

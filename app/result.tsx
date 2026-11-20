@@ -8,18 +8,22 @@ import { Camera } from '../components/icons';
 import { PartySheet } from '../components/PartySheet';
 import { ReadingOverlay } from '../components/ReadingOverlay';
 import { SaleRow } from '../components/SaleRow';
+import { SaveSheet } from '../components/SaveSheet';
 import { ScanImage } from '../components/ScanImage';
 import { Segmented } from '../components/Segmented';
 import { StatusCard } from '../components/StatusCard';
 import { SupplierSheet } from '../components/SupplierSheet';
 import { TermsSheet } from '../components/TermsSheet';
 import { TEAM_BUILD } from '../lib/build';
+import { localIsoDate } from '../lib/checks/dates';
 import { candidates } from '../lib/checks/num';
+import { saveBlock } from '../lib/exportRows';
 import { formatMs, peso, prettyDate, qty } from '../lib/format';
 import { FORMS, formFields } from '../lib/forms';
 import { addItem, lists, subscribeLists } from '../lib/lists';
 import { boxValue, rawFromScan, saleOf, type SaleView } from '../lib/sale';
 import { compareWithSample, sampleInfo } from '../lib/samples';
+import { savedSummary, subscribeSaved } from '../lib/saved';
 import { useScanFlow } from '../lib/scanFlow';
 import { getScan, type Kind, type StoredScan, subscribeRecent, updateScan } from '../lib/scans';
 import { settings, subscribeSettings } from '../lib/settings';
@@ -51,7 +55,15 @@ type OpenSheet =
   | { kind: 'boxes'; title: string; boxes: string[]; row?: number } // row: an item row's sheet
   | { kind: 'terms' }
   | { kind: 'customer' }
-  | { kind: 'supplier' };
+  | { kind: 'supplier' }
+  | { kind: 'save' };
+
+const BLOCKED: Record<string, string> = {
+  no_date: 'Add the date first: tap Date.',
+  no_total: 'Add the total first: tap Total due.',
+  no_supplier: 'Choose the supplier first: tap Supplier.',
+};
+const dayOf = (iso: string) => prettyDate(localIsoDate(new Date(iso)));
 
 // The result (the test app's ResultActivity): the checks' card, the scan view, the sale with every row opening what
 // the camera saw in its boxes (each box fixable, the checks run again at once), the footnote, and Retake.
@@ -65,6 +77,7 @@ export default function Result() {
     () => (scan && scan.result.aligned && scan.result.form ? saleOf(scan, theLists, theSettings) : null),
     [scan, theLists, theSettings],
   );
+  const summary = useSyncExternalStore(subscribeSaved, () => (id ? savedSummary(id) : undefined));
   const [sheet, setSheet] = useState<OpenSheet | null>(null);
   if (!scan) {
     return (
@@ -88,6 +101,18 @@ export default function Result() {
     const { exact, written } = compareWithSample(r.reads, sampleInfo(scan.sampleId));
     sampleLine = `Sample invoice: ${exact} of ${written} boxes read exactly as written.`;
   }
+  const isSample = scan.source === 'sample';
+  const canSave = r.aligned && !isSample && sale !== null;
+  const savedLine = summary
+    ? `Saved as a ${summary.kind} on ${dayOf(summary.savedAt)}. ${summary.exportedAt ? `Exported ${dayOf(summary.exportedAt)}.` : 'Not exported yet.'}`
+    : null;
+  const back = from === 'recent' || from === 'saved';
+
+  function openSave() {
+    const block = saveBlock(scan!, sale);
+    if (block === null) setSheet({ kind: 'save' });
+    else if (BLOCKED[block]) toast(BLOCKED[block]);
+  }
 
   return (
     <View style={styles.screen}>
@@ -98,12 +123,29 @@ export default function Result() {
         {sale && <SaleSections scan={scan} sale={sale} open={setSheet} />}
         <Text style={styles.footnote}>{footnote}</Text>
         {sampleLine && <Text style={styles.footnote}>{sampleLine}</Text>}
+        {isSample && r.aligned && (
+          <Text style={styles.footnote}>{"Sample invoices are made up, so they can't be saved."}</Text>
+        )}
       </ScrollView>
       <View style={styles.bottom}>
+        {savedLine && <Text style={styles.saved}>{savedLine}</Text>}
         {r.aligned ? (
-          <OutlinedButton label="Retake" onPress={() => flow.retake(scan, from === 'recent')} />
+          <View style={styles.buttons}>
+            <View style={styles.button}>
+              <OutlinedButton label="Retake" onPress={() => flow.retake(scan, back)} />
+            </View>
+            {canSave && (
+              <View style={styles.button}>
+                <PrimaryButton
+                  testID="save-open"
+                  label={summary ? 'Save changes' : scan.kind === 'sale' ? 'Save sale' : 'Save purchase'}
+                  onPress={openSave}
+                />
+              </View>
+            )}
+          </View>
         ) : (
-          <PrimaryButton label="Retake" icon={Camera} onPress={() => flow.retake(scan, from === 'recent')} />
+          <PrimaryButton label="Retake" icon={Camera} onPress={() => flow.retake(scan, back)} />
         )}
       </View>
       {sheet?.kind === 'boxes' && (
@@ -118,6 +160,7 @@ export default function Result() {
       {sheet?.kind === 'supplier' && sale && (
         <SupplierSheet visible scan={scan} sale={sale} onClose={() => setSheet(null)} />
       )}
+      {sheet?.kind === 'save' && sale && <SaveSheet visible scan={scan} sale={sale} onClose={() => setSheet(null)} />}
       <ReadingOverlay visible={flow.reading} />
     </View>
   );
@@ -345,6 +388,9 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.panel, borderRadius: 18, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
   footnote: { fontSize: 13, color: colors.mute, marginTop: 16, lineHeight: 18 },
   bottom: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, backgroundColor: colors.panel },
+  saved: { fontSize: 13, color: colors.pine, marginBottom: 12 },
+  buttons: { flexDirection: 'row', gap: 12 },
+  button: { flex: 1 },
   title: { ...bold, fontSize: 18, color: colors.ink },
   subtitle: { fontSize: 13, color: colors.mute },
 });

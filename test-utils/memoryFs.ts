@@ -40,10 +40,15 @@ class MemoryDirectory {
     for (const k of [...store.files.keys()]) if (k.startsWith(`${base}/`)) store.files.delete(k);
     for (const k of [...store.dirs]) if (k === base || k.startsWith(`${base}/`)) store.dirs.delete(k);
   }
-  /** Renames the folder to the destination's path (which must not exist yet). */
+  /**
+   * As expo-file-system 58 on Android (FileSystemPath.getMoveOrCopyPath, unix-like): into the destination when it
+   * exists, else renamed to it when its parent exists.
+   */
   async move(destination: { uri: string }) {
     const from = trim(this.uri);
-    const to = trim(destination.uri);
+    let to = trim(destination.uri);
+    if (new MemoryDirectory(to).exists) to = `${to}/${nameOf(from)}`;
+    else if (!new MemoryDirectory(to.replace(/\/[^/]*$/, '')).exists) throw new Error(`No destination folder: ${to}`);
     if (new MemoryDirectory(to).exists) throw new Error(`Destination exists: ${to}`);
     for (const k of [...store.files.keys()]) {
       if (!k.startsWith(`${from}/`)) continue;
