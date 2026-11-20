@@ -19,10 +19,15 @@ jest.mock('expo-file-system', () => {
   return { ...memory, File: Object.assign(memory.File, { pickFileAsync: (options: object) => mockPick(options) }) };
 });
 
-/** What the file picker gives: a file with that name, type and text. */
+/** What the file picker gives: a file with that name, type and text (its bytes UTF-8, as Google Sheets writes). */
 const picked = (name: string, text: string | Error, type = 'text/csv') => ({
   canceled: false,
-  result: { name, type, text: async () => (text instanceof Error ? Promise.reject(text) : text) },
+  result: {
+    name,
+    type,
+    text: async () => (text instanceof Error ? Promise.reject(text) : text),
+    bytes: async () => (text instanceof Error ? Promise.reject(text) : new TextEncoder().encode(text)),
+  },
 });
 
 const press = (el: Parameters<typeof fireEvent.press>[0]) => act(async () => fireEvent.press(el));
@@ -221,4 +226,16 @@ test('which columns', async () => {
   await press(screen.getByText('Which columns?'));
   expect(screen.getByText('Columns for items')).toBeTruthy();
   expect(screen.getByText('The first row names the columns: Name, Unit and Price.')).toBeTruthy();
+});
+
+test("a CSV saved by Excel's plain CSV keeps its ñ", async () => {
+  // Excel's "CSV (Comma delimited)" writes Windows-1252; read as UTF-8 (File.text() on Android), its ñ would be lost
+  const bytes = Uint8Array.from(Array.from('Code,Registered name\r\nC1,Parañaque Hardware\r\n', (c) => c.charCodeAt(0)));
+  mockPick.mockResolvedValueOnce({
+    canceled: false,
+    result: { name: 'parties.csv', type: 'text/csv', text: async () => new TextDecoder().decode(bytes), bytes: async () => bytes },
+  });
+  await render(<ListsScreen />);
+  await press(screen.getByText('Import CSV'));
+  expect(screen.getByText('Parañaque Hardware')).toBeTruthy();
 });

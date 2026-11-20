@@ -50,12 +50,6 @@ export function matchCustomer(name: string, tinDigits: string, pack: Pack): [str
   const lower = n.toLowerCase();
   const score = (c: PackCustomer) => Math.max(...[c.name, ...(c.names ?? [])].map((x) => wRatio(lower, x.toLowerCase())));
   const byTin = tin9.length === 9 ? pack.customers.filter((c) => c.tin.replace(/-/g, '').slice(0, 9) === tin9) : [];
-  const ranked = n
-    ? pack.customers
-        .map((c, i) => ({ c, i, s: score(c) }))
-        .sort((x, y) => y.s - x.s || x.i - y.i)
-        .slice(0, 3)
-    : [];
   if (byTin.length > 0) {
     let best = byTin[0];
     if (n) {
@@ -70,6 +64,13 @@ export function matchCustomer(name: string, tinDigits: string, pack: Pack): [str
     }
     if (!n || score(best) >= 60) return [best.id, 'auto'];
   }
+  // Every customer is scored only when the TIN didn't settle it (the Python ranks them first: the same answer).
+  const ranked = n
+    ? pack.customers
+        .map((c, i) => ({ c, i, s: score(c) }))
+        .sort((x, y) => y.s - x.s || x.i - y.i)
+        .slice(0, 3)
+    : [];
   if (ranked.length > 0) {
     const top = ranked[0];
     const gap = top.s - (ranked.length > 1 ? ranked[1].s : 0);
@@ -82,10 +83,12 @@ export function matchCustomer(name: string, tinDigits: string, pack: Pack): [str
 /** The item list's match. A weak name match counts only when the unit and the list price also agree. */
 export function matchItem(desc: string, pack: Pack, unit?: string | null, price?: number | null): [string | null, number] {
   if (!desc) return [null, 0];
+  const query = desc.toLowerCase();
+  const queryUnit = unit ? unit.toLowerCase() : '';
   let best: [string | null, number, number] = [null, -1, 0];
   for (const it of pack.items) {
-    const s = wRatio(desc.toLowerCase(), it.description.toLowerCase());
-    const unitOk = !!unit && ratio(unit.toLowerCase(), it.unit.toLowerCase()) >= 67;
+    const s = wRatio(query, it.description.toLowerCase());
+    const unitOk = !!unit && ratio(queryUnit, it.unit.toLowerCase()) >= 67;
     const priceOk = price != null && Math.abs(price - it.price) < 0.011;
     const total = s + (unitOk ? 15 : 0) + (priceOk ? 20 : 0);
     if (total > best[1]) best = [it.id, total, s >= 70 || (s >= 40 && unitOk && priceOk) ? s : -1];

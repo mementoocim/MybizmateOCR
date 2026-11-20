@@ -12,6 +12,8 @@ import type { Settings, TaxType } from './settings';
 
 export const SAMPLE_DAY = '2026-11-18'; // the samples are made-up invoices of that time: checked as of then
 export const VARIOUS_CUSTOMER = 'VARIOUS-CUST';
+/** Said where a real scan could add a name to the lists: a sample's made-up names never reach them, or an export. */
+export const SAMPLE_NAMES = "Samples are made up, so their names aren't added to your lists.";
 export const VARIOUS_SUPPLIER = 'VARIOUS-SUPP';
 
 export type PartyStatus = 'auto' | 'chosen' | 'unsure' | 'new' | 'unlisted' | 'blank' | 'typed' | 'various' | 'missing';
@@ -104,7 +106,19 @@ export function problemWords(final: Final, kind: Kind, supplierMissing: boolean)
 
 const listColumn = (p: Party) => p.code || exportName(p);
 
+// One run of the checks per scan as it stands: Home's row, the scan's screen and Saved invoices share it. The
+// stores replace a scan, the lists or the settings when they change, so the same objects give the same answer.
+const views = new WeakMap<StoredScan, { lists: Lists; settings: Settings; view: SaleView }>();
+
 export function saleOf(scan: StoredScan, lists: Lists, settings: Settings): SaleView {
+  const hit = views.get(scan);
+  if (hit && hit.lists === lists && hit.settings === settings) return hit.view;
+  const view = checkSale(scan, lists, settings);
+  views.set(scan, { lists, settings, view });
+  return view;
+}
+
+function checkSale(scan: StoredScan, lists: Lists, settings: Settings): SaleView {
   const raw = rawFromScan(scan);
   const isSale = scan.kind === 'sale';
   const pack: Pack = isSale ? packFor(lists) : { customers: [], items: [] };

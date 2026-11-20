@@ -17,7 +17,7 @@ import { TermsSheet } from '../components/TermsSheet';
 import { TEAM_BUILD } from '../lib/build';
 import { localIsoDate } from '../lib/checks/dates';
 import { candidates } from '../lib/checks/num';
-import { saveBlock } from '../lib/exportRows';
+import { exportRow, saveBlock, sameRow } from '../lib/exportRows';
 import { formatMs, peso, prettyDate, qty } from '../lib/format';
 import { FORMS, formFields } from '../lib/forms';
 import { addItem, lists, subscribeLists } from '../lib/lists';
@@ -103,9 +103,17 @@ export default function Result() {
   }
   const isSample = scan.source === 'sample';
   const canSave = r.aligned && !isSample && sale !== null;
-  const savedLine = summary
-    ? `Saved as a ${summary.kind} on ${dayOf(summary.savedAt)}. ${summary.exportedAt ? `Exported ${dayOf(summary.exportedAt)}.` : 'Not exported yet.'}`
-    : null;
+  // A saved invoice changed here (a box, sale or purchase, its party) goes out as saved until Save changes.
+  const changed =
+    summary !== undefined &&
+    sale !== null &&
+    scan.saved !== null &&
+    !sameRow(exportRow(scan, sale, scan.saved.details), summary.row);
+  const savedLine = !summary
+    ? null
+    : changed
+      ? 'Changed since it was saved. The export still has the saved version: tap Save changes.'
+      : `Saved as a ${summary.kind} on ${dayOf(summary.savedAt)}. ${summary.exportedAt ? `Exported ${dayOf(summary.exportedAt)}.` : 'Not exported yet.'}`;
   const back = from === 'recent' || from === 'saved';
 
   function openSave() {
@@ -128,7 +136,7 @@ export default function Result() {
         )}
       </ScrollView>
       <View style={styles.bottom}>
-        {savedLine && <Text style={styles.saved}>{savedLine}</Text>}
+        {savedLine && <Text style={[styles.saved, changed && styles.changed]}>{savedLine}</Text>}
         {r.aligned ? (
           <View style={styles.buttons}>
             <View style={styles.button}>
@@ -169,7 +177,7 @@ export default function Result() {
 /** On a sale, an item the lists don't have: one tap adds it, with its unit and the row's unit price. */
 function NewItem({ scan, sale, row }: { scan: StoredScan; sale: SaleView; row: number }) {
   const item = sale.final.items.find((it) => it.row === row);
-  if (scan.kind !== 'sale' || !item || item.item_id !== null || !item.description) return null;
+  if (scan.kind !== 'sale' || scan.source === 'sample' || !item || item.item_id !== null || !item.description) return null;
   const add = async () => {
     await addItem({ name: item.description, unit: boxValue(scan, `item${row}_unit`) ?? '', price: item.unit_price });
     toast('Added to your items.');
@@ -236,7 +244,12 @@ function SaleSections({ scan, sale, open }: { scan: StoredScan; sale: SaleView; 
     <>
       <Text style={sectionLabel}>THIS INVOICE IS</Text>
       <View style={styles.kind}>
-        <Segmented options={KINDS} value={scan.kind} onChange={(kind) => updateScan(scan.id, { kind })} />
+        <Segmented
+          options={KINDS}
+          value={scan.kind}
+          // the party chosen for one is never the other's: a sale's customer didn't issue the invoice
+          onChange={(kind) => kind !== scan.kind && updateScan(scan.id, { kind, party: null })}
+        />
       </View>
       <Text style={styles.caption}>{KIND_CAPTION[scan.kind]}</Text>
 
@@ -389,6 +402,7 @@ const styles = StyleSheet.create({
   footnote: { fontSize: 13, color: colors.mute, marginTop: 16, lineHeight: 18 },
   bottom: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, backgroundColor: colors.panel },
   saved: { fontSize: 13, color: colors.pine, marginBottom: 12 },
+  changed: { color: colors.ember },
   buttons: { flexDirection: 'row', gap: 12 },
   button: { flex: 1 },
   title: { ...bold, fontSize: 18, color: colors.ink },

@@ -149,16 +149,49 @@ function partyType(text: string, fallback: PartyType): PartyType {
   return fallback;
 }
 
-/** The party a row updates: the same code, else the same first 9 TIN digits and the same name; -1 when none. */
-function findParty(parties: readonly Party[], code: string, tin: string, name: string): number {
-  if (code) {
-    const byCode = parties.findIndex((p) => p.code.toLowerCase() === code.toLowerCase());
-    if (byCode >= 0) return byCode;
-  }
-  const tin9 = tin.replace(/\D/g, '').slice(0, 9);
-  return parties.findIndex(
-    (p) => p.tin.replace(/\D/g, '').slice(0, 9) === tin9 && partyName(p).toLowerCase() === name.toLowerCase(),
-  );
+const codeKey = (code: string) => code.toLowerCase();
+const tinNameKey = (tin: string, name: string) => `${tin.replace(/\D/g, '').slice(0, 9)}|${name.toLowerCase()}`;
+
+/**
+ * Where a CSV row's party is in the list: the first with the same code, else the first with the same first 9 TIN
+ * digits and the same name (-1 when none). Kept as the rows change the list, so a file of thousands reads quickly.
+ */
+function partyIndex(parties: readonly Party[]) {
+  const byCode = new Map<string, number[]>(); // each key's places in the list, in order
+  const byTinName = new Map<string, number[]>();
+  const keysOf = (p: Party) => ({ code: p.code ? codeKey(p.code) : null, tinName: tinNameKey(p.tin, partyName(p)) });
+  const put = (map: Map<string, number[]>, key: string, i: number) => {
+    const places = map.get(key);
+    if (!places) return void map.set(key, [i]);
+    const after = places.findIndex((at) => at > i);
+    places.splice(after === -1 ? places.length : after, 0, i);
+  };
+  const drop = (map: Map<string, number[]>, key: string, i: number) => {
+    const places = map.get(key);
+    if (!places) return;
+    places.splice(places.indexOf(i), 1);
+    if (places.length === 0) map.delete(key);
+  };
+  const add = (p: Party, i: number) => {
+    const k = keysOf(p);
+    if (k.code !== null) put(byCode, k.code, i);
+    put(byTinName, k.tinName, i);
+  };
+  parties.forEach(add);
+  return {
+    find(code: string, tin: string, name: string): number {
+      const sameCode = code ? byCode.get(codeKey(code)) : undefined;
+      if (sameCode) return sameCode[0];
+      return byTinName.get(tinNameKey(tin, name))?.[0] ?? -1;
+    },
+    add,
+    replace(i: number, before: Party, after: Party) {
+      const k = keysOf(before);
+      if (k.code !== null) drop(byCode, k.code, i);
+      drop(byTinName, k.tinName, i);
+      add(after, i);
+    },
+  };
 }
 
 /**
@@ -173,6 +206,7 @@ export async function importPartiesCsv(text: string, defaultType: 'customer' | '
     throw new ListImportError('no_columns');
   }
   const parties = [...current.parties];
+  const index = partyIndex(parties);
   const summary: ImportSummary = { added: 0, updated: 0, skipped: 0, customers: 0, suppliers: 0 };
   for (const row of rows) {
     const cell = {} as Record<PartyColumn, string>;
@@ -210,7 +244,7 @@ export async function importPartiesCsv(text: string, defaultType: 'customer' | '
       terms: termsText.includes('account') ? 'account' : termsText.includes('cash') ? 'cash' : '',
       fromScan: false,
     };
-    const i = findParty(parties, read.code, read.tin, partyName(read));
+    const i = index.find(read.code, read.tin, partyName(read));
     let saved: Party;
     if (i >= 0) {
       const old = parties[i];
@@ -231,10 +265,12 @@ export async function importPartiesCsv(text: string, defaultType: 'customer' | '
         fromScan: false,
       };
       parties[i] = saved;
+      index.replace(i, old, saved);
       summary.updated++;
     } else {
       saved = { ...read, id: newId('p'), exportedAt: null };
       parties.push(saved);
+      index.add(saved, parties.length - 1);
       summary.added++;
     }
     if (saved.type !== 'supplier') summary.customers++;

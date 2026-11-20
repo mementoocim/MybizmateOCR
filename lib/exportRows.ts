@@ -117,6 +117,12 @@ export function partyRow(p: Party): ExportRow {
 
 /** A template header -> its value; a column left out is blank. */
 export type ExportRow = Readonly<Record<string, string | number>>;
+
+/** The same row: the same columns with the same values. */
+export function sameRow(a: ExportRow, b: ExportRow): boolean {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
+}
 export type SaveBlock = 'sample' | 'no_form' | 'no_date' | 'no_total' | 'no_supplier';
 
 /** Why a scan can't be saved yet, or null. Samples are made up, so they never are. */

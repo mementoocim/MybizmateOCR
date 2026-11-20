@@ -7,6 +7,7 @@ import { addScan, setEdit } from '../lib/scans';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 import { memoryFs } from '../test-utils/memoryFs';
+import { pinToday } from '../test-utils/today';
 
 let mockParams: { id?: string; from?: string } = {};
 const mockToast = jest.fn();
@@ -45,8 +46,19 @@ async function showSample(): Promise<string> {
   return id;
 }
 
+/** The same invoice from the camera: a real scan, whose names can be added to the lists. */
+async function showScan(): Promise<string> {
+  const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('inv_0007')) });
+  mockParams = { id };
+  await render(<Result />);
+  return id;
+}
+
 const press = (el: Parameters<typeof fireEvent.press>[0]) => act(async () => fireEvent.press(el));
 const type = (label: string, text: string) => act(async () => fireEvent.changeText(screen.getByLabelText(label), text));
+
+beforeAll(() => pinToday(new Date(2026, 10, 18, 10, 0))); // a camera scan is checked as of the day it's read
+afterAll(() => jest.useRealTimers());
 
 beforeEach(async () => {
   jest.clearAllMocks();
@@ -78,7 +90,7 @@ test('choose another', async () => {
 
 test('add a new customer', async () => {
   await importPartiesCsv(PARTIES, 'customer');
-  const id = await showSample();
+  const id = await showScan();
   await act(async () => {
     setEdit(id, 'customer_name', 'Bagong Tindahan');
     setEdit(id, 'customer_tin', '900-000-003');
@@ -99,7 +111,7 @@ test('add a new customer', async () => {
 });
 
 test('an empty customer list', async () => {
-  await showSample();
+  await showScan();
   await press(screen.getByText('Customer'));
   expect(screen.getByText('Your customer list is empty. Import it in Your lists, or add this customer now.')).toBeTruthy();
   expect(screen.getByText('Add “TorresConstruction Supply” to your customers')).toBeTruthy();
@@ -137,7 +149,7 @@ test('various suppliers', async () => {
 });
 
 test('add a typed supplier to the list', async () => {
-  await showSample();
+  await showScan();
   await press(screen.getByText('A purchase'));
   await press(screen.getByText('Supplier'));
   await type("Supplier's name", 'Juan Hardware');
@@ -158,10 +170,45 @@ test('search by TIN', async () => {
 });
 
 test('add an item from a scan', async () => {
-  await showSample();
+  await showScan();
   await press(screen.getByText('Sugar'));
   await press(screen.getByText('Add “Sugar” to your items'));
   expect(mockToast).toHaveBeenCalledWith('Added to your items.');
   expect(lists().items).toMatchObject([{ name: 'Sugar', unit: 'kg', price: 85 }]);
   expect(screen.queryByText('Add “Sugar” to your items')).toBeNull();
+});
+
+test("a sample's made-up names aren't added to the lists", async () => {
+  await showSample();
+  await press(screen.getByText('Customer'));
+  expect(screen.getByText('Your customer list is empty. Import it in Your lists.')).toBeTruthy();
+  expect(screen.getByText("Samples are made up, so their names aren't added to your lists.")).toBeTruthy();
+  expect(screen.queryByText('Add “TorresConstruction Supply” to your customers')).toBeNull();
+  await press(screen.getByLabelText('Close'));
+  await press(screen.getByText('Sugar'));
+  expect(screen.queryByText('Add “Sugar” to your items')).toBeNull();
+  await press(screen.getByLabelText('Close'));
+  await press(screen.getByText('A purchase'));
+  await press(screen.getByText('Supplier'));
+  await type("Supplier's name", 'Juan Hardware');
+  expect(screen.getByText('Use this name')).toBeTruthy();
+  expect(screen.queryByText('Add to your suppliers')).toBeNull();
+  expect(lists().parties).toHaveLength(0);
+});
+
+test('switching between a sale and a purchase drops the chosen party', async () => {
+  await importPartiesCsv(PARTIES, 'customer');
+  await showScan();
+  await press(screen.getByText('Customer'));
+  await press(screen.getByText('Choose another'));
+  await type('Search your customers', 'santos');
+  await press(screen.getByText('Santos General Merchandise'));
+  await press(screen.getByLabelText('Close'));
+  await press(screen.getByText('A purchase'));
+  // the customer chosen for the sale isn't the supplier who issued the invoice
+  expect(screen.getByText('Not chosen yet')).toBeTruthy();
+  expect(screen.getByText(/Supplier \(choose one\)/)).toBeTruthy();
+  await press(screen.getByText('A sale'));
+  expect(screen.queryByText('Chosen from your customers')).toBeNull();
+  expect(screen.getByText('Torres Construction Supply')).toBeTruthy();
 });

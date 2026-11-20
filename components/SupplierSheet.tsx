@@ -2,7 +2,7 @@ import { useState, useSyncExternalStore } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { addParty, lists, subscribeLists, suppliersOf } from '../lib/lists';
-import type { SaleView } from '../lib/sale';
+import { SAMPLE_NAMES, type SaleView } from '../lib/sale';
 import { type PartyChoice, type StoredScan, updateScan } from '../lib/scans';
 import { bold, colors, sectionLabel } from '../lib/theme';
 import { toast } from '../lib/toast';
@@ -78,7 +78,11 @@ export function SupplierSheet({
           style={styles.input}
         />
         <TextButton label="Use this name" disabled={!typed} onPress={() => pick({ name: typed })} />
-        <TextButton label="Add to your suppliers" disabled={!typed} onPress={() => void add()} />
+        {scan.source === 'sample' ? (
+          <Text style={styles.note}>{SAMPLE_NAMES}</Text>
+        ) : (
+          <TextButton label="Add to your suppliers" disabled={!typed} onPress={() => void add()} />
+        )}
       </View>
     </Sheet>
   );
@@ -90,6 +94,7 @@ const styles = StyleSheet.create({
   name: { ...bold, fontSize: 15, color: colors.ink },
   line: { fontSize: 13, color: colors.mute, marginTop: 2 },
   section: { marginTop: 20 },
+  note: { fontSize: 14, color: colors.mute, marginTop: 6, lineHeight: 20 },
   input: {
     borderWidth: 1,
     borderColor: colors.line,

@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { formFields } from '../lib/forms';
 import { addParty, customersOf, formatTin, lists, type Party, subscribeLists } from '../lib/lists';
-import { boxValue, type SaleView } from '../lib/sale';
+import { boxValue, SAMPLE_NAMES, type SaleView } from '../lib/sale';
 import { type StoredScan, updateScan } from '../lib/scans';
 import { colors, sectionLabel } from '../lib/theme';
 import { toast } from '../lib/toast';
@@ -56,8 +56,10 @@ export function PartySheet({
     toast('Added to your customers.');
   }
 
+  const canAdd = scan.source !== 'sample';
   const chooseAnother = (label: string) => <TextButton label={label} onPress={() => setPicking(true)} />;
-  const addButton = (label: string) => <TextButton label={label} onPress={() => void add()} />;
+  const addButton = (label: string) =>
+    canAdd ? <TextButton label={label} onPress={() => void add()} /> : <Text style={styles.note}>{SAMPLE_NAMES}</Text>;
 
   let section;
   if (picking) {
@@ -90,7 +92,11 @@ export function PartySheet({
   } else if (party.status === 'unlisted') {
     section = (
       <>
-        <Text style={styles.note}>Your customer list is empty. Import it in Your lists, or add this customer now.</Text>
+        <Text style={styles.note}>
+          {canAdd
+            ? 'Your customer list is empty. Import it in Your lists, or add this customer now.'
+            : 'Your customer list is empty. Import it in Your lists.'}
+        </Text>
         {addButton(`Add “${written}” to your customers`)}
       </>
     );

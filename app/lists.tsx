@@ -5,6 +5,7 @@ import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import { OutlinedButton, TextButton } from '../components/Buttons';
 import { Segmented } from '../components/Segmented';
 import { Sheet } from '../components/Sheet';
+import { decodeCsv } from '../lib/csv';
 import { peso } from '../lib/format';
 import {
   clearItems,
@@ -99,7 +100,7 @@ export default function ListsScreen() {
         toast('Choose a .csv file. In Excel or Google Sheets, save or download the sheet as CSV.');
         return;
       }
-      const text = await picked.result.text();
+      const text = decodeCsv(await picked.result.bytes()); // UTF-8, or Excel's plain CSV (Windows-1252)
       if (into === 'items') {
         const s = await importItemsCsv(text);
         toast(`Imported ${counted(s.added + s.updated, 'item', 'items')}.${skipped(s)}`);

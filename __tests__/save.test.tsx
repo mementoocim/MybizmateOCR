@@ -130,3 +130,24 @@ test('withholding asks for the ATC', async () => {
   ).toBeTruthy();
   expect(screen.getByText(/things? (is|are) still marked to check\. You can save anyway\./)).toBeTruthy();
 });
+
+test('a change after saving says the export still has the saved version', async () => {
+  const id = await show('inv_0007');
+  await press(screen.getByTestId('save-open'));
+  await press(screen.getByText('Not VAT-registered'));
+  await type('Revenue account', '4010');
+  await press(screen.getByTestId('save-confirm'));
+  expect(screen.getByText('Saved as a sale on Nov 18, 2026. Not exported yet.')).toBeTruthy();
+  await act(async () => setEdit(id, 'invoice_no', '0007999'));
+  expect(
+    screen.getByText("Changed since it was saved. The export still has the saved version: tap Save changes."),
+  ).toBeTruthy();
+  await press(screen.getByTestId('save-open'));
+  await press(screen.getByTestId('save-confirm'));
+  expect(screen.getByText('Saved as a sale on Nov 18, 2026. Not exported yet.')).toBeTruthy();
+  // a switch to a purchase changes what would go out too
+  await press(screen.getByText('A purchase'));
+  expect(
+    screen.getByText("Changed since it was saved. The export still has the saved version: tap Save changes."),
+  ).toBeTruthy();
+});
