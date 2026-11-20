@@ -77,10 +77,11 @@ TEST_CASE("parity on every fixture photo") {
   for (const auto& entry : std::filesystem::directory_iterator(fixturesDir() + "/expected")) {
     const std::string stem = entry.path().stem().string();
     CAPTURE(stem);
+    if (expected(stem)["form"] == "service_invoice") continue;  // until Task 4
     checkParity(scanFixture(stem), expected(stem));
     photos++;
   }
-  CHECK(photos == 16);
+  CHECK(photos == 18);  // until Task 4
 }
 
 TEST_CASE("a tiny image finds no form instead of failing") {

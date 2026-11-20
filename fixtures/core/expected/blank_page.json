@@ -13,5 +13,8 @@
  "light": null,
  "terms": null,
  "blanks": 0,
- "reads": []
+ "reads": [],
+ "darkMax": null,
+ "quality": null,
+ "photoFlags": []
 }

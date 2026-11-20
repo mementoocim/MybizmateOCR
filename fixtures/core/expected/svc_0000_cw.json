@@ -1,0 +1,442 @@
+{
+ "photo": "svc_0000_cw.jpg",
+ "aligned": true,
+ "form": "service_invoice",
+ "photoSize": [
+  2197,
+  1734
+ ],
+ "turned": false,
+ "corners": [
+  [
+   1298.8427734375,
+   239.33766174316406
+  ],
+  [
+   1290.051513671875,
+   1455.3057861328125
+  ],
+  [
+   386.5323486328125,
+   1498.179931640625
+  ],
+  [
+   381.9625244140625,
+   275.3878173828125
+  ]
+ ],
+ "sharpness": 0.7065156692840983,
+ "sharpMin": 0.5,
+ "light": 250.0,
+ "terms": "cash",
+ "blanks": 4,
+ "reads": [
+  {
+   "name": "date",
+   "type": "date",
+   "text": "Oct 29, 2026",
+   "conf": 0.9773941536744436,
+   "alts": [
+    "0 29, 2026",
+    "0ct 29, 2026"
+   ],
+   "cropSize": [
+    223,
+    45
+   ]
+  },
+  {
+   "name": "customer_name",
+   "type": "text",
+   "text": "Fornandoz Electrical",
+   "conf": 0.9686081618070602,
+   "alts": [],
+   "cropSize": [
+    337,
+    42
+   ]
+  },
+  {
+   "name": "customer_tin",
+   "type": "tin",
+   "text": "990077732",
+   "conf": 0.8197267916467454,
+   "alts": [],
+   "cropSize": [
+    187,
+    42
+   ]
+  },
+  {
+   "name": "customer_address",
+   "type": "text",
+   "text": "Mabini St.. Ilagan City",
+   "conf": 0.9564035697416826,
+   "alts": [],
+   "cropSize": [
+    102,
+    51
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "Five thousand eight hundred ten pesos and 50/100",
+   "conf": 0.9908979535102844,
+   "alts": [],
+   "cropSize": [
+    485,
+    96
+   ]
+  },
+  {
+   "name": "amount_figure",
+   "type": "amount",
+   "text": "5,810.50",
+   "conf": 0.99845851957798,
+   "alts": [],
+   "cropSize": [
+    135,
+    38
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Detergent",
+   "conf": 0.9999789926740859,
+   "alts": [],
+   "cropSize": [
+    146,
+    46
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "2",
+   "conf": 0.999997615814209,
+   "alts": [],
+   "cropSize": [
+    26,
+    32
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "110",
+   "conf": 0.9312832355499268,
+   "alts": [
+    "170",
+    "710"
+   ],
+   "cropSize": [
+    62,
+    38
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "220",
+   "conf": 0.9999777873357137,
+   "alts": [],
+   "cropSize": [
+    65,
+    37
+   ]
+  },
+  {
+   "name": "item2_description",
+   "type": "text",
+   "text": "Nails",
+   "conf": 0.9999213218688965,
+   "alts": [],
+   "cropSize": [
+    83,
+    47
+   ]
+  },
+  {
+   "name": "item2_qty",
+   "type": "number",
+   "text": "12",
+   "conf": 0.9899847507476807,
+   "alts": [
+    "72"
+   ],
+   "cropSize": [
+    47,
+    36
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "95",
+   "conf": 0.9995415806770325,
+   "alts": [],
+   "cropSize": [
+    49,
+    41
+   ]
+  },
+  {
+   "name": "item2_amount",
+   "type": "amount",
+   "text": "1,140",
+   "conf": 0.949614405632019,
+   "alts": [
+    "1,740",
+    "7,140"
+   ],
+   "cropSize": [
+    85,
+    35
+   ]
+  },
+  {
+   "name": "item3_description",
+   "type": "text",
+   "text": "Plywood 1/4",
+   "conf": 0.9995797872543335,
+   "alts": [],
+   "cropSize": [
+    194,
+    52
+   ]
+  },
+  {
+   "name": "item3_qty",
+   "type": "number",
+   "text": "8",
+   "conf": 0.9999845027923584,
+   "alts": [],
+   "cropSize": [
+    31,
+    40
+   ]
+  },
+  {
+   "name": "item3_unit_price",
+   "type": "amount",
+   "text": "520",
+   "conf": 0.9999488194783529,
+   "alts": [],
+   "cropSize": [
+    65,
+    36
+   ]
+  },
+  {
+   "name": "item3_amount",
+   "type": "amount",
+   "text": "4,160",
+   "conf": 0.9969889998435975,
+   "alts": [],
+   "cropSize": [
+    89,
+    40
+   ]
+  },
+  {
+   "name": "item4_description",
+   "type": "text",
+   "text": "Nescafe",
+   "conf": 0.999873697757721,
+   "alts": [],
+   "cropSize": [
+    118,
+    46
+   ]
+  },
+  {
+   "name": "item4_qty",
+   "type": "number",
+   "text": "5",
+   "conf": 0.9987093210220337,
+   "alts": [],
+   "cropSize": [
+    25,
+    34
+   ]
+  },
+  {
+   "name": "item4_unit_price",
+   "type": "amount",
+   "text": "9.50",
+   "conf": 0.9999310672283173,
+   "alts": [],
+   "cropSize": [
+    78,
+    44
+   ]
+  },
+  {
+   "name": "item4_amount",
+   "type": "amount",
+   "text": "47.50",
+   "conf": 0.9999699831008911,
+   "alts": [],
+   "cropSize": [
+    96,
+    43
+   ]
+  },
+  {
+   "name": "item5_description",
+   "type": "text",
+   "text": "Alaska Evap",
+   "conf": 0.9819190447980707,
+   "alts": [],
+   "cropSize": [
+    186,
+    51
+   ]
+  },
+  {
+   "name": "item5_qty",
+   "type": "number",
+   "text": "6",
+   "conf": 0.9999490976333618,
+   "alts": [],
+   "cropSize": [
+    26,
+    31
+   ]
+  },
+  {
+   "name": "item5_unit_price",
+   "type": "amount",
+   "text": "40.50",
+   "conf": 0.999920392036438,
+   "alts": [],
+   "cropSize": [
+    99,
+    43
+   ]
+  },
+  {
+   "name": "item5_amount",
+   "type": "amount",
+   "text": "243",
+   "conf": 0.999985933303833,
+   "alts": [],
+   "cropSize": [
+    68,
+    39
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "5,187.95",
+   "conf": 0.9993587136268616,
+   "alts": [],
+   "cropSize": [
+    114,
+    39
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "622.55",
+   "conf": 0.9999039769172668,
+   "alts": [],
+   "cropSize": [
+    90,
+    34
+   ]
+  },
+  {
+   "name": "total_due_2",
+   "type": "amount",
+   "text": "5,810.50",
+   "conf": 0.9985519871115685,
+   "alts": [],
+   "cropSize": [
+    109,
+    34
+   ]
+  },
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "5184138",
+   "conf": 0.9999975476946149,
+   "alts": [],
+   "cropSize": [
+    207,
+    43
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "5,810.50",
+   "conf": 0.9925371333956718,
+   "alts": [
+    "5,870.50"
+   ],
+   "cropSize": [
+    133,
+    37
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "622.55",
+   "conf": 0.9999077121416727,
+   "alts": [],
+   "cropSize": [
+    120,
+    38
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "5,187.95",
+   "conf": 0.9993037581443787,
+   "alts": [],
+   "cropSize": [
+    141,
+    43
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "622.55",
+   "conf": 0.999943753083547,
+   "alts": [],
+   "cropSize": [
+    108,
+    37
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "5,810.50",
+   "conf": 0.9997288435697556,
+   "alts": [],
+   "cropSize": [
+    157,
+    44
+   ]
+  }
+ ],
+ "darkMax": 50,
+ "quality": {
+  "sharpness": 0.7065,
+  "sharp_min": 0.5,
+  "light": 250.0,
+  "dark_max": 50
+ },
+ "photoFlags": [],
+ "score": 0.9439461883408071
+}

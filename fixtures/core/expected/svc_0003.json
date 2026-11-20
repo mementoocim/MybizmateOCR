@@ -1,0 +1,387 @@
+{
+ "photo": "svc_0003.jpg",
+ "aligned": true,
+ "form": "service_invoice",
+ "photoSize": [
+  1923,
+  2264
+ ],
+ "turned": false,
+ "corners": [
+  [
+   338.9327392578125,
+   949.55126953125
+  ],
+  [
+   1602.63330078125,
+   951.5802001953125
+  ],
+  [
+   1543.973388671875,
+   1941.17431640625
+  ],
+  [
+   290.8509521484375,
+   1909.284912109375
+  ]
+ ],
+ "sharpness": 0.8509471466692007,
+ "sharpMin": 0.5,
+ "light": 234.0,
+ "terms": "account",
+ "blanks": 8,
+ "reads": [
+  {
+   "name": "date",
+   "type": "date",
+   "text": "10-26-26",
+   "conf": 0.9999902099370956,
+   "alts": [],
+   "cropSize": [
+    170,
+    49
+   ]
+  },
+  {
+   "name": "customer_name",
+   "type": "text",
+   "text": "Villanueva Bakeshop",
+   "conf": 0.9812306353920385,
+   "alts": [],
+   "cropSize": [
+    279,
+    42
+   ]
+  },
+  {
+   "name": "customer_tin",
+   "type": "tin",
+   "text": "890122456",
+   "conf": 0.9550650583373176,
+   "alts": [],
+   "cropSize": [
+    155,
+    46
+   ]
+  },
+  {
+   "name": "customer_address",
+   "type": "text",
+   "text": "Brgy. Minante 1, Caunyan Citv",
+   "conf": 0.8942764749129614,
+   "alts": [],
+   "cropSize": [
+    149,
+    62
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "Twenty-seven thousand three hundred sixty-three pesos only",
+   "conf": 0.9968155866319482,
+   "alts": [],
+   "cropSize": [
+    497,
+    98
+   ]
+  },
+  {
+   "name": "amount_figure",
+   "type": "amount",
+   "text": "27,363.00",
+   "conf": 0.9999728600184122,
+   "alts": [],
+   "cropSize": [
+    137,
+    39
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Detergent",
+   "conf": 0.9999434285693698,
+   "alts": [],
+   "cropSize": [
+    161,
+    55
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "2",
+   "conf": 0.9999988079071045,
+   "alts": [],
+   "cropSize": [
+    29,
+    38
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "110.00",
+   "conf": 0.9999590714772543,
+   "alts": [],
+   "cropSize": [
+    108,
+    46
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "220.00",
+   "conf": 0.9999789396921793,
+   "alts": [],
+   "cropSize": [
+    116,
+    44
+   ]
+  },
+  {
+   "name": "item2_description",
+   "type": "text",
+   "text": "Cement 40kq",
+   "conf": 0.9052530608393929,
+   "alts": [],
+   "cropSize": [
+    207,
+    44
+   ]
+  },
+  {
+   "name": "item2_qty",
+   "type": "number",
+   "text": "100",
+   "conf": 0.9999814430872599,
+   "alts": [],
+   "cropSize": [
+    66,
+    42
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "270.00",
+   "conf": 0.9999280969301859,
+   "alts": [],
+   "cropSize": [
+    113,
+    45
+   ]
+  },
+  {
+   "name": "item2_amount",
+   "type": "amount",
+   "text": "27,000.00",
+   "conf": 0.9999580648210313,
+   "alts": [],
+   "cropSize": [
+    140,
+    43
+   ]
+  },
+  {
+   "name": "item3_description",
+   "type": "text",
+   "text": "Sardines",
+   "conf": 0.9999880194664001,
+   "alts": [],
+   "cropSize": [
+    136,
+    45
+   ]
+  },
+  {
+   "name": "item3_qty",
+   "type": "number",
+   "text": "2",
+   "conf": 0.9999992847442627,
+   "alts": [],
+   "cropSize": [
+    31,
+    42
+   ]
+  },
+  {
+   "name": "item3_unit_price",
+   "type": "amount",
+   "text": "24.00",
+   "conf": 0.9999462008476258,
+   "alts": [],
+   "cropSize": [
+    100,
+    47
+   ]
+  },
+  {
+   "name": "item3_amount",
+   "type": "amount",
+   "text": "48.00",
+   "conf": 0.9999847888946534,
+   "alts": [],
+   "cropSize": [
+    94,
+    46
+   ]
+  },
+  {
+   "name": "item4_description",
+   "type": "text",
+   "text": "Nescafe 3in1",
+   "conf": 0.9916215588649114,
+   "alts": [],
+   "cropSize": [
+    191,
+    42
+   ]
+  },
+  {
+   "name": "item4_qty",
+   "type": "number",
+   "text": "10",
+   "conf": 0.9993868172168732,
+   "alts": [],
+   "cropSize": [
+    47,
+    45
+   ]
+  },
+  {
+   "name": "item4_unit_price",
+   "type": "amount",
+   "text": "9.50",
+   "conf": 0.9999807775020599,
+   "alts": [],
+   "cropSize": [
+    67,
+    40
+   ]
+  },
+  {
+   "name": "item4_amount",
+   "type": "amount",
+   "text": "95.00",
+   "conf": 0.9998557686805725,
+   "alts": [],
+   "cropSize": [
+    95,
+    50
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "24,431.25",
+   "conf": 0.9999547865655687,
+   "alts": [],
+   "cropSize": [
+    133,
+    39
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "2.931.75",
+   "conf": 0.945728562772274,
+   "alts": [
+    "2,931.75"
+   ],
+   "cropSize": [
+    114,
+    42
+   ]
+  },
+  {
+   "name": "total_due_2",
+   "type": "amount",
+   "text": "27,363.00",
+   "conf": 0.9999234278996786,
+   "alts": [],
+   "cropSize": [
+    150,
+    43
+   ]
+  },
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "8394973",
+   "conf": 0.9999979393822807,
+   "alts": [],
+   "cropSize": [
+    206,
+    42
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "27,363.00",
+   "conf": 0.999953826268514,
+   "alts": [],
+   "cropSize": [
+    181,
+    51
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "2,931.75",
+   "conf": 0.9998841509222984,
+   "alts": [],
+   "cropSize": [
+    131,
+    40
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "24,431.25",
+   "conf": 0.999901533126831,
+   "alts": [],
+   "cropSize": [
+    170,
+    48
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "2,931.75",
+   "conf": 0.9998774155974388,
+   "alts": [],
+   "cropSize": [
+    147,
+    51
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "27,363.00",
+   "conf": 0.9997611178292168,
+   "alts": [],
+   "cropSize": [
+    151,
+    40
+   ]
+  }
+ ],
+ "darkMax": 50,
+ "quality": {
+  "sharpness": 0.8509,
+  "sharp_min": 0.5,
+  "light": 234.0,
+  "dark_max": 50
+ },
+ "photoFlags": [],
+ "score": 0.9103139013452914
+}
