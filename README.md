@@ -43,12 +43,15 @@ cut to 98 Latin characters) inside a local Expo module, so Android and iPhone wi
   same as the Python on every fixture (`fixtures/checks/`). They check the date, the customer against your customers
   (by TIN, then by name), the terms, each row's quantity × price, each row's item and price against your items, the
   rows against the total, and the VAT breakdown. The status card lists what to check, or says "Ready to post". A
-  sample is checked as of 2026-11-18, the day the samples were made; any other scan as of the day it was read.
+  sample is checked as of 2026-11-18, the day the samples were made; any other scan as of the day it was read. The
+  name matching counts common subsequences bit-parallel, as rapidfuzz does, so long lists stay quick: against 3,000
+  customers and 1,000 items, one check takes about 0.1 s on a laptop (it took 2.5 s before the final review).
 - **Fixing a box:** tap any box and type what it says; the checks run again at once. Terms has its own sheet ("Cash"
   or "On account").
 - **A sale or a purchase:** a scan is a sale, to the form's customer. "A purchase" asks who sold it: the business
   printed at the top of the invoice, which the scanner doesn't read, so it's chosen from your suppliers, typed, or
-  "Various suppliers". The form's customer boxes then show as "Sold to".
+  "Various suppliers". The form's customer boxes then show as "Sold to". Switching between a sale and a purchase
+  drops the party chosen for the other.
 - **Your lists** (⋮ → Your lists): customers, suppliers and items, imported from CSV files and kept on the phone. In
   MyBizMate, export your parties, open the file in Excel or Google Sheets, save it as CSV, copy it to the phone, then
   Import CSV.
@@ -60,12 +63,15 @@ cut to 98 Latin characters) inside a local Expo module, so Android and iPhone wi
   - Items: Name (or Description), Unit and Price (or List price). The same name updates the item.
   - A file picked from Android's Downloads may come as a link without its name, so a CSV is known by its name or by
     the type the phone gives it.
+  - Excel's plain "CSV (Comma delimited)" (Windows-1252) and "CSV UTF-8", and Google Sheets' download, all keep their
+    ñ: the file is read as UTF-8 when it is valid UTF-8, else as Windows-1252.
 - **Saving** (Save, on a scan): the date, the customer or supplier, Gross (VAT included), the tax type (suggested
   from the VAT boxes and whether the business is VAT-registered, which the first save asks), the account (a code or
   name from your chart of accounts, remembered in Settings), the terms, and the ATC code when tax was withheld. A
-  saved invoice keeps its own files (page, crops, original), apart from the 6 recent scans. Samples can't be saved:
-  they're made up. Saved invoices (⋮, or the row on Home) lists them, "To export" or "Exported"; long-press one to
-  delete it.
+  saved invoice keeps its own files (page, crops, original), apart from the 6 recent scans. A saved invoice changed
+  afterwards says "Changed since it was saved. The export still has the saved version: tap Save changes." Samples
+  can't be saved, and their names can't be added to the lists: they're made up. Saved invoices (⋮, or the row on
+  Home) lists them, "To export" or "Exported"; long-press one to delete it.
 - **The exports** (Saved invoices): .xlsx files in MyBizMate's own import layouts (the "Import" sheet with the
   template's header row, word for word), sent with the phone's share sheet (email, Drive, chat):
   - **Export sales** (the Sales import) and **Export purchases** (the Purchases import): one row per invoice: Date,
@@ -164,8 +170,9 @@ adb shell am start -a android.intent.action.VIEW -d "mybizmatescan://camera?test
 ## Checked on the emulator (milestone 3)
 
 A debug build on the emulator (Medium Phone, API 36, x86_64), 2026-11-20, with the made-up lists. On the final tree,
-every suite passed: jest (34 suites, 201 tests), the typecheck and ESLint, the core's doctest (36 test cases, 6048
-assertions), the module's Kotlin tests, and the checks' fixture exporter's test (9 of 9).
+every suite passed: jest (34 suites, 201 tests; 35 suites, 212 tests after the final review's fixes), the typecheck
+and ESLint, the core's doctest (36 test cases, 6048 assertions), the module's Kotlin tests, and the checks' fixture
+exporter's test (9 of 9).
 
 1. **The splash:** the logo stays put from the phone's splash to the brand splash, to the pixel: (406, 1067)–(674,
    1332) on the phone's splash and (406, 1067)–(675, 1333) on the brand splash, measured on screenshots. A debug
@@ -199,12 +206,16 @@ assertions), the module's Kotlin tests, and the checks' fixture exporter's test 
 9. **Settings:** this check found a bug, now fixed: an account typed in Settings was lost when the screen was left
    with the back arrow, since it was saved only when the field was left. Now "4000 Sales Revenue" stays, and the next
    save sheet starts with it.
+10. **After the final review's fixes:** a Windows-1252 CSV imported "Parañaque Hardware" intact, and a made-up list of
+    3,000 parties imported, with Home's recent scans still showing their status. (The lists were then reset to the
+    made-up ones.)
 
 **Still open:**
 - **MyBizMate's own importer.** No exported file has been imported into MyBizMate yet. That check waits for the
   user's go-ahead: a sale exported as `VARIOUS-CUST` imported into the test company, every column read and its Gross;
   then, if wanted, the Parties file (with City, Province and ZIP filled in) and a sale that names "Bagong Tindahan".
-- **Milestone 2's real-phone checks** (below).
+- **Milestone 2's real-phone checks** (below), and on the same phone, how long a check takes with a few thousand
+  parties and items in the lists.
 
 ## Measured (milestone 2)
 
