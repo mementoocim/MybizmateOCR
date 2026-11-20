@@ -1,5 +1,5 @@
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useState, useSyncExternalStore } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { OutlinedButton, PrimaryButton, TextButton } from '../components/Buttons';
@@ -11,7 +11,7 @@ import { Sheet } from '../components/Sheet';
 import { TEAM_BUILD } from '../lib/build';
 import { SAMPLES } from '../lib/samples';
 import { useScanFlow } from '../lib/scanFlow';
-import { recentScans, type StoredScan } from '../lib/scans';
+import { recentScans, subscribeRecent } from '../lib/scans';
 import { bold, colors, sectionLabel } from '../lib/theme';
 
 const TIPS = [
@@ -26,15 +26,9 @@ const handwriting = (font: string) => `${font === 'PatrickHand' ? 'Patrick Hand'
 export default function Home() {
   const router = useRouter();
   const flow = useScanFlow();
-  const [recent, setRecent] = useState<StoredScan[]>(() => recentScans());
+  const recent = useSyncExternalStore(subscribeRecent, recentScans); // a scan read on any screen shows at once
   const [samplesOpen, setSamplesOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-
-  // Scans read on other screens (the camera) show when Home comes back; one read here shows when it's done.
-  useFocusEffect(useCallback(() => setRecent(recentScans()), []));
-  useEffect(() => {
-    if (!flow.reading) setRecent(recentScans());
-  }, [flow.reading]);
 
   return (
     <View style={styles.screen}>
@@ -54,8 +48,8 @@ export default function Home() {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Scan an invoice</Text>
         <Text style={styles.description}>
-          Take a photo of a filled-in MyBizMate Sales Invoice or Service Invoice. It's read right here on your phone, in
-          a second or two, even without internet.
+          {"Take a photo of a filled-in MyBizMate Sales Invoice or Service Invoice. It's read right here on your " +
+            'phone, in a second or two, even without internet.'}
         </Text>
 
         <View style={styles.card}>

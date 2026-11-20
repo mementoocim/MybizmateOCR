@@ -17,8 +17,21 @@ export type StoredScan = {
 };
 
 const KEEP = 6;
-let recent: StoredScan[] = [];
+let recent: readonly StoredScan[] = []; // replaced, never changed in place: screens subscribe to it
 let counter = 0;
+const listeners = new Set<() => void>();
+
+function changed(): void {
+  listeners.forEach((listener) => listener());
+}
+
+/** For useSyncExternalStore: called after each change to the list. */
+export function subscribeRecent(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
 
 const listFile = () => new File(Paths.document, 'recent.json');
 
@@ -33,6 +46,7 @@ async function save(): Promise<void> {
 export function addScan(s: Omit<StoredScan, 'id' | 'at'>): string {
   const scan: StoredScan = { ...s, id: `${Date.now()}-${++counter}`, at: new Date() };
   recent = [scan, ...recent].slice(0, KEEP);
+  changed();
   void save();
   return scan.id;
 }
@@ -41,9 +55,9 @@ export function getScan(id: string): StoredScan | undefined {
   return recent.find((s) => s.id === id);
 }
 
-/** Newest first, 6 at most. */
-export function recentScans(): StoredScan[] {
-  return [...recent];
+/** Newest first, 6 at most; the same list until it changes. */
+export function recentScans(): readonly StoredScan[] {
+  return recent;
 }
 
 /** At start: the saved list, without scans whose folder is gone. */
@@ -59,4 +73,5 @@ export async function loadRecent(): Promise<void> {
   } catch {
     recent = [];
   }
+  changed();
 }

@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import Home from '../app/index';
+import { addScan } from '../lib/scans';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 
@@ -118,6 +119,14 @@ test('recent scans', async () => {
   expect(screen.getAllByText('Photo from gallery').length).toBeGreaterThan(0);
   // earlier tests' scans are in the list too (the store lives for the whole file)
   expect(screen.getAllByText(/^Read · 0 ms · \d{1,2}:\d{2} (AM|PM)$/).length).toBeGreaterThan(0);
+});
+
+test('a scan read on another screen shows in Recent scans at once', async () => {
+  await render(<Home />);
+  await act(async () => {
+    addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('inv_0007')) });
+  });
+  expect(screen.getAllByText('Camera photo').length).toBeGreaterThan(0);
 });
 
 test('the team menu', async () => {

@@ -1,5 +1,5 @@
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Image, StyleSheet, Text, View } from 'react-native';
 
 import { sampleUri } from '../lib/samples';
@@ -17,8 +17,8 @@ const FADE_MS = 300;
  */
 export function BrandSplash({ onReady }: { onReady: () => void }) {
   const [error, setError] = useState<string | null>(null);
-  const brandIn = useRef(new Animated.Value(0)).current;
-  const out = useRef(new Animated.Value(1)).current;
+  const [brandIn] = useState(() => new Animated.Value(0));
+  const [out] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
     let live = true;
