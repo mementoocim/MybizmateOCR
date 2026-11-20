@@ -72,9 +72,19 @@ struct UnreadableImage : std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
-// Decodes a photo, applying its EXIF rotation; a long side over MAX_SIDE is shrunk (INTER_AREA). Throws
-// UnreadableImage.
+// Decodes a photo, applying its EXIF rotation; a long side over MAX_SIDE is shrunk (INTER_AREA) to the size a full
+// decode would give. A JPEG over twice the cap is first decoded smaller by the JPEG decoder itself (jpegReduction).
+// Throws UnreadableImage.
 cv::Mat decodePhoto(const std::string& path);
+
+// The size a JPEG's frame header gives (as stored, before any EXIF turn), read without decoding the photo; none for
+// any other file.
+std::optional<cv::Size> jpegSize(const std::string& path);
+
+// How much smaller the JPEG decoder should decode a photo of this stored size: 1, 2, 4 or 8, the most that keeps its
+// long side over MAX_SIDE. Only a photo over twice the cap is decoded smaller (a 50 MP photo in full needs about
+// 150 MB); the rest decode in full, exactly as the Python reference does.
+int jpegReduction(cv::Size stored);
 
 class Scanner {
  public:

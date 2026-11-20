@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -102,17 +103,65 @@ std::optional<std::string> termsOf(double cash, double account) {
 
 }  // namespace
 
+std::optional<cv::Size> jpegSize(const std::string& path) {
+  std::ifstream in(path, std::ios::binary);
+  if (in.get() != 0xFF || in.get() != 0xD8) return std::nullopt;  // no JPEG start marker
+  while (in) {
+    if (in.get() != 0xFF) return std::nullopt;  // not at a marker: a broken file
+    int marker = in.get();
+    while (marker == 0xFF) marker = in.get();  // fill bytes
+    if (marker < 0 || marker == 0xD9 || marker == 0xDA) return std::nullopt;  // the end, or image data before a frame
+    if (marker == 0x01 || (marker >= 0xD0 && marker <= 0xD8)) continue;  // markers without a length
+    const int hi = in.get(), lo = in.get();
+    if (hi < 0 || lo < 0) return std::nullopt;
+    const int length = (hi << 8) | lo;
+    if (length < 2) return std::nullopt;
+    // A frame header (SOF0-15, but not DHT C4, JPG C8 or DAC CC): precision, then height and width.
+    if (marker >= 0xC0 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC) {
+      in.get();  // precision
+      const int h1 = in.get(), h0 = in.get(), w1 = in.get(), w0 = in.get();
+      if (w0 < 0) return std::nullopt;
+      const int height = (h1 << 8) | h0, width = (w1 << 8) | w0;
+      if (width <= 0 || height <= 0) return std::nullopt;
+      return cv::Size(width, height);
+    }
+    in.seekg(length - 2, std::ios::cur);
+  }
+  return std::nullopt;
+}
+
+int jpegReduction(cv::Size stored) {
+  const int longSide = std::max(stored.width, stored.height);
+  for (int f : {8, 4, 2})
+    if (longSide > f * MAX_SIDE) return f;
+  return 1;
+}
+
 cv::Mat decodePhoto(const std::string& path) {
-  cv::Mat img = cv::imread(path, cv::IMREAD_COLOR);  // applies the photo's EXIF rotation
+  const std::optional<cv::Size> stored = jpegSize(path);
+  const int f = stored ? jpegReduction(*stored) : 1;
+  const int flags = f == 8 ? cv::IMREAD_REDUCED_COLOR_8
+                    : f == 4 ? cv::IMREAD_REDUCED_COLOR_4
+                    : f == 2 ? cv::IMREAD_REDUCED_COLOR_2
+                             : cv::IMREAD_COLOR;
+  cv::Mat img = cv::imread(path, flags);  // applies the photo's EXIF rotation
   if (img.empty()) throw UnreadableImage("can't open the photo: " + path);
-  const int longSide = std::max(img.cols, img.rows);
+  // The size a full decode would have (after the EXIF turn): the reduced decode keeps the photo's shape, turned or not.
+  int cols = img.cols, rows = img.rows;
+  if (f > 1) {
+    const double sw = stored->width / static_cast<double>(f), sh = stored->height / static_cast<double>(f);
+    const bool turned = std::abs(img.cols - sh) < std::abs(img.cols - sw);
+    cols = turned ? stored->height : stored->width;
+    rows = turned ? stored->width : stored->height;
+  }
+  const int longSide = std::max(cols, rows);
   if (longSide > MAX_SIDE) {
     const double s = MAX_SIDE / static_cast<double>(longSide);
     // Python's round() (the reference's cap) rounds halves to even, as std::nearbyint does; std::lround wouldn't.
     cv::Mat small;
     cv::resize(img, small,
-               cv::Size(static_cast<int>(std::nearbyint(img.cols * s)), static_cast<int>(std::nearbyint(img.rows * s))),
-               0, 0, cv::INTER_AREA);
+               cv::Size(static_cast<int>(std::nearbyint(cols * s)), static_cast<int>(std::nearbyint(rows * s))), 0, 0,
+               cv::INTER_AREA);
     img = small;
   }
   return img;
