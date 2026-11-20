@@ -1,0 +1,2540 @@
+{
+ "name": "bir_2307",
+ "title": "BIR Form 2307",
+ "page": [
+  1700,
+  2600
+ ],
+ "frame": {
+  "tl": [
+   51.1,
+   140.0
+  ],
+  "tr": [
+   1657.9,
+   140.0
+  ],
+  "br": [
+   1657.9,
+   2408.0
+  ],
+  "bl": [
+   51.1,
+   2408.0
+  ]
+ },
+ "grid": {
+  "h": [
+   [
+    140.0,
+    51.1,
+    1657.9
+   ],
+   [
+    262.0,
+    51.1,
+    1657.9
+   ],
+   [
+    288.0,
+    51.1,
+    1657.9
+   ],
+   [
+    293.1,
+    1108.0,
+    1400.7
+   ],
+   [
+    295.0,
+    420.3,
+    712.7
+   ],
+   [
+    338.9,
+    1108.0,
+    1400.7
+   ],
+   [
+    339.1,
+    420.3,
+    712.7
+   ],
+   [
+    345.0,
+    51.1,
+    1657.9
+   ],
+   [
+    371.0,
+    51.1,
+    1657.9
+   ],
+   [
+    380.8,
+    575.1,
+    1209.0
+   ],
+   [
+    424.0,
+    575.1,
+    1209.0
+   ],
+   [
+    431.0,
+    51.1,
+    1657.9
+   ],
+   [
+    455.8,
+    93.7,
+    1644.9
+   ],
+   [
+    500.1,
+    93.7,
+    1644.9
+   ],
+   [
+    534.8,
+    95.3,
+    1489.1
+   ],
+   [
+    534.8,
+    1504.6,
+    1643.4
+   ],
+   [
+    578.8,
+    1504.6,
+    1643.4
+   ],
+   [
+    579.1,
+    95.3,
+    1489.1
+   ],
+   [
+    613.8,
+    95.3,
+    1642.0
+   ],
+   [
+    658.1,
+    95.3,
+    1642.0
+   ],
+   [
+    668.0,
+    51.1,
+    1657.9
+   ],
+   [
+    694.0,
+    51.1,
+    1657.9
+   ],
+   [
+    700.9,
+    577.3,
+    1211.3
+   ],
+   [
+    745.3,
+    577.3,
+    1211.3
+   ],
+   [
+    751.0,
+    51.1,
+    1657.9
+   ],
+   [
+    775.8,
+    93.7,
+    1644.9
+   ],
+   [
+    820.1,
+    93.7,
+    1644.9
+   ],
+   [
+    854.8,
+    95.3,
+    1489.1
+   ],
+   [
+    854.8,
+    1504.6,
+    1643.4
+   ],
+   [
+    898.8,
+    1504.6,
+    1643.4
+   ],
+   [
+    899.1,
+    95.3,
+    1489.1
+   ],
+   [
+    909.0,
+    51.1,
+    1657.9
+   ],
+   [
+    935.0,
+    51.1,
+    1657.9
+   ],
+   [
+    962.0,
+    611.0,
+    1417.0
+   ],
+   [
+    1014.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1052.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1090.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1128.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1166.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1204.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1242.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1280.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1318.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1356.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1394.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1432.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1485.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1523.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1561.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1599.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1637.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1675.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1713.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1751.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1789.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1827.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1865.0,
+    51.1,
+    1657.9
+   ],
+   [
+    1903.0,
+    51.1,
+    1657.9
+   ],
+   [
+    2005.0,
+    51.1,
+    1657.9
+   ],
+   [
+    2084.0,
+    51.1,
+    1657.9
+   ],
+   [
+    2137.0,
+    51.1,
+    1657.9
+   ],
+   [
+    2141.9,
+    375.1,
+    715.7
+   ],
+   [
+    2141.9,
+    1353.1,
+    1645.4
+   ],
+   [
+    2141.9,
+    880.3,
+    1171.5
+   ],
+   [
+    2186.7,
+    880.3,
+    1171.5
+   ],
+   [
+    2186.7,
+    1353.1,
+    1645.4
+   ],
+   [
+    2187.2,
+    375.1,
+    715.7
+   ],
+   [
+    2194.0,
+    51.1,
+    1657.9
+   ],
+   [
+    2220.0,
+    51.1,
+    1657.9
+   ],
+   [
+    2299.0,
+    51.1,
+    1657.9
+   ],
+   [
+    2351.0,
+    51.1,
+    1657.9
+   ],
+   [
+    2356.6,
+    375.2,
+    715.8
+   ],
+   [
+    2356.7,
+    880.6,
+    1171.7
+   ],
+   [
+    2356.7,
+    1353.4,
+    1645.7
+   ],
+   [
+    2401.3,
+    880.6,
+    1171.7
+   ],
+   [
+    2401.3,
+    1353.4,
+    1645.7
+   ],
+   [
+    2401.9,
+    375.2,
+    715.8
+   ],
+   [
+    2408.0,
+    51.1,
+    1657.9
+   ]
+  ],
+  "v": [
+   [
+    51.1,
+    140.0,
+    2408.0
+   ],
+   [
+    93.7,
+    455.8,
+    500.1
+   ],
+   [
+    93.7,
+    775.8,
+    820.1
+   ],
+   [
+    95.3,
+    534.8,
+    579.1
+   ],
+   [
+    95.3,
+    613.8,
+    658.1
+   ],
+   [
+    95.3,
+    854.8,
+    899.1
+   ],
+   [
+    331.0,
+    140.0,
+    262.0
+   ],
+   [
+    375.1,
+    2141.9,
+    2187.2
+   ],
+   [
+    375.2,
+    2356.6,
+    2401.9
+   ],
+   [
+    420.3,
+    295.0,
+    339.1
+   ],
+   [
+    491.0,
+    935.0,
+    1903.0
+   ],
+   [
+    493.7,
+    295.0,
+    339.1
+   ],
+   [
+    566.4,
+    295.0,
+    339.1
+   ],
+   [
+    575.1,
+    380.8,
+    424.0
+   ],
+   [
+    577.3,
+    700.9,
+    745.3
+   ],
+   [
+    611.0,
+    935.0,
+    1903.0
+   ],
+   [
+    685.3,
+    380.8,
+    424.0
+   ],
+   [
+    687.8,
+    700.9,
+    745.3
+   ],
+   [
+    712.7,
+    295.0,
+    339.1
+   ],
+   [
+    715.7,
+    2141.9,
+    2187.2
+   ],
+   [
+    715.8,
+    2356.6,
+    2401.9
+   ],
+   [
+    718.1,
+    380.8,
+    424.0
+   ],
+   [
+    719.9,
+    700.9,
+    745.3
+   ],
+   [
+    811.0,
+    962.0,
+    1903.0
+   ],
+   [
+    827.7,
+    380.8,
+    424.0
+   ],
+   [
+    829.7,
+    700.9,
+    745.3
+   ],
+   [
+    860.8,
+    380.8,
+    424.0
+   ],
+   [
+    862.7,
+    700.9,
+    745.3
+   ],
+   [
+    880.3,
+    2141.9,
+    2186.7
+   ],
+   [
+    880.6,
+    2356.7,
+    2401.3
+   ],
+   [
+    953.3,
+    2141.9,
+    2186.7
+   ],
+   [
+    953.5,
+    2356.7,
+    2401.3
+   ],
+   [
+    970.1,
+    380.8,
+    424.0
+   ],
+   [
+    972.2,
+    700.9,
+    745.3
+   ],
+   [
+    1003.2,
+    380.8,
+    424.0
+   ],
+   [
+    1005.3,
+    700.9,
+    745.3
+   ],
+   [
+    1017.0,
+    962.0,
+    1903.0
+   ],
+   [
+    1025.8,
+    2141.9,
+    2186.7
+   ],
+   [
+    1026.1,
+    2356.7,
+    2401.3
+   ],
+   [
+    1108.0,
+    293.1,
+    338.9
+   ],
+   [
+    1171.5,
+    2141.9,
+    2186.7
+   ],
+   [
+    1171.7,
+    2356.7,
+    2401.3
+   ],
+   [
+    1181.4,
+    293.1,
+    338.9
+   ],
+   [
+    1209.0,
+    380.8,
+    424.0
+   ],
+   [
+    1211.3,
+    700.9,
+    745.3
+   ],
+   [
+    1217.0,
+    140.0,
+    262.0
+   ],
+   [
+    1217.0,
+    962.0,
+    1903.0
+   ],
+   [
+    1254.3,
+    293.1,
+    338.9
+   ],
+   [
+    1353.1,
+    2141.9,
+    2186.7
+   ],
+   [
+    1353.4,
+    2356.7,
+    2401.3
+   ],
+   [
+    1400.7,
+    293.1,
+    338.9
+   ],
+   [
+    1417.0,
+    935.0,
+    1903.0
+   ],
+   [
+    1426.4,
+    2141.9,
+    2186.7
+   ],
+   [
+    1426.7,
+    2356.7,
+    2401.3
+   ],
+   [
+    1489.1,
+    534.8,
+    579.1
+   ],
+   [
+    1489.1,
+    854.8,
+    899.1
+   ],
+   [
+    1499.2,
+    2141.9,
+    2186.7
+   ],
+   [
+    1499.4,
+    2356.7,
+    2401.3
+   ],
+   [
+    1504.6,
+    534.8,
+    578.8
+   ],
+   [
+    1504.6,
+    854.8,
+    898.8
+   ],
+   [
+    1642.0,
+    613.8,
+    658.1
+   ],
+   [
+    1643.4,
+    534.8,
+    578.8
+   ],
+   [
+    1643.4,
+    854.8,
+    898.8
+   ],
+   [
+    1644.9,
+    455.8,
+    500.1
+   ],
+   [
+    1644.9,
+    775.8,
+    820.1
+   ],
+   [
+    1645.4,
+    2141.9,
+    2186.7
+   ],
+   [
+    1645.7,
+    2356.7,
+    2401.3
+   ],
+   [
+    1657.9,
+    140.0,
+    2408.0
+   ]
+  ]
+ },
+ "slack": {
+  "header": [
+   16,
+   14
+  ],
+  "table": [
+   16,
+   14
+  ]
+ },
+ "paper": [
+  25,
+  22,
+  1685,
+  2459
+ ],
+ "fields": [
+  {
+   "name": "period_from",
+   "bbox": [
+    420,
+    295,
+    713,
+    339
+   ],
+   "type": "digits",
+   "label": "Period from"
+  },
+  {
+   "name": "period_to",
+   "bbox": [
+    1108,
+    293,
+    1401,
+    339
+   ],
+   "type": "digits",
+   "label": "Period to"
+  },
+  {
+   "name": "payee_tin",
+   "bbox": [
+    575,
+    381,
+    1209,
+    424
+   ],
+   "type": "tin",
+   "label": "Payee's TIN"
+  },
+  {
+   "name": "payee_name",
+   "bbox": [
+    94,
+    456,
+    1645,
+    500
+   ],
+   "type": "text",
+   "label": "Payee's name"
+  },
+  {
+   "name": "payee_address",
+   "bbox": [
+    95,
+    535,
+    1489,
+    579
+   ],
+   "type": "text",
+   "label": "Payee's address"
+  },
+  {
+   "name": "payee_zip",
+   "bbox": [
+    1505,
+    535,
+    1643,
+    579
+   ],
+   "type": "digits",
+   "label": "Payee's ZIP code"
+  },
+  {
+   "name": "payor_tin",
+   "bbox": [
+    577,
+    701,
+    1211,
+    745
+   ],
+   "type": "tin",
+   "label": "Payor's TIN"
+  },
+  {
+   "name": "payor_name",
+   "bbox": [
+    94,
+    776,
+    1645,
+    820
+   ],
+   "type": "text",
+   "label": "Payor's name"
+  },
+  {
+   "name": "payor_address",
+   "bbox": [
+    95,
+    855,
+    1489,
+    899
+   ],
+   "type": "text",
+   "label": "Payor's address"
+  },
+  {
+   "name": "payor_zip",
+   "bbox": [
+    1505,
+    855,
+    1643,
+    899
+   ],
+   "type": "digits",
+   "label": "Payor's ZIP code"
+  },
+  {
+   "name": "ewt1_payment",
+   "bbox": [
+    51,
+    1014,
+    491,
+    1052
+   ],
+   "type": "text",
+   "label": "Row 1 · Income payment"
+  },
+  {
+   "name": "ewt1_atc",
+   "bbox": [
+    491,
+    1014,
+    611,
+    1052
+   ],
+   "type": "code",
+   "label": "Row 1 · ATC"
+  },
+  {
+   "name": "ewt1_m1",
+   "bbox": [
+    611,
+    1014,
+    811,
+    1052
+   ],
+   "type": "amount",
+   "label": "Row 1 · 1st month"
+  },
+  {
+   "name": "ewt1_m2",
+   "bbox": [
+    811,
+    1014,
+    1017,
+    1052
+   ],
+   "type": "amount",
+   "label": "Row 1 · 2nd month"
+  },
+  {
+   "name": "ewt1_m3",
+   "bbox": [
+    1017,
+    1014,
+    1217,
+    1052
+   ],
+   "type": "amount",
+   "label": "Row 1 · 3rd month"
+  },
+  {
+   "name": "ewt1_total",
+   "bbox": [
+    1217,
+    1014,
+    1417,
+    1052
+   ],
+   "type": "amount",
+   "label": "Row 1 · Total"
+  },
+  {
+   "name": "ewt1_tax",
+   "bbox": [
+    1417,
+    1014,
+    1658,
+    1052
+   ],
+   "type": "amount",
+   "label": "Row 1 · Tax withheld"
+  },
+  {
+   "name": "ewt2_payment",
+   "bbox": [
+    51,
+    1052,
+    491,
+    1090
+   ],
+   "type": "text",
+   "label": "Row 2 · Income payment"
+  },
+  {
+   "name": "ewt2_atc",
+   "bbox": [
+    491,
+    1052,
+    611,
+    1090
+   ],
+   "type": "code",
+   "label": "Row 2 · ATC"
+  },
+  {
+   "name": "ewt2_m1",
+   "bbox": [
+    611,
+    1052,
+    811,
+    1090
+   ],
+   "type": "amount",
+   "label": "Row 2 · 1st month"
+  },
+  {
+   "name": "ewt2_m2",
+   "bbox": [
+    811,
+    1052,
+    1017,
+    1090
+   ],
+   "type": "amount",
+   "label": "Row 2 · 2nd month"
+  },
+  {
+   "name": "ewt2_m3",
+   "bbox": [
+    1017,
+    1052,
+    1217,
+    1090
+   ],
+   "type": "amount",
+   "label": "Row 2 · 3rd month"
+  },
+  {
+   "name": "ewt2_total",
+   "bbox": [
+    1217,
+    1052,
+    1417,
+    1090
+   ],
+   "type": "amount",
+   "label": "Row 2 · Total"
+  },
+  {
+   "name": "ewt2_tax",
+   "bbox": [
+    1417,
+    1052,
+    1658,
+    1090
+   ],
+   "type": "amount",
+   "label": "Row 2 · Tax withheld"
+  },
+  {
+   "name": "ewt3_payment",
+   "bbox": [
+    51,
+    1090,
+    491,
+    1128
+   ],
+   "type": "text",
+   "label": "Row 3 · Income payment"
+  },
+  {
+   "name": "ewt3_atc",
+   "bbox": [
+    491,
+    1090,
+    611,
+    1128
+   ],
+   "type": "code",
+   "label": "Row 3 · ATC"
+  },
+  {
+   "name": "ewt3_m1",
+   "bbox": [
+    611,
+    1090,
+    811,
+    1128
+   ],
+   "type": "amount",
+   "label": "Row 3 · 1st month"
+  },
+  {
+   "name": "ewt3_m2",
+   "bbox": [
+    811,
+    1090,
+    1017,
+    1128
+   ],
+   "type": "amount",
+   "label": "Row 3 · 2nd month"
+  },
+  {
+   "name": "ewt3_m3",
+   "bbox": [
+    1017,
+    1090,
+    1217,
+    1128
+   ],
+   "type": "amount",
+   "label": "Row 3 · 3rd month"
+  },
+  {
+   "name": "ewt3_total",
+   "bbox": [
+    1217,
+    1090,
+    1417,
+    1128
+   ],
+   "type": "amount",
+   "label": "Row 3 · Total"
+  },
+  {
+   "name": "ewt3_tax",
+   "bbox": [
+    1417,
+    1090,
+    1658,
+    1128
+   ],
+   "type": "amount",
+   "label": "Row 3 · Tax withheld"
+  },
+  {
+   "name": "ewt4_payment",
+   "bbox": [
+    51,
+    1128,
+    491,
+    1166
+   ],
+   "type": "text",
+   "label": "Row 4 · Income payment"
+  },
+  {
+   "name": "ewt4_atc",
+   "bbox": [
+    491,
+    1128,
+    611,
+    1166
+   ],
+   "type": "code",
+   "label": "Row 4 · ATC"
+  },
+  {
+   "name": "ewt4_m1",
+   "bbox": [
+    611,
+    1128,
+    811,
+    1166
+   ],
+   "type": "amount",
+   "label": "Row 4 · 1st month"
+  },
+  {
+   "name": "ewt4_m2",
+   "bbox": [
+    811,
+    1128,
+    1017,
+    1166
+   ],
+   "type": "amount",
+   "label": "Row 4 · 2nd month"
+  },
+  {
+   "name": "ewt4_m3",
+   "bbox": [
+    1017,
+    1128,
+    1217,
+    1166
+   ],
+   "type": "amount",
+   "label": "Row 4 · 3rd month"
+  },
+  {
+   "name": "ewt4_total",
+   "bbox": [
+    1217,
+    1128,
+    1417,
+    1166
+   ],
+   "type": "amount",
+   "label": "Row 4 · Total"
+  },
+  {
+   "name": "ewt4_tax",
+   "bbox": [
+    1417,
+    1128,
+    1658,
+    1166
+   ],
+   "type": "amount",
+   "label": "Row 4 · Tax withheld"
+  },
+  {
+   "name": "ewt5_payment",
+   "bbox": [
+    51,
+    1166,
+    491,
+    1204
+   ],
+   "type": "text",
+   "label": "Row 5 · Income payment"
+  },
+  {
+   "name": "ewt5_atc",
+   "bbox": [
+    491,
+    1166,
+    611,
+    1204
+   ],
+   "type": "code",
+   "label": "Row 5 · ATC"
+  },
+  {
+   "name": "ewt5_m1",
+   "bbox": [
+    611,
+    1166,
+    811,
+    1204
+   ],
+   "type": "amount",
+   "label": "Row 5 · 1st month"
+  },
+  {
+   "name": "ewt5_m2",
+   "bbox": [
+    811,
+    1166,
+    1017,
+    1204
+   ],
+   "type": "amount",
+   "label": "Row 5 · 2nd month"
+  },
+  {
+   "name": "ewt5_m3",
+   "bbox": [
+    1017,
+    1166,
+    1217,
+    1204
+   ],
+   "type": "amount",
+   "label": "Row 5 · 3rd month"
+  },
+  {
+   "name": "ewt5_total",
+   "bbox": [
+    1217,
+    1166,
+    1417,
+    1204
+   ],
+   "type": "amount",
+   "label": "Row 5 · Total"
+  },
+  {
+   "name": "ewt5_tax",
+   "bbox": [
+    1417,
+    1166,
+    1658,
+    1204
+   ],
+   "type": "amount",
+   "label": "Row 5 · Tax withheld"
+  },
+  {
+   "name": "ewt6_payment",
+   "bbox": [
+    51,
+    1204,
+    491,
+    1242
+   ],
+   "type": "text",
+   "label": "Row 6 · Income payment"
+  },
+  {
+   "name": "ewt6_atc",
+   "bbox": [
+    491,
+    1204,
+    611,
+    1242
+   ],
+   "type": "code",
+   "label": "Row 6 · ATC"
+  },
+  {
+   "name": "ewt6_m1",
+   "bbox": [
+    611,
+    1204,
+    811,
+    1242
+   ],
+   "type": "amount",
+   "label": "Row 6 · 1st month"
+  },
+  {
+   "name": "ewt6_m2",
+   "bbox": [
+    811,
+    1204,
+    1017,
+    1242
+   ],
+   "type": "amount",
+   "label": "Row 6 · 2nd month"
+  },
+  {
+   "name": "ewt6_m3",
+   "bbox": [
+    1017,
+    1204,
+    1217,
+    1242
+   ],
+   "type": "amount",
+   "label": "Row 6 · 3rd month"
+  },
+  {
+   "name": "ewt6_total",
+   "bbox": [
+    1217,
+    1204,
+    1417,
+    1242
+   ],
+   "type": "amount",
+   "label": "Row 6 · Total"
+  },
+  {
+   "name": "ewt6_tax",
+   "bbox": [
+    1417,
+    1204,
+    1658,
+    1242
+   ],
+   "type": "amount",
+   "label": "Row 6 · Tax withheld"
+  },
+  {
+   "name": "ewt7_payment",
+   "bbox": [
+    51,
+    1242,
+    491,
+    1280
+   ],
+   "type": "text",
+   "label": "Row 7 · Income payment"
+  },
+  {
+   "name": "ewt7_atc",
+   "bbox": [
+    491,
+    1242,
+    611,
+    1280
+   ],
+   "type": "code",
+   "label": "Row 7 · ATC"
+  },
+  {
+   "name": "ewt7_m1",
+   "bbox": [
+    611,
+    1242,
+    811,
+    1280
+   ],
+   "type": "amount",
+   "label": "Row 7 · 1st month"
+  },
+  {
+   "name": "ewt7_m2",
+   "bbox": [
+    811,
+    1242,
+    1017,
+    1280
+   ],
+   "type": "amount",
+   "label": "Row 7 · 2nd month"
+  },
+  {
+   "name": "ewt7_m3",
+   "bbox": [
+    1017,
+    1242,
+    1217,
+    1280
+   ],
+   "type": "amount",
+   "label": "Row 7 · 3rd month"
+  },
+  {
+   "name": "ewt7_total",
+   "bbox": [
+    1217,
+    1242,
+    1417,
+    1280
+   ],
+   "type": "amount",
+   "label": "Row 7 · Total"
+  },
+  {
+   "name": "ewt7_tax",
+   "bbox": [
+    1417,
+    1242,
+    1658,
+    1280
+   ],
+   "type": "amount",
+   "label": "Row 7 · Tax withheld"
+  },
+  {
+   "name": "ewt8_payment",
+   "bbox": [
+    51,
+    1280,
+    491,
+    1318
+   ],
+   "type": "text",
+   "label": "Row 8 · Income payment"
+  },
+  {
+   "name": "ewt8_atc",
+   "bbox": [
+    491,
+    1280,
+    611,
+    1318
+   ],
+   "type": "code",
+   "label": "Row 8 · ATC"
+  },
+  {
+   "name": "ewt8_m1",
+   "bbox": [
+    611,
+    1280,
+    811,
+    1318
+   ],
+   "type": "amount",
+   "label": "Row 8 · 1st month"
+  },
+  {
+   "name": "ewt8_m2",
+   "bbox": [
+    811,
+    1280,
+    1017,
+    1318
+   ],
+   "type": "amount",
+   "label": "Row 8 · 2nd month"
+  },
+  {
+   "name": "ewt8_m3",
+   "bbox": [
+    1017,
+    1280,
+    1217,
+    1318
+   ],
+   "type": "amount",
+   "label": "Row 8 · 3rd month"
+  },
+  {
+   "name": "ewt8_total",
+   "bbox": [
+    1217,
+    1280,
+    1417,
+    1318
+   ],
+   "type": "amount",
+   "label": "Row 8 · Total"
+  },
+  {
+   "name": "ewt8_tax",
+   "bbox": [
+    1417,
+    1280,
+    1658,
+    1318
+   ],
+   "type": "amount",
+   "label": "Row 8 · Tax withheld"
+  },
+  {
+   "name": "ewt9_payment",
+   "bbox": [
+    51,
+    1318,
+    491,
+    1356
+   ],
+   "type": "text",
+   "label": "Row 9 · Income payment"
+  },
+  {
+   "name": "ewt9_atc",
+   "bbox": [
+    491,
+    1318,
+    611,
+    1356
+   ],
+   "type": "code",
+   "label": "Row 9 · ATC"
+  },
+  {
+   "name": "ewt9_m1",
+   "bbox": [
+    611,
+    1318,
+    811,
+    1356
+   ],
+   "type": "amount",
+   "label": "Row 9 · 1st month"
+  },
+  {
+   "name": "ewt9_m2",
+   "bbox": [
+    811,
+    1318,
+    1017,
+    1356
+   ],
+   "type": "amount",
+   "label": "Row 9 · 2nd month"
+  },
+  {
+   "name": "ewt9_m3",
+   "bbox": [
+    1017,
+    1318,
+    1217,
+    1356
+   ],
+   "type": "amount",
+   "label": "Row 9 · 3rd month"
+  },
+  {
+   "name": "ewt9_total",
+   "bbox": [
+    1217,
+    1318,
+    1417,
+    1356
+   ],
+   "type": "amount",
+   "label": "Row 9 · Total"
+  },
+  {
+   "name": "ewt9_tax",
+   "bbox": [
+    1417,
+    1318,
+    1658,
+    1356
+   ],
+   "type": "amount",
+   "label": "Row 9 · Tax withheld"
+  },
+  {
+   "name": "ewt10_payment",
+   "bbox": [
+    51,
+    1356,
+    491,
+    1394
+   ],
+   "type": "text",
+   "label": "Row 10 · Income payment"
+  },
+  {
+   "name": "ewt10_atc",
+   "bbox": [
+    491,
+    1356,
+    611,
+    1394
+   ],
+   "type": "code",
+   "label": "Row 10 · ATC"
+  },
+  {
+   "name": "ewt10_m1",
+   "bbox": [
+    611,
+    1356,
+    811,
+    1394
+   ],
+   "type": "amount",
+   "label": "Row 10 · 1st month"
+  },
+  {
+   "name": "ewt10_m2",
+   "bbox": [
+    811,
+    1356,
+    1017,
+    1394
+   ],
+   "type": "amount",
+   "label": "Row 10 · 2nd month"
+  },
+  {
+   "name": "ewt10_m3",
+   "bbox": [
+    1017,
+    1356,
+    1217,
+    1394
+   ],
+   "type": "amount",
+   "label": "Row 10 · 3rd month"
+  },
+  {
+   "name": "ewt10_total",
+   "bbox": [
+    1217,
+    1356,
+    1417,
+    1394
+   ],
+   "type": "amount",
+   "label": "Row 10 · Total"
+  },
+  {
+   "name": "ewt10_tax",
+   "bbox": [
+    1417,
+    1356,
+    1658,
+    1394
+   ],
+   "type": "amount",
+   "label": "Row 10 · Tax withheld"
+  },
+  {
+   "name": "ewt_total_m1",
+   "bbox": [
+    611,
+    1394,
+    811,
+    1432
+   ],
+   "type": "amount",
+   "label": "Total row · 1st month"
+  },
+  {
+   "name": "ewt_total_m2",
+   "bbox": [
+    811,
+    1394,
+    1017,
+    1432
+   ],
+   "type": "amount",
+   "label": "Total row · 2nd month"
+  },
+  {
+   "name": "ewt_total_m3",
+   "bbox": [
+    1017,
+    1394,
+    1217,
+    1432
+   ],
+   "type": "amount",
+   "label": "Total row · 3rd month"
+  },
+  {
+   "name": "ewt_total_total",
+   "bbox": [
+    1217,
+    1394,
+    1417,
+    1432
+   ],
+   "type": "amount",
+   "label": "Total row · Total"
+  },
+  {
+   "name": "ewt_total_tax",
+   "bbox": [
+    1417,
+    1394,
+    1658,
+    1432
+   ],
+   "type": "amount",
+   "label": "Total row · Tax withheld"
+  },
+  {
+   "name": "bt1_payment",
+   "bbox": [
+    51,
+    1485,
+    491,
+    1523
+   ],
+   "type": "text",
+   "label": "Business tax row 1 · Money payment"
+  },
+  {
+   "name": "bt1_atc",
+   "bbox": [
+    491,
+    1485,
+    611,
+    1523
+   ],
+   "type": "code",
+   "label": "Business tax row 1 · ATC"
+  },
+  {
+   "name": "bt1_m1",
+   "bbox": [
+    611,
+    1485,
+    811,
+    1523
+   ],
+   "type": "amount",
+   "label": "Business tax row 1 · 1st month"
+  },
+  {
+   "name": "bt1_m2",
+   "bbox": [
+    811,
+    1485,
+    1017,
+    1523
+   ],
+   "type": "amount",
+   "label": "Business tax row 1 · 2nd month"
+  },
+  {
+   "name": "bt1_m3",
+   "bbox": [
+    1017,
+    1485,
+    1217,
+    1523
+   ],
+   "type": "amount",
+   "label": "Business tax row 1 · 3rd month"
+  },
+  {
+   "name": "bt1_total",
+   "bbox": [
+    1217,
+    1485,
+    1417,
+    1523
+   ],
+   "type": "amount",
+   "label": "Business tax row 1 · Total"
+  },
+  {
+   "name": "bt1_tax",
+   "bbox": [
+    1417,
+    1485,
+    1658,
+    1523
+   ],
+   "type": "amount",
+   "label": "Business tax row 1 · Tax withheld"
+  },
+  {
+   "name": "bt2_payment",
+   "bbox": [
+    51,
+    1523,
+    491,
+    1561
+   ],
+   "type": "text",
+   "label": "Business tax row 2 · Money payment"
+  },
+  {
+   "name": "bt2_atc",
+   "bbox": [
+    491,
+    1523,
+    611,
+    1561
+   ],
+   "type": "code",
+   "label": "Business tax row 2 · ATC"
+  },
+  {
+   "name": "bt2_m1",
+   "bbox": [
+    611,
+    1523,
+    811,
+    1561
+   ],
+   "type": "amount",
+   "label": "Business tax row 2 · 1st month"
+  },
+  {
+   "name": "bt2_m2",
+   "bbox": [
+    811,
+    1523,
+    1017,
+    1561
+   ],
+   "type": "amount",
+   "label": "Business tax row 2 · 2nd month"
+  },
+  {
+   "name": "bt2_m3",
+   "bbox": [
+    1017,
+    1523,
+    1217,
+    1561
+   ],
+   "type": "amount",
+   "label": "Business tax row 2 · 3rd month"
+  },
+  {
+   "name": "bt2_total",
+   "bbox": [
+    1217,
+    1523,
+    1417,
+    1561
+   ],
+   "type": "amount",
+   "label": "Business tax row 2 · Total"
+  },
+  {
+   "name": "bt2_tax",
+   "bbox": [
+    1417,
+    1523,
+    1658,
+    1561
+   ],
+   "type": "amount",
+   "label": "Business tax row 2 · Tax withheld"
+  },
+  {
+   "name": "bt3_payment",
+   "bbox": [
+    51,
+    1561,
+    491,
+    1599
+   ],
+   "type": "text",
+   "label": "Business tax row 3 · Money payment"
+  },
+  {
+   "name": "bt3_atc",
+   "bbox": [
+    491,
+    1561,
+    611,
+    1599
+   ],
+   "type": "code",
+   "label": "Business tax row 3 · ATC"
+  },
+  {
+   "name": "bt3_m1",
+   "bbox": [
+    611,
+    1561,
+    811,
+    1599
+   ],
+   "type": "amount",
+   "label": "Business tax row 3 · 1st month"
+  },
+  {
+   "name": "bt3_m2",
+   "bbox": [
+    811,
+    1561,
+    1017,
+    1599
+   ],
+   "type": "amount",
+   "label": "Business tax row 3 · 2nd month"
+  },
+  {
+   "name": "bt3_m3",
+   "bbox": [
+    1017,
+    1561,
+    1217,
+    1599
+   ],
+   "type": "amount",
+   "label": "Business tax row 3 · 3rd month"
+  },
+  {
+   "name": "bt3_total",
+   "bbox": [
+    1217,
+    1561,
+    1417,
+    1599
+   ],
+   "type": "amount",
+   "label": "Business tax row 3 · Total"
+  },
+  {
+   "name": "bt3_tax",
+   "bbox": [
+    1417,
+    1561,
+    1658,
+    1599
+   ],
+   "type": "amount",
+   "label": "Business tax row 3 · Tax withheld"
+  },
+  {
+   "name": "bt4_payment",
+   "bbox": [
+    51,
+    1599,
+    491,
+    1637
+   ],
+   "type": "text",
+   "label": "Business tax row 4 · Money payment"
+  },
+  {
+   "name": "bt4_atc",
+   "bbox": [
+    491,
+    1599,
+    611,
+    1637
+   ],
+   "type": "code",
+   "label": "Business tax row 4 · ATC"
+  },
+  {
+   "name": "bt4_m1",
+   "bbox": [
+    611,
+    1599,
+    811,
+    1637
+   ],
+   "type": "amount",
+   "label": "Business tax row 4 · 1st month"
+  },
+  {
+   "name": "bt4_m2",
+   "bbox": [
+    811,
+    1599,
+    1017,
+    1637
+   ],
+   "type": "amount",
+   "label": "Business tax row 4 · 2nd month"
+  },
+  {
+   "name": "bt4_m3",
+   "bbox": [
+    1017,
+    1599,
+    1217,
+    1637
+   ],
+   "type": "amount",
+   "label": "Business tax row 4 · 3rd month"
+  },
+  {
+   "name": "bt4_total",
+   "bbox": [
+    1217,
+    1599,
+    1417,
+    1637
+   ],
+   "type": "amount",
+   "label": "Business tax row 4 · Total"
+  },
+  {
+   "name": "bt4_tax",
+   "bbox": [
+    1417,
+    1599,
+    1658,
+    1637
+   ],
+   "type": "amount",
+   "label": "Business tax row 4 · Tax withheld"
+  },
+  {
+   "name": "bt5_payment",
+   "bbox": [
+    51,
+    1637,
+    491,
+    1675
+   ],
+   "type": "text",
+   "label": "Business tax row 5 · Money payment"
+  },
+  {
+   "name": "bt5_atc",
+   "bbox": [
+    491,
+    1637,
+    611,
+    1675
+   ],
+   "type": "code",
+   "label": "Business tax row 5 · ATC"
+  },
+  {
+   "name": "bt5_m1",
+   "bbox": [
+    611,
+    1637,
+    811,
+    1675
+   ],
+   "type": "amount",
+   "label": "Business tax row 5 · 1st month"
+  },
+  {
+   "name": "bt5_m2",
+   "bbox": [
+    811,
+    1637,
+    1017,
+    1675
+   ],
+   "type": "amount",
+   "label": "Business tax row 5 · 2nd month"
+  },
+  {
+   "name": "bt5_m3",
+   "bbox": [
+    1017,
+    1637,
+    1217,
+    1675
+   ],
+   "type": "amount",
+   "label": "Business tax row 5 · 3rd month"
+  },
+  {
+   "name": "bt5_total",
+   "bbox": [
+    1217,
+    1637,
+    1417,
+    1675
+   ],
+   "type": "amount",
+   "label": "Business tax row 5 · Total"
+  },
+  {
+   "name": "bt5_tax",
+   "bbox": [
+    1417,
+    1637,
+    1658,
+    1675
+   ],
+   "type": "amount",
+   "label": "Business tax row 5 · Tax withheld"
+  },
+  {
+   "name": "bt6_payment",
+   "bbox": [
+    51,
+    1675,
+    491,
+    1713
+   ],
+   "type": "text",
+   "label": "Business tax row 6 · Money payment"
+  },
+  {
+   "name": "bt6_atc",
+   "bbox": [
+    491,
+    1675,
+    611,
+    1713
+   ],
+   "type": "code",
+   "label": "Business tax row 6 · ATC"
+  },
+  {
+   "name": "bt6_m1",
+   "bbox": [
+    611,
+    1675,
+    811,
+    1713
+   ],
+   "type": "amount",
+   "label": "Business tax row 6 · 1st month"
+  },
+  {
+   "name": "bt6_m2",
+   "bbox": [
+    811,
+    1675,
+    1017,
+    1713
+   ],
+   "type": "amount",
+   "label": "Business tax row 6 · 2nd month"
+  },
+  {
+   "name": "bt6_m3",
+   "bbox": [
+    1017,
+    1675,
+    1217,
+    1713
+   ],
+   "type": "amount",
+   "label": "Business tax row 6 · 3rd month"
+  },
+  {
+   "name": "bt6_total",
+   "bbox": [
+    1217,
+    1675,
+    1417,
+    1713
+   ],
+   "type": "amount",
+   "label": "Business tax row 6 · Total"
+  },
+  {
+   "name": "bt6_tax",
+   "bbox": [
+    1417,
+    1675,
+    1658,
+    1713
+   ],
+   "type": "amount",
+   "label": "Business tax row 6 · Tax withheld"
+  },
+  {
+   "name": "bt7_payment",
+   "bbox": [
+    51,
+    1713,
+    491,
+    1751
+   ],
+   "type": "text",
+   "label": "Business tax row 7 · Money payment"
+  },
+  {
+   "name": "bt7_atc",
+   "bbox": [
+    491,
+    1713,
+    611,
+    1751
+   ],
+   "type": "code",
+   "label": "Business tax row 7 · ATC"
+  },
+  {
+   "name": "bt7_m1",
+   "bbox": [
+    611,
+    1713,
+    811,
+    1751
+   ],
+   "type": "amount",
+   "label": "Business tax row 7 · 1st month"
+  },
+  {
+   "name": "bt7_m2",
+   "bbox": [
+    811,
+    1713,
+    1017,
+    1751
+   ],
+   "type": "amount",
+   "label": "Business tax row 7 · 2nd month"
+  },
+  {
+   "name": "bt7_m3",
+   "bbox": [
+    1017,
+    1713,
+    1217,
+    1751
+   ],
+   "type": "amount",
+   "label": "Business tax row 7 · 3rd month"
+  },
+  {
+   "name": "bt7_total",
+   "bbox": [
+    1217,
+    1713,
+    1417,
+    1751
+   ],
+   "type": "amount",
+   "label": "Business tax row 7 · Total"
+  },
+  {
+   "name": "bt7_tax",
+   "bbox": [
+    1417,
+    1713,
+    1658,
+    1751
+   ],
+   "type": "amount",
+   "label": "Business tax row 7 · Tax withheld"
+  },
+  {
+   "name": "bt8_payment",
+   "bbox": [
+    51,
+    1751,
+    491,
+    1789
+   ],
+   "type": "text",
+   "label": "Business tax row 8 · Money payment"
+  },
+  {
+   "name": "bt8_atc",
+   "bbox": [
+    491,
+    1751,
+    611,
+    1789
+   ],
+   "type": "code",
+   "label": "Business tax row 8 · ATC"
+  },
+  {
+   "name": "bt8_m1",
+   "bbox": [
+    611,
+    1751,
+    811,
+    1789
+   ],
+   "type": "amount",
+   "label": "Business tax row 8 · 1st month"
+  },
+  {
+   "name": "bt8_m2",
+   "bbox": [
+    811,
+    1751,
+    1017,
+    1789
+   ],
+   "type": "amount",
+   "label": "Business tax row 8 · 2nd month"
+  },
+  {
+   "name": "bt8_m3",
+   "bbox": [
+    1017,
+    1751,
+    1217,
+    1789
+   ],
+   "type": "amount",
+   "label": "Business tax row 8 · 3rd month"
+  },
+  {
+   "name": "bt8_total",
+   "bbox": [
+    1217,
+    1751,
+    1417,
+    1789
+   ],
+   "type": "amount",
+   "label": "Business tax row 8 · Total"
+  },
+  {
+   "name": "bt8_tax",
+   "bbox": [
+    1417,
+    1751,
+    1658,
+    1789
+   ],
+   "type": "amount",
+   "label": "Business tax row 8 · Tax withheld"
+  },
+  {
+   "name": "bt9_payment",
+   "bbox": [
+    51,
+    1789,
+    491,
+    1827
+   ],
+   "type": "text",
+   "label": "Business tax row 9 · Money payment"
+  },
+  {
+   "name": "bt9_atc",
+   "bbox": [
+    491,
+    1789,
+    611,
+    1827
+   ],
+   "type": "code",
+   "label": "Business tax row 9 · ATC"
+  },
+  {
+   "name": "bt9_m1",
+   "bbox": [
+    611,
+    1789,
+    811,
+    1827
+   ],
+   "type": "amount",
+   "label": "Business tax row 9 · 1st month"
+  },
+  {
+   "name": "bt9_m2",
+   "bbox": [
+    811,
+    1789,
+    1017,
+    1827
+   ],
+   "type": "amount",
+   "label": "Business tax row 9 · 2nd month"
+  },
+  {
+   "name": "bt9_m3",
+   "bbox": [
+    1017,
+    1789,
+    1217,
+    1827
+   ],
+   "type": "amount",
+   "label": "Business tax row 9 · 3rd month"
+  },
+  {
+   "name": "bt9_total",
+   "bbox": [
+    1217,
+    1789,
+    1417,
+    1827
+   ],
+   "type": "amount",
+   "label": "Business tax row 9 · Total"
+  },
+  {
+   "name": "bt9_tax",
+   "bbox": [
+    1417,
+    1789,
+    1658,
+    1827
+   ],
+   "type": "amount",
+   "label": "Business tax row 9 · Tax withheld"
+  },
+  {
+   "name": "bt10_payment",
+   "bbox": [
+    51,
+    1827,
+    491,
+    1865
+   ],
+   "type": "text",
+   "label": "Business tax row 10 · Money payment"
+  },
+  {
+   "name": "bt10_atc",
+   "bbox": [
+    491,
+    1827,
+    611,
+    1865
+   ],
+   "type": "code",
+   "label": "Business tax row 10 · ATC"
+  },
+  {
+   "name": "bt10_m1",
+   "bbox": [
+    611,
+    1827,
+    811,
+    1865
+   ],
+   "type": "amount",
+   "label": "Business tax row 10 · 1st month"
+  },
+  {
+   "name": "bt10_m2",
+   "bbox": [
+    811,
+    1827,
+    1017,
+    1865
+   ],
+   "type": "amount",
+   "label": "Business tax row 10 · 2nd month"
+  },
+  {
+   "name": "bt10_m3",
+   "bbox": [
+    1017,
+    1827,
+    1217,
+    1865
+   ],
+   "type": "amount",
+   "label": "Business tax row 10 · 3rd month"
+  },
+  {
+   "name": "bt10_total",
+   "bbox": [
+    1217,
+    1827,
+    1417,
+    1865
+   ],
+   "type": "amount",
+   "label": "Business tax row 10 · Total"
+  },
+  {
+   "name": "bt10_tax",
+   "bbox": [
+    1417,
+    1827,
+    1658,
+    1865
+   ],
+   "type": "amount",
+   "label": "Business tax row 10 · Tax withheld"
+  },
+  {
+   "name": "bt_total_m1",
+   "bbox": [
+    611,
+    1865,
+    811,
+    1903
+   ],
+   "type": "amount",
+   "label": "Business tax total row · 1st month"
+  },
+  {
+   "name": "bt_total_m2",
+   "bbox": [
+    811,
+    1865,
+    1017,
+    1903
+   ],
+   "type": "amount",
+   "label": "Business tax total row · 2nd month"
+  },
+  {
+   "name": "bt_total_m3",
+   "bbox": [
+    1017,
+    1865,
+    1217,
+    1903
+   ],
+   "type": "amount",
+   "label": "Business tax total row · 3rd month"
+  },
+  {
+   "name": "bt_total_total",
+   "bbox": [
+    1217,
+    1865,
+    1417,
+    1903
+   ],
+   "type": "amount",
+   "label": "Business tax total row · Total"
+  },
+  {
+   "name": "bt_total_tax",
+   "bbox": [
+    1417,
+    1865,
+    1658,
+    1903
+   ],
+   "type": "amount",
+   "label": "Business tax total row · Tax withheld"
+  }
+ ]
+}

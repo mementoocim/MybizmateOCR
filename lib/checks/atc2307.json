@@ -1,0 +1,968 @@
+[
+ {
+  "code": "WB030",
+  "rate": 0.03,
+  "description": "Tax on Carriers and Keepers of Garages",
+  "table": "bt"
+ },
+ {
+  "code": "WB040",
+  "rate": 0.02,
+  "description": "Franchise Tax on Gas and Water Utilities",
+  "table": "bt"
+ },
+ {
+  "code": "WB050",
+  "rate": 0.03,
+  "description": "Franchise Tax on radio/TV broadcasting cos. (annual gross <= P10M, non-VAT)",
+  "table": "bt"
+ },
+ {
+  "code": "WB070",
+  "rate": 0.02,
+  "description": "Tax on Life Insurance Premiums",
+  "table": "bt"
+ },
+ {
+  "code": "WB080",
+  "rate": 0.03,
+  "description": "Persons Exempt from VAT under Sec. 109(BB) (creditable) — Government Withholding Agent",
+  "table": "bt"
+ },
+ {
+  "code": "WB082",
+  "rate": 0.03,
+  "description": "Persons Exempt from VAT under Sec. 109(BB) (creditable) — Private Withholding Agent",
+  "table": "bt"
+ },
+ {
+  "code": "WB084",
+  "rate": 0.03,
+  "description": "Persons Exempt from VAT under Sec. 109(BB) (final) (Sec. 116 applies)",
+  "table": "bt"
+ },
+ {
+  "code": "WB090",
+  "rate": 0.1,
+  "description": "Tax on Overseas Dispatch, Message or Conversation from the Philippines",
+  "table": "bt"
+ },
+ {
+  "code": "WB102",
+  "rate": 0.0,
+  "description": "Banks/NBFI (quasi-banking) — dividends/equity shares/net income of subsidiaries",
+  "table": "bt"
+ },
+ {
+  "code": "WB103",
+  "rate": 0.07,
+  "description": "Banks/NBFI (quasi-banking) — royalties, rentals, profits from exchange & other gross income",
+  "table": "bt"
+ },
+ {
+  "code": "WB104",
+  "rate": 0.07,
+  "description": "Banks/NBFI (quasi-banking) — net trading gains on FX/debt securities/derivatives",
+  "table": "bt"
+ },
+ {
+  "code": "WB108",
+  "rate": 0.05,
+  "description": "Other NBFI (non quasi-banking) — lending & financial leasing, maturity 5 years or less",
+  "table": "bt"
+ },
+ {
+  "code": "WB109",
+  "rate": 0.01,
+  "description": "Other NBFI (non quasi-banking) — lending & financial leasing, maturity more than 5 years",
+  "table": "bt"
+ },
+ {
+  "code": "WB110",
+  "rate": 0.05,
+  "description": "Other NBFI (non quasi-banking) — all other items treated as gross income",
+  "table": "bt"
+ },
+ {
+  "code": "WB120",
+  "rate": 0.04,
+  "description": "Agents of Foreign Insurance Companies — Insurance Agents",
+  "table": "bt"
+ },
+ {
+  "code": "WB121",
+  "rate": 0.05,
+  "description": "Agents of Foreign Insurance Companies — Owner of the Property",
+  "table": "bt"
+ },
+ {
+  "code": "WB130",
+  "rate": 0.03,
+  "description": "Tax on International Carriers",
+  "table": "bt"
+ },
+ {
+  "code": "WB140",
+  "rate": 0.18,
+  "description": "Tax on Cockpits",
+  "table": "bt"
+ },
+ {
+  "code": "WB150",
+  "rate": 0.18,
+  "description": "Tax on amusement places (cabarets, clubs, videoke/karaoke bars, music lounges, etc.)",
+  "table": "bt"
+ },
+ {
+  "code": "WB160",
+  "rate": 0.1,
+  "description": "Tax on Boxing exhibitions",
+  "table": "bt"
+ },
+ {
+  "code": "WB170",
+  "rate": 0.15,
+  "description": "Tax on Professional basketball games",
+  "table": "bt"
+ },
+ {
+  "code": "WB180",
+  "rate": 0.3,
+  "description": "Tax on jai-alai and race tracks",
+  "table": "bt"
+ },
+ {
+  "code": "WB200",
+  "rate": 0.006,
+  "description": "Tax on sale/barter/exchange of stocks listed & traded through the Local Stock Exchange",
+  "table": "bt"
+ },
+ {
+  "code": "WB201",
+  "rate": 0.04,
+  "description": "Tax on shares of stock through IPO — proportion of shares not over 25%",
+  "table": "bt"
+ },
+ {
+  "code": "WB202",
+  "rate": 0.02,
+  "description": "Tax on shares of stock through IPO — over 25% but not over 33 1/3%",
+  "table": "bt"
+ },
+ {
+  "code": "WB203",
+  "rate": 0.01,
+  "description": "Tax on shares of stock through IPO — over 33 1/3%",
+  "table": "bt"
+ },
+ {
+  "code": "WB301",
+  "rate": 0.05,
+  "description": "Banks/NBFI (quasi-banking) — lending & financial leasing, maturity 5 years or less",
+  "table": "bt"
+ },
+ {
+  "code": "WB303",
+  "rate": 0.01,
+  "description": "Banks/NBFI (quasi-banking) — lending & financial leasing, maturity more than 5 years",
+  "table": "bt"
+ },
+ {
+  "code": "WC010",
+  "rate": 0.1,
+  "description": "Professional Fees (Lawyers, CPAs, Engineers)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC011",
+  "rate": 0.15,
+  "description": "Professional Fees (Lawyers, CPAs, Engineers)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC020",
+  "rate": 0.1,
+  "description": "Professional Entertainers",
+  "table": "ewt"
+ },
+ {
+  "code": "WC021",
+  "rate": 0.15,
+  "description": "Professional Entertainers",
+  "table": "ewt"
+ },
+ {
+  "code": "WC030",
+  "rate": 0.1,
+  "description": "Professional Athletes",
+  "table": "ewt"
+ },
+ {
+  "code": "WC031",
+  "rate": 0.15,
+  "description": "Professional Athletes",
+  "table": "ewt"
+ },
+ {
+  "code": "WC040",
+  "rate": 0.1,
+  "description": "Directors/Producers (Movies, TV, Radio)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC041",
+  "rate": 0.15,
+  "description": "Directors/Producers (Movies, TV, Radio)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC050",
+  "rate": 0.1,
+  "description": "Management & Technical Consultants",
+  "table": "ewt"
+ },
+ {
+  "code": "WC051",
+  "rate": 0.15,
+  "description": "Management & Technical Consultants",
+  "table": "ewt"
+ },
+ {
+  "code": "WC060",
+  "rate": 0.1,
+  "description": "Business & Bookkeeping Agents",
+  "table": "ewt"
+ },
+ {
+  "code": "WC061",
+  "rate": 0.15,
+  "description": "Business & Bookkeeping Agents",
+  "table": "ewt"
+ },
+ {
+  "code": "WC070",
+  "rate": 0.1,
+  "description": "Insurance Agents/Adjusters",
+  "table": "ewt"
+ },
+ {
+  "code": "WC071",
+  "rate": 0.15,
+  "description": "Insurance Agents/Adjusters",
+  "table": "ewt"
+ },
+ {
+  "code": "WC080",
+  "rate": 0.1,
+  "description": "Other Talent Fees",
+  "table": "ewt"
+ },
+ {
+  "code": "WC081",
+  "rate": 0.15,
+  "description": "Other Talent Fees",
+  "table": "ewt"
+ },
+ {
+  "code": "WC090",
+  "rate": 0.1,
+  "description": "Directors' Fees (non-employee)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC091",
+  "rate": 0.15,
+  "description": "Directors' Fees (non-employee)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC100",
+  "rate": 0.05,
+  "description": "Rentals (Personal/Real Property)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC110",
+  "rate": 0.05,
+  "description": "Cinematographic Film Rentals",
+  "table": "ewt"
+ },
+ {
+  "code": "WC120",
+  "rate": 0.02,
+  "description": "Payments to Contractors",
+  "table": "ewt"
+ },
+ {
+  "code": "WC139",
+  "rate": 0.1,
+  "description": "Commissions/Fees (Brokers, RESPs)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC140",
+  "rate": 0.15,
+  "description": "Commissions/Fees (Brokers, RESPs)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC150",
+  "rate": 0.15,
+  "description": "Medical Practitioners (Hospitals/HMOs)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC151",
+  "rate": 0.1,
+  "description": "Medical Practitioners (Hospitals/HMOs)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC156",
+  "rate": 0.005,
+  "description": "Payments by Credit Card Companies",
+  "table": "ewt"
+ },
+ {
+  "code": "WC157",
+  "rate": 0.02,
+  "description": "GOCC payments to Suppliers (Services)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC158",
+  "rate": 0.01,
+  "description": "Top Withholding Agents — Goods",
+  "table": "ewt"
+ },
+ {
+  "code": "WC160",
+  "rate": 0.02,
+  "description": "Top Withholding Agents — Services",
+  "table": "ewt"
+ },
+ {
+  "code": "WC515",
+  "rate": 0.1,
+  "description": "Sales/Marketing Commissions",
+  "table": "ewt"
+ },
+ {
+  "code": "WC516",
+  "rate": 0.15,
+  "description": "Sales/Marketing Commissions",
+  "table": "ewt"
+ },
+ {
+  "code": "WC535",
+  "rate": 0.01,
+  "description": "Pre-Need Companies (Funeral Parlors)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC540",
+  "rate": 0.05,
+  "description": "Tolling Fees (Refineries)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC555",
+  "rate": 0.015,
+  "description": "Sale of Real Property (Ordinary Asset)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC556",
+  "rate": 0.03,
+  "description": "Sale of Real Property (Ordinary Asset)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC557",
+  "rate": 0.05,
+  "description": "Sale of Real Property (Ordinary Asset)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC558",
+  "rate": 0.06,
+  "description": "Sale of Real Property (Ordinary Asset)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC610",
+  "rate": 0.01,
+  "description": "Suppliers of Agricultural Products",
+  "table": "ewt"
+ },
+ {
+  "code": "WC630",
+  "rate": 0.05,
+  "description": "Minerals & Quarry Resources",
+  "table": "ewt"
+ },
+ {
+  "code": "WC632",
+  "rate": 0.01,
+  "description": "Purchases of Gold by BSP",
+  "table": "ewt"
+ },
+ {
+  "code": "WC640",
+  "rate": 0.01,
+  "description": "GOCC payments to Suppliers (Goods)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC650",
+  "rate": 0.15,
+  "description": "MERALCO Refunds — Active",
+  "table": "ewt"
+ },
+ {
+  "code": "WC651",
+  "rate": 0.15,
+  "description": "MERALCO Refunds — Terminated",
+  "table": "ewt"
+ },
+ {
+  "code": "WC660",
+  "rate": 0.1,
+  "description": "Interest on Meter Deposit Refunds (>200 kWh)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC661",
+  "rate": null,
+  "description": "On gross amount of interest on the refund of meter deposit whether paid directly to the customers or applied against customer’s billings of Non- Residential customers whose monthly electricity consumption exceeds 200 kwh as classified by MERALCO",
+  "table": "ewt"
+ },
+ {
+  "code": "WC662",
+  "rate": null,
+  "description": "On gross amount of interest on the refund of meter deposit whether paid directly to the customers or applied against customer’s billings of Residential and General Service customers whose monthly electricity consumption exceeds 200 kwh as classified by other electric Distribution Utilities (DU)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC663",
+  "rate": 0.15,
+  "description": "Interest on Meter Deposit Refunds (>200 kWh)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC680",
+  "rate": 0.05,
+  "description": "Political Campaign Expenses",
+  "table": "ewt"
+ },
+ {
+  "code": "WC690",
+  "rate": 0.01,
+  "description": "Real Estate Investment Trust (REIT)",
+  "table": "ewt"
+ },
+ {
+  "code": "WC710",
+  "rate": 0.15,
+  "description": "Interest on Other Debt Instruments",
+  "table": "ewt"
+ },
+ {
+  "code": "WC720",
+  "rate": 0.01,
+  "description": "Payments on Raw Sugar",
+  "table": "ewt"
+ },
+ {
+  "code": "WC770",
+  "rate": 0.01,
+  "description": "Joint Ventures/Consortiums — Suppliers of Goods",
+  "table": "ewt"
+ },
+ {
+  "code": "WC780",
+  "rate": 0.02,
+  "description": "Joint Ventures/Consortiums — Suppliers of Services",
+  "table": "ewt"
+ },
+ {
+  "code": "WC790",
+  "rate": 0.15,
+  "description": "Co-venturer's Share in Net Income of a JV/Consortium",
+  "table": "ewt"
+ },
+ {
+  "code": "WC820",
+  "rate": 0.005,
+  "description": "E-marketplace Operators — Gross Remittances",
+  "table": "ewt"
+ },
+ {
+  "code": "WC830",
+  "rate": 0.005,
+  "description": "Digital Financial Services Providers — Gross Remittances",
+  "table": "ewt"
+ },
+ {
+  "code": "WC840",
+  "rate": 0.005,
+  "description": "TWA — Motor Vehicles (CBU/SKD), Parts",
+  "table": "ewt"
+ },
+ {
+  "code": "WC850",
+  "rate": 0.005,
+  "description": "TWA — Medicine / Pharmaceuticals",
+  "table": "ewt"
+ },
+ {
+  "code": "WC860",
+  "rate": 0.005,
+  "description": "TWA — Solid/Liquid Fuels",
+  "table": "ewt"
+ },
+ {
+  "code": "WI010",
+  "rate": 0.05,
+  "description": "Professional Fees (Lawyers, CPAs, Engineers)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI011",
+  "rate": 0.1,
+  "description": "Professional Fees (Lawyers, CPAs, Engineers)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI020",
+  "rate": 0.05,
+  "description": "Professional Entertainers",
+  "table": "ewt"
+ },
+ {
+  "code": "WI021",
+  "rate": 0.1,
+  "description": "Professional Entertainers",
+  "table": "ewt"
+ },
+ {
+  "code": "WI030",
+  "rate": 0.05,
+  "description": "Professional Athletes",
+  "table": "ewt"
+ },
+ {
+  "code": "WI031",
+  "rate": 0.1,
+  "description": "Professional Athletes",
+  "table": "ewt"
+ },
+ {
+  "code": "WI040",
+  "rate": 0.05,
+  "description": "Directors/Producers (Movies, TV, Radio)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI041",
+  "rate": 0.1,
+  "description": "Directors/Producers (Movies, TV, Radio)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI050",
+  "rate": 0.05,
+  "description": "Management & Technical Consultants",
+  "table": "ewt"
+ },
+ {
+  "code": "WI051",
+  "rate": 0.1,
+  "description": "Management & Technical Consultants",
+  "table": "ewt"
+ },
+ {
+  "code": "WI060",
+  "rate": 0.05,
+  "description": "Business & Bookkeeping Agents",
+  "table": "ewt"
+ },
+ {
+  "code": "WI061",
+  "rate": 0.1,
+  "description": "Business & Bookkeeping Agents",
+  "table": "ewt"
+ },
+ {
+  "code": "WI070",
+  "rate": 0.05,
+  "description": "Insurance Agents/Adjusters",
+  "table": "ewt"
+ },
+ {
+  "code": "WI071",
+  "rate": 0.1,
+  "description": "Insurance Agents/Adjusters",
+  "table": "ewt"
+ },
+ {
+  "code": "WI080",
+  "rate": 0.05,
+  "description": "Other Talent Fees",
+  "table": "ewt"
+ },
+ {
+  "code": "WI081",
+  "rate": 0.1,
+  "description": "Other Talent Fees",
+  "table": "ewt"
+ },
+ {
+  "code": "WI090",
+  "rate": 0.05,
+  "description": "Directors' Fees (non-employee)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI091",
+  "rate": 0.1,
+  "description": "Directors' Fees (non-employee)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI100",
+  "rate": 0.05,
+  "description": "Rentals (Personal/Real Property)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI110",
+  "rate": 0.05,
+  "description": "Cinematographic Film Rentals",
+  "table": "ewt"
+ },
+ {
+  "code": "WI120",
+  "rate": 0.02,
+  "description": "Payments to Contractors",
+  "table": "ewt"
+ },
+ {
+  "code": "WI130",
+  "rate": 0.15,
+  "description": "Beneficiaries of Estates & Trusts",
+  "table": "ewt"
+ },
+ {
+  "code": "WI139",
+  "rate": 0.05,
+  "description": "Brokers' Commissions",
+  "table": "ewt"
+ },
+ {
+  "code": "WI140",
+  "rate": 0.1,
+  "description": "Brokers' Commissions",
+  "table": "ewt"
+ },
+ {
+  "code": "WI150",
+  "rate": 0.1,
+  "description": "Medical Practitioners (Hospitals/HMOs)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI151",
+  "rate": 0.05,
+  "description": "Medical Practitioners (Hospitals/HMOs)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI152",
+  "rate": 0.1,
+  "description": "GPP Payments to Partners",
+  "table": "ewt"
+ },
+ {
+  "code": "WI153",
+  "rate": 0.15,
+  "description": "GPP Payments to Partners",
+  "table": "ewt"
+ },
+ {
+  "code": "WI156",
+  "rate": 0.005,
+  "description": "Payments by Credit Card Companies",
+  "table": "ewt"
+ },
+ {
+  "code": "WI157",
+  "rate": 0.02,
+  "description": "GOCC payments to Suppliers (Services)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI158",
+  "rate": 0.01,
+  "description": "Top Withholding Agents — Goods",
+  "table": "ewt"
+ },
+ {
+  "code": "WI159",
+  "rate": 0.15,
+  "description": "Govt Personnel Shipping/Airlines",
+  "table": "ewt"
+ },
+ {
+  "code": "WI160",
+  "rate": 0.02,
+  "description": "Top Withholding Agents — Services",
+  "table": "ewt"
+ },
+ {
+  "code": "WI515",
+  "rate": 0.05,
+  "description": "Sales/Marketing Commissions",
+  "table": "ewt"
+ },
+ {
+  "code": "WI516",
+  "rate": 0.1,
+  "description": "Sales/Marketing Commissions",
+  "table": "ewt"
+ },
+ {
+  "code": "WI530",
+  "rate": 0.01,
+  "description": "Embalmers",
+  "table": "ewt"
+ },
+ {
+  "code": "WI535",
+  "rate": 0.01,
+  "description": "Pre-Need Companies (Funeral Parlors)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI540",
+  "rate": 0.05,
+  "description": "Tolling Fees (Refineries)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI555",
+  "rate": 0.015,
+  "description": "Sale of Real Property (Ordinary Asset)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI556",
+  "rate": 0.03,
+  "description": "Sale of Real Property (Ordinary Asset)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI557",
+  "rate": 0.05,
+  "description": "Sale of Real Property (Ordinary Asset)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI558",
+  "rate": 0.06,
+  "description": "Sale of Real Property (Ordinary Asset)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI610",
+  "rate": 0.01,
+  "description": "Suppliers of Agricultural Products",
+  "table": "ewt"
+ },
+ {
+  "code": "WI630",
+  "rate": 0.05,
+  "description": "Minerals & Quarry Resources",
+  "table": "ewt"
+ },
+ {
+  "code": "WI632",
+  "rate": 0.01,
+  "description": "Purchases of Gold by BSP",
+  "table": "ewt"
+ },
+ {
+  "code": "WI640",
+  "rate": 0.01,
+  "description": "GOCC payments to Suppliers (Goods)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI650",
+  "rate": 0.15,
+  "description": "MERALCO Refunds — Active",
+  "table": "ewt"
+ },
+ {
+  "code": "WI651",
+  "rate": 0.15,
+  "description": "MERALCO Refunds — Terminated",
+  "table": "ewt"
+ },
+ {
+  "code": "WI660",
+  "rate": 0.1,
+  "description": "Interest on Meter Deposit Refunds (>200 kWh)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI661",
+  "rate": null,
+  "description": "On gross amount of interest on the refund of meter deposit whether paid directly to the customers or applied against customer’s billings of Non- Residential customers whose monthly electricity consumption exceeds 200 kwh as classified by MERALCO",
+  "table": "ewt"
+ },
+ {
+  "code": "WI662",
+  "rate": null,
+  "description": "On gross amount of interest on the refund of meter deposit whether paid directly to the customers or applied against customer’s billings of Residential and General Service customers whose monthly electricity consumption exceeds 200 kwh as classified by other electric Distribution Utilities (DU)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI663",
+  "rate": 0.15,
+  "description": "Interest on Meter Deposit Refunds (>200 kWh)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI680",
+  "rate": 0.05,
+  "description": "Political Campaign Expenses",
+  "table": "ewt"
+ },
+ {
+  "code": "WI690",
+  "rate": 0.01,
+  "description": "Real Estate Investment Trust (REIT)",
+  "table": "ewt"
+ },
+ {
+  "code": "WI710",
+  "rate": 0.15,
+  "description": "Interest on Other Debt Instruments",
+  "table": "ewt"
+ },
+ {
+  "code": "WI720",
+  "rate": 0.01,
+  "description": "Payments on Raw Sugar",
+  "table": "ewt"
+ },
+ {
+  "code": "WI770",
+  "rate": 0.01,
+  "description": "Joint Ventures/Consortiums — Suppliers of Goods",
+  "table": "ewt"
+ },
+ {
+  "code": "WI780",
+  "rate": 0.02,
+  "description": "Joint Ventures/Consortiums — Suppliers of Services",
+  "table": "ewt"
+ },
+ {
+  "code": "WI820",
+  "rate": 0.005,
+  "description": "E-marketplace Operators — Gross Remittances",
+  "table": "ewt"
+ },
+ {
+  "code": "WI830",
+  "rate": 0.005,
+  "description": "Digital Financial Services Providers — Gross Remittances",
+  "table": "ewt"
+ },
+ {
+  "code": "WI840",
+  "rate": 0.005,
+  "description": "TWA — Motor Vehicles (CBU/SKD), Parts",
+  "table": "ewt"
+ },
+ {
+  "code": "WI850",
+  "rate": 0.005,
+  "description": "TWA — Medicine / Pharmaceuticals",
+  "table": "ewt"
+ },
+ {
+  "code": "WI860",
+  "rate": 0.005,
+  "description": "TWA — Solid/Liquid Fuels",
+  "table": "ewt"
+ },
+ {
+  "code": "WV010",
+  "rate": 0.05,
+  "description": "VAT WH on Purchase of Goods — Government",
+  "table": "bt"
+ },
+ {
+  "code": "WV012",
+  "rate": 0.12,
+  "description": "VAT WH on Purchases of Goods (with waiver) — creditable",
+  "table": "bt"
+ },
+ {
+  "code": "WV014",
+  "rate": 0.12,
+  "description": "VAT WH on Purchases of Goods (with waiver) — final",
+  "table": "bt"
+ },
+ {
+  "code": "WV020",
+  "rate": 0.05,
+  "description": "VAT WH on Purchase of Services — Government",
+  "table": "bt"
+ },
+ {
+  "code": "WV022",
+  "rate": 0.12,
+  "description": "VAT WH on Purchases of Services (with waiver) — creditable",
+  "table": "bt"
+ },
+ {
+  "code": "WV024",
+  "rate": 0.12,
+  "description": "VAT WH on Purchases of Services (with waiver) — final",
+  "table": "bt"
+ },
+ {
+  "code": "WV030",
+  "rate": 0.085,
+  "description": "VAT WH on Government Public Work Contracts",
+  "table": "bt"
+ },
+ {
+  "code": "WV040",
+  "rate": 0.12,
+  "description": "Final VAT — Lease/Use of Property by Non-residents (Govt WA)",
+  "table": "bt"
+ },
+ {
+  "code": "WV050",
+  "rate": 0.12,
+  "description": "Final VAT — Lease/Use of Property by Non-residents (Private WA)",
+  "table": "bt"
+ },
+ {
+  "code": "WV060",
+  "rate": 0.12,
+  "description": "Final VAT — Other Services by Non-residents in PH (Govt WA)",
+  "table": "bt"
+ },
+ {
+  "code": "WV070",
+  "rate": 0.12,
+  "description": "Final VAT — Other Services by Non-residents in PH (Private WA)",
+  "table": "bt"
+ }
+]
