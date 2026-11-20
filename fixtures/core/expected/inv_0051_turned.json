@@ -1,0 +1,376 @@
+{
+ "photo": "inv_0051_turned.jpg",
+ "aligned": true,
+ "form": "sales_invoice",
+ "photoSize": [
+  1736,
+  2201
+ ],
+ "turned": true,
+ "corners": [
+  [
+   178.6744842529297,
+   227.490478515625
+  ],
+  [
+   1562.3321533203125,
+   237.92514038085938
+  ],
+  [
+   1580.3575439453125,
+   1973.6490478515625
+  ],
+  [
+   123.34564208984375,
+   2010.052490234375
+  ]
+ ],
+ "sharpness": 2.48313298077242,
+ "sharpMin": 1.0,
+ "light": 253.0,
+ "terms": "account",
+ "blanks": 36,
+ "reads": [
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "0008869",
+   "conf": 0.9999891349247524,
+   "alts": [],
+   "cropSize": [
+    148,
+    40
+   ]
+  },
+  {
+   "name": "date",
+   "type": "date",
+   "text": "21 0ct 2026",
+   "conf": 0.9591474207964811,
+   "alts": [
+    "27 0ct 2026",
+    "21 Oct 2026"
+   ],
+   "cropSize": [
+    215,
+    43
+   ]
+  },
+  {
+   "name": "customer_name",
+   "type": "text",
+   "text": "Flores Grocery",
+   "conf": 0.9831304890768868,
+   "alts": [],
+   "cropSize": [
+    225,
+    48
+   ]
+  },
+  {
+   "name": "customer_tin",
+   "type": "tin",
+   "text": "556677889",
+   "conf": 0.9999305605888367,
+   "alts": [],
+   "cropSize": [
+    165,
+    39
+   ]
+  },
+  {
+   "name": "customer_address",
+   "type": "text",
+   "text": "Centro East, Alicia, Isabela",
+   "conf": 0.9938942257847104,
+   "alts": [],
+   "cropSize": [
+    427,
+    42
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "Two thousand two hundred fifty-one pesos only",
+   "conf": 0.9986821757422553,
+   "alts": [],
+   "cropSize": [
+    695,
+    48
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "2,009.82",
+   "conf": 0.999777227640152,
+   "alts": [],
+   "cropSize": [
+    109,
+    33
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "247.18",
+   "conf": 0.9104001224040985,
+   "alts": [
+    "241.18",
+    "247.78"
+   ],
+   "cropSize": [
+    90,
+    35
+   ]
+  },
+  {
+   "name": "vat_exempt",
+   "type": "amount",
+   "text": "0.00",
+   "conf": 0.999738410115242,
+   "alts": [],
+   "cropSize": [
+    58,
+    33
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "2,257",
+   "conf": 0.9232054710388183,
+   "alts": [
+    "2,251"
+   ],
+   "cropSize": [
+    76,
+    31
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "247.18",
+   "conf": 0.9956304927666982,
+   "alts": [],
+   "cropSize": [
+    99,
+    38
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "2,009.82",
+   "conf": 0.9995800107717514,
+   "alts": [],
+   "cropSize": [
+    125,
+    38
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "247.18",
+   "conf": 0.9684464434782664,
+   "alts": [
+    "247.78",
+    "241.18"
+   ],
+   "cropSize": [
+    99,
+    36
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "2,251",
+   "conf": 0.9761780261993408,
+   "alts": [
+    "2,257"
+   ],
+   "cropSize": [
+    88,
+    35
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "2",
+   "conf": 0.9999938011169434,
+   "alts": [],
+   "cropSize": [
+    28,
+    32
+   ]
+  },
+  {
+   "name": "item1_unit",
+   "type": "text",
+   "text": "pe",
+   "conf": 0.9522322416305542,
+   "alts": [],
+   "cropSize": [
+    40,
+    38
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Plywood 1/4",
+   "conf": 0.998535540970889,
+   "alts": [],
+   "cropSize": [
+    177,
+    40
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "546",
+   "conf": 0.9998967250188192,
+   "alts": [],
+   "cropSize": [
+    58,
+    32
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "7,092",
+   "conf": 0.9517702579498291,
+   "alts": [
+    "1,092"
+   ],
+   "cropSize": [
+    85,
+    35
+   ]
+  },
+  {
+   "name": "item2_qty",
+   "type": "number",
+   "text": "2",
+   "conf": 0.999990701675415,
+   "alts": [],
+   "cropSize": [
+    28,
+    32
+   ]
+  },
+  {
+   "name": "item2_unit",
+   "type": "text",
+   "text": "sachet",
+   "conf": 0.9999447464942932,
+   "alts": [],
+   "cropSize": [
+    106,
+    40
+   ]
+  },
+  {
+   "name": "item2_description",
+   "type": "text",
+   "text": "Nescafe",
+   "conf": 0.9999283041272845,
+   "alts": [],
+   "cropSize": [
+    126,
+    41
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "9.50",
+   "conf": 0.9999507069587708,
+   "alts": [],
+   "cropSize": [
+    65,
+    38
+   ]
+  },
+  {
+   "name": "item2_amount",
+   "type": "amount",
+   "text": "19",
+   "conf": 0.7940889894962311,
+   "alts": [
+    "79"
+   ],
+   "cropSize": [
+    43,
+    36
+   ]
+  },
+  {
+   "name": "item3_qty",
+   "type": "number",
+   "text": "12",
+   "conf": 0.9463224112987518,
+   "alts": [
+    "72"
+   ],
+   "cropSize": [
+    47,
+    39
+   ]
+  },
+  {
+   "name": "item3_unit",
+   "type": "text",
+   "text": "pack",
+   "conf": 0.999224454164505,
+   "alts": [],
+   "cropSize": [
+    72,
+    38
+   ]
+  },
+  {
+   "name": "item3_description",
+   "type": "text",
+   "text": "Bear Brand",
+   "conf": 0.9936730563640594,
+   "alts": [],
+   "cropSize": [
+    153,
+    38
+   ]
+  },
+  {
+   "name": "item3_unit_price",
+   "type": "amount",
+   "text": "95",
+   "conf": 0.9991298615932465,
+   "alts": [],
+   "cropSize": [
+    43,
+    39
+   ]
+  },
+  {
+   "name": "item3_amount",
+   "type": "amount",
+   "text": "1,140",
+   "conf": 0.8932125329971313,
+   "alts": [
+    "1,740",
+    "7,140"
+   ],
+   "cropSize": [
+    95,
+    43
+   ]
+  }
+ ]
+}

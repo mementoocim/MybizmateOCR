@@ -1,0 +1,128 @@
+{
+ "photo": "inv_0051_dark.jpg",
+ "aligned": true,
+ "form": "sales_invoice",
+ "photoSize": [
+  1736,
+  2201
+ ],
+ "turned": false,
+ "corners": [
+  [
+   154.80018615722656,
+   226.1709442138672
+  ],
+  [
+   1611.7847900390625,
+   189.90225219726562
+  ],
+  [
+   1556.31005859375,
+   1972.530029296875
+  ],
+  [
+   172.61886596679688,
+   1961.8768310546875
+  ]
+ ],
+ "sharpness": 2.45713766926751,
+ "sharpMin": 1.0,
+ "light": 51.0,
+ "terms": "account",
+ "blanks": 57,
+ "reads": [
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "Two thousand two hundred fifty-one pesos only",
+   "conf": 0.9978860497474671,
+   "alts": [],
+   "cropSize": [
+    693,
+    48
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "247.18",
+   "conf": 0.9265534281730652,
+   "alts": [
+    "247.78"
+   ],
+   "cropSize": [
+    96,
+    36
+   ]
+  },
+  {
+   "name": "item1_unit",
+   "type": "text",
+   "text": "P",
+   "conf": 0.3771495223045349,
+   "alts": [],
+   "cropSize": [
+    19,
+    25
+   ]
+  },
+  {
+   "name": "item2_unit",
+   "type": "text",
+   "text": "a",
+   "conf": 0.9971283078193665,
+   "alts": [],
+   "cropSize": [
+    20,
+    25
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "9.",
+   "conf": 0.9547709226608276,
+   "alts": [],
+   "cropSize": [
+    21,
+    28
+   ]
+  },
+  {
+   "name": "item3_description",
+   "type": "text",
+   "text": "d",
+   "conf": 0.9936609268188477,
+   "alts": [],
+   "cropSize": [
+    17,
+    27
+   ]
+  },
+  {
+   "name": "item3_unit_price",
+   "type": "amount",
+   "text": "95",
+   "conf": 0.9998154938220978,
+   "alts": [],
+   "cropSize": [
+    40,
+    35
+   ]
+  },
+  {
+   "name": "item3_amount",
+   "type": "amount",
+   "text": "1,140",
+   "conf": 0.9350902676582337,
+   "alts": [
+    "1,740",
+    "7,140"
+   ],
+   "cropSize": [
+    92,
+    39
+   ]
+  }
+ ]
+}

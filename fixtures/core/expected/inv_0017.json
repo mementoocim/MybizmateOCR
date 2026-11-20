@@ -1,0 +1,244 @@
+{
+ "photo": "inv_0017.jpg",
+ "aligned": true,
+ "form": "sales_invoice",
+ "photoSize": [
+  1962,
+  2285
+ ],
+ "turned": false,
+ "corners": [
+  [
+   225.11595153808594,
+   215.1533660888672
+  ],
+  [
+   1636.5419921875,
+   143.87286376953125
+  ],
+  [
+   1701.128662109375,
+   2091.701416015625
+  ],
+  [
+   304.90655517578125,
+   2138.102783203125
+  ]
+ ],
+ "sharpness": 2.535332209285838,
+ "sharpMin": 1.0,
+ "light": 255.0,
+ "terms": "account",
+ "blanks": 46,
+ "reads": [
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "0000186",
+   "conf": 0.9999885899680001,
+   "alts": [],
+   "cropSize": [
+    149,
+    39
+   ]
+  },
+  {
+   "name": "date",
+   "type": "date",
+   "text": "11-18-26",
+   "conf": 0.9999532401561737,
+   "alts": [],
+   "cropSize": [
+    132,
+    41
+   ]
+  },
+  {
+   "name": "customer_name",
+   "type": "text",
+   "text": "REYES SARI-SARI STORE",
+   "conf": 0.9920884938467116,
+   "alts": [],
+   "cropSize": [
+    395,
+    45
+   ]
+  },
+  {
+   "name": "customer_tin",
+   "type": "tin",
+   "text": "456-789-012",
+   "conf": 0.9999793442812833,
+   "alts": [],
+   "cropSize": [
+    221,
+    40
+   ]
+  },
+  {
+   "name": "customer_address",
+   "type": "text",
+   "text": "45 Mabini St., Alicia, Isabela",
+   "conf": 0.9905905346075694,
+   "alts": [],
+   "cropSize": [
+    418,
+    43
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "One thousand nine hundred pesos only",
+   "conf": 0.9760213030709161,
+   "alts": [],
+   "cropSize": [
+    567,
+    48
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "1696.43",
+   "conf": 0.9999681711196899,
+   "alts": [],
+   "cropSize": [
+    109,
+    37
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "203.57",
+   "conf": 0.9998553395271301,
+   "alts": [],
+   "cropSize": [
+    96,
+    36
+   ]
+  },
+  {
+   "name": "vat_exempt",
+   "type": "amount",
+   "text": "0.00",
+   "conf": 0.9995561391115189,
+   "alts": [],
+   "cropSize": [
+    58,
+    33
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "1900.00",
+   "conf": 0.9997444237981524,
+   "alts": [],
+   "cropSize": [
+    96,
+    38
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "203.57",
+   "conf": 0.9999762376149496,
+   "alts": [],
+   "cropSize": [
+    96,
+    38
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "1696.43",
+   "conf": 0.9959705642291478,
+   "alts": [],
+   "cropSize": [
+    109,
+    38
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "203.57",
+   "conf": 0.9999880194664001,
+   "alts": [],
+   "cropSize": [
+    104,
+    35
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "1900.00",
+   "conf": 0.999927682535989,
+   "alts": [],
+   "cropSize": [
+    99,
+    37
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "20",
+   "conf": 0.9999926686286926,
+   "alts": [],
+   "cropSize": [
+    44,
+    38
+   ]
+  },
+  {
+   "name": "item1_unit",
+   "type": "text",
+   "text": "pack",
+   "conf": 0.9999301433563232,
+   "alts": [],
+   "cropSize": [
+    69,
+    43
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Bear Brand 300g",
+   "conf": 0.9992734948794048,
+   "alts": [],
+   "cropSize": [
+    233,
+    40
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "95.00",
+   "conf": 0.9999646186828614,
+   "alts": [],
+   "cropSize": [
+    88,
+    42
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "1900.00",
+   "conf": 0.9999574848583767,
+   "alts": [],
+   "cropSize": [
+    117,
+    38
+   ]
+  }
+ ]
+}

@@ -1,0 +1,299 @@
+{
+ "photo": "inv_0001.jpg",
+ "aligned": true,
+ "form": "sales_invoice",
+ "photoSize": [
+  1617,
+  2021
+ ],
+ "turned": false,
+ "corners": [
+  [
+   249.2215118408203,
+   65.08100128173828
+  ],
+  [
+   1479.1502685546875,
+   191.69967651367188
+  ],
+  [
+   1364.2408447265625,
+   1959.96630859375
+  ],
+  [
+   156.69656372070312,
+   1808.7181396484375
+  ]
+ ],
+ "sharpness": 2.3472361711525265,
+ "sharpMin": 1.0,
+ "light": 255.0,
+ "terms": "cash",
+ "blanks": 41,
+ "reads": [
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "0007925",
+   "conf": 0.9999926090240479,
+   "alts": [],
+   "cropSize": [
+    149,
+    39
+   ]
+  },
+  {
+   "name": "date",
+   "type": "date",
+   "text": "10/22/2026",
+   "conf": 0.9998251259326935,
+   "alts": [],
+   "cropSize": [
+    176,
+    45
+   ]
+  },
+  {
+   "name": "customer_name",
+   "type": "text",
+   "text": "SAMPLE COMPANY",
+   "conf": 0.9642294304711478,
+   "alts": [],
+   "cropSize": [
+    300,
+    46
+   ]
+  },
+  {
+   "name": "customer_tin",
+   "type": "tin",
+   "text": "123456789",
+   "conf": 0.9788648552364774,
+   "alts": [],
+   "cropSize": [
+    197,
+    37
+   ]
+  },
+  {
+   "name": "customer_address",
+   "type": "text",
+   "text": "106 Burgos St., Cabatuan, Isabela",
+   "conf": 0.9934242024566188,
+   "alts": [],
+   "cropSize": [
+    473,
+    45
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "Five hundred fifty-eight pesos and 5o/100",
+   "conf": 0.9612331753823815,
+   "alts": [],
+   "cropSize": [
+    689,
+    44
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "498.66",
+   "conf": 0.9995262920856476,
+   "alts": [],
+   "cropSize": [
+    97,
+    35
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "59.84",
+   "conf": 0.9997492909431458,
+   "alts": [],
+   "cropSize": [
+    82,
+    36
+   ]
+  },
+  {
+   "name": "zero_rated",
+   "type": "amount",
+   "text": "0.00",
+   "conf": 0.9997656494379044,
+   "alts": [],
+   "cropSize": [
+    67,
+    30
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "558.50",
+   "conf": 0.9999219179153442,
+   "alts": [],
+   "cropSize": [
+    89,
+    35
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "59.84",
+   "conf": 0.9992527484893798,
+   "alts": [],
+   "cropSize": [
+    90,
+    31
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "498.66",
+   "conf": 0.996177057425181,
+   "alts": [],
+   "cropSize": [
+    87,
+    34
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "59.84",
+   "conf": 0.9997346520423889,
+   "alts": [],
+   "cropSize": [
+    82,
+    30
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "558.50",
+   "conf": 0.9998334646224976,
+   "alts": [],
+   "cropSize": [
+    91,
+    31
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "2",
+   "conf": 0.9999951124191284,
+   "alts": [],
+   "cropSize": [
+    28,
+    34
+   ]
+  },
+  {
+   "name": "item1_unit",
+   "type": "text",
+   "text": "pack",
+   "conf": 0.9999623894691467,
+   "alts": [],
+   "cropSize": [
+    68,
+    43
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Bear Brand 300g",
+   "conf": 0.9707413792610169,
+   "alts": [],
+   "cropSize": [
+    240,
+    43
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "90.25",
+   "conf": 0.9998966336250306,
+   "alts": [],
+   "cropSize": [
+    83,
+    34
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "180.50",
+   "conf": 0.9992096821467081,
+   "alts": [],
+   "cropSize": [
+    92,
+    38
+   ]
+  },
+  {
+   "name": "item2_qty",
+   "type": "number",
+   "text": "24",
+   "conf": 0.99998539686203,
+   "alts": [],
+   "cropSize": [
+    47,
+    34
+   ]
+  },
+  {
+   "name": "item2_unit",
+   "type": "text",
+   "text": "pack",
+   "conf": 0.9999703466892242,
+   "alts": [],
+   "cropSize": [
+    76,
+    38
+   ]
+  },
+  {
+   "name": "item2_description",
+   "type": "text",
+   "text": "Lucky Me Pancit Canton",
+   "conf": 0.9976994747465308,
+   "alts": [],
+   "cropSize": [
+    306,
+    40
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "15.75",
+   "conf": 0.9988780856132508,
+   "alts": [],
+   "cropSize": [
+    84,
+    39
+   ]
+  },
+  {
+   "name": "item2_amount",
+   "type": "amount",
+   "text": "378.00",
+   "conf": 0.9999803900718689,
+   "alts": [],
+   "cropSize": [
+    111,
+    41
+   ]
+  }
+ ]
+}

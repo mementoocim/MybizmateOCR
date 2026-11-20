@@ -1,0 +1,538 @@
+{
+ "photo": "inv_0091.jpg",
+ "aligned": true,
+ "form": "sales_invoice",
+ "photoSize": [
+  1367,
+  1725
+ ],
+ "turned": false,
+ "corners": [
+  [
+   154.9976043701172,
+   158.95816040039062
+  ],
+  [
+   1197.5057373046875,
+   111.29832458496094
+  ],
+  [
+   1224.9107666015625,
+   1504.135498046875
+  ],
+  [
+   161.96646118164062,
+   1557.4600830078125
+  ]
+ ],
+ "sharpness": 1.6687985528216298,
+ "sharpMin": 1.0,
+ "light": 235.0,
+ "terms": "cash",
+ "blanks": 22,
+ "reads": [
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "0009456",
+   "conf": 0.9999921832765851,
+   "alts": [],
+   "cropSize": [
+    150,
+    39
+   ]
+  },
+  {
+   "name": "date",
+   "type": "date",
+   "text": "09-24-26",
+   "conf": 0.9934812784194946,
+   "alts": [
+    "0q-24-26"
+   ],
+   "cropSize": [
+    137,
+    40
+   ]
+  },
+  {
+   "name": "customer_name",
+   "type": "text",
+   "text": "",
+   "conf": 0.0,
+   "alts": [],
+   "cropSize": [
+    18,
+    18
+   ]
+  },
+  {
+   "name": "customer_address",
+   "type": "text",
+   "text": "1",
+   "conf": 0.28084641695022583,
+   "alts": [],
+   "cropSize": [
+    129,
+    19
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "Fourteen thousand seven hundred sixty-five pesos only",
+   "conf": 0.9988513408966784,
+   "alts": [],
+   "cropSize": [
+    1381,
+    48
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "13,183.04",
+   "conf": 0.993716816107432,
+   "alts": [
+    "73,183.04",
+    "13.183.04"
+   ],
+   "cropSize": [
+    146,
+    37
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "1,581.96",
+   "conf": 0.899001307785511,
+   "alts": [
+    "1,587.96",
+    "7,581.96",
+    "1.581.96"
+   ],
+   "cropSize": [
+    120,
+    29
+   ]
+  },
+  {
+   "name": "zero_rated",
+   "type": "amount",
+   "text": "0.00",
+   "conf": 0.9945630133152008,
+   "alts": [],
+   "cropSize": [
+    66,
+    35
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "14,765",
+   "conf": 0.9402918219566345,
+   "alts": [
+    "14.765",
+    "74,765"
+   ],
+   "cropSize": [
+    103,
+    38
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "7,581.96",
+   "conf": 0.9392904490232468,
+   "alts": [
+    "1,581.96",
+    "7,587.96"
+   ],
+   "cropSize": [
+    126,
+    37
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "13,183.04",
+   "conf": 0.9907163050439622,
+   "alts": [
+    "13,783.04"
+   ],
+   "cropSize": [
+    130,
+    36
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "1,581.96",
+   "conf": 0.9372991248965263,
+   "alts": [
+    "1,587.96",
+    "7,581.96",
+    "1.581.96"
+   ],
+   "cropSize": [
+    109,
+    30
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "14,765",
+   "conf": 0.9987159967422485,
+   "alts": [],
+   "cropSize": [
+    91,
+    35
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "50",
+   "conf": 0.9866651594638824,
+   "alts": [],
+   "cropSize": [
+    45,
+    35
+   ]
+  },
+  {
+   "name": "item1_unit",
+   "type": "text",
+   "text": "6t1",
+   "conf": 0.9218140641848246,
+   "alts": [],
+   "cropSize": [
+    47,
+    36
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Coke",
+   "conf": 0.980623796582222,
+   "alts": [],
+   "cropSize": [
+    578,
+    39
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "75",
+   "conf": 0.9998273849487305,
+   "alts": [],
+   "cropSize": [
+    41,
+    36
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "3,750",
+   "conf": 0.9970607161521912,
+   "alts": [],
+   "cropSize": [
+    81,
+    38
+   ]
+  },
+  {
+   "name": "item2_qty",
+   "type": "number",
+   "text": "6",
+   "conf": 0.9999592304229736,
+   "alts": [],
+   "cropSize": [
+    28,
+    32
+   ]
+  },
+  {
+   "name": "item2_unit",
+   "type": "text",
+   "text": "sack",
+   "conf": 0.9997869580984116,
+   "alts": [],
+   "cropSize": [
+    79,
+    43
+   ]
+  },
+  {
+   "name": "item2_description",
+   "type": "text",
+   "text": "Rice",
+   "conf": 0.9999864399433136,
+   "alts": [],
+   "cropSize": [
+    71,
+    43
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "1,350",
+   "conf": 0.9470645904541015,
+   "alts": [
+    "7,350",
+    "1.350"
+   ],
+   "cropSize": [
+    87,
+    38
+   ]
+  },
+  {
+   "name": "item2_amount",
+   "type": "amount",
+   "text": "8,100",
+   "conf": 0.9779984474182128,
+   "alts": [
+    "8.100"
+   ],
+   "cropSize": [
+    90,
+    39
+   ]
+  },
+  {
+   "name": "item3_qty",
+   "type": "number",
+   "text": "10",
+   "conf": 0.9999138712882996,
+   "alts": [],
+   "cropSize": [
+    43,
+    36
+   ]
+  },
+  {
+   "name": "item3_unit",
+   "type": "text",
+   "text": "sachet",
+   "conf": 0.9998390972614288,
+   "alts": [],
+   "cropSize": [
+    93,
+    36
+   ]
+  },
+  {
+   "name": "item3_description",
+   "type": "text",
+   "text": "Nescafe",
+   "conf": 0.9965518372399467,
+   "alts": [],
+   "cropSize": [
+    125,
+    41
+   ]
+  },
+  {
+   "name": "item3_unit_price",
+   "type": "amount",
+   "text": "9.50",
+   "conf": 0.9991806447505951,
+   "alts": [],
+   "cropSize": [
+    61,
+    33
+   ]
+  },
+  {
+   "name": "item3_amount",
+   "type": "amount",
+   "text": "95",
+   "conf": 0.9999291896820068,
+   "alts": [],
+   "cropSize": [
+    45,
+    37
+   ]
+  },
+  {
+   "name": "item4_qty",
+   "type": "number",
+   "text": "100",
+   "conf": 0.999926229317983,
+   "alts": [],
+   "cropSize": [
+    67,
+    40
+   ]
+  },
+  {
+   "name": "item4_unit",
+   "type": "text",
+   "text": "pack",
+   "conf": 0.9998940378427505,
+   "alts": [],
+   "cropSize": [
+    81,
+    42
+   ]
+  },
+  {
+   "name": "item4_description",
+   "type": "text",
+   "text": "Lucky Me Pancit Canton",
+   "conf": 0.967612393877723,
+   "alts": [],
+   "cropSize": [
+    349,
+    43
+   ]
+  },
+  {
+   "name": "item4_unit_price",
+   "type": "amount",
+   "text": "16.50",
+   "conf": 0.9988636136054992,
+   "alts": [],
+   "cropSize": [
+    82,
+    32
+   ]
+  },
+  {
+   "name": "item4_amount",
+   "type": "amount",
+   "text": "1,650",
+   "conf": 0.9898548245429992,
+   "alts": [
+    "7,650"
+   ],
+   "cropSize": [
+    89,
+    37
+   ]
+  },
+  {
+   "name": "item5_qty",
+   "type": "number",
+   "text": "6",
+   "conf": 0.9999063014984131,
+   "alts": [],
+   "cropSize": [
+    25,
+    31
+   ]
+  },
+  {
+   "name": "item5_unit",
+   "type": "text",
+   "text": "kg",
+   "conf": 0.9996053874492645,
+   "alts": [],
+   "cropSize": [
+    38,
+    40
+   ]
+  },
+  {
+   "name": "item5_description",
+   "type": "text",
+   "text": "Sugar 1kg",
+   "conf": 0.9827403757307265,
+   "alts": [],
+   "cropSize": [
+    151,
+    42
+   ]
+  },
+  {
+   "name": "item5_unit_price",
+   "type": "amount",
+   "text": "85",
+   "conf": 0.9999196529388428,
+   "alts": [],
+   "cropSize": [
+    49,
+    39
+   ]
+  },
+  {
+   "name": "item5_amount",
+   "type": "amount",
+   "text": "510",
+   "conf": 0.9975590904553732,
+   "alts": [],
+   "cropSize": [
+    62,
+    37
+   ]
+  },
+  {
+   "name": "item6_qty",
+   "type": "number",
+   "text": "6",
+   "conf": 0.9999526739120483,
+   "alts": [],
+   "cropSize": [
+    25,
+    32
+   ]
+  },
+  {
+   "name": "item6_unit",
+   "type": "text",
+   "text": "pack",
+   "conf": 0.9998772591352463,
+   "alts": [],
+   "cropSize": [
+    75,
+    42
+   ]
+  },
+  {
+   "name": "item6_description",
+   "type": "text",
+   "text": "Detergent 1kg",
+   "conf": 0.975866592847384,
+   "alts": [],
+   "cropSize": [
+    221,
+    43
+   ]
+  },
+  {
+   "name": "item6_unit_price",
+   "type": "amount",
+   "text": "110",
+   "conf": 0.9602401852607727,
+   "alts": [
+    "170"
+   ],
+   "cropSize": [
+    63,
+    41
+   ]
+  },
+  {
+   "name": "item6_amount",
+   "type": "amount",
+   "text": "660",
+   "conf": 0.9993772109349569,
+   "alts": [],
+   "cropSize": [
+    58,
+    30
+   ]
+  }
+ ]
+}

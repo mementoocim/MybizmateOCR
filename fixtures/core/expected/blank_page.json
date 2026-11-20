@@ -1,0 +1,17 @@
+{
+ "photo": "blank_page.png",
+ "aligned": false,
+ "form": null,
+ "photoSize": [
+  1700,
+  2200
+ ],
+ "turned": false,
+ "corners": null,
+ "sharpness": null,
+ "sharpMin": null,
+ "light": null,
+ "terms": null,
+ "blanks": 0,
+ "reads": []
+}

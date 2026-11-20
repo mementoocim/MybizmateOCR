@@ -1,0 +1,418 @@
+{
+ "photo": "inv_0011.jpg",
+ "aligned": true,
+ "form": "sales_invoice",
+ "photoSize": [
+  1745,
+  2082
+ ],
+ "turned": false,
+ "corners": [
+  [
+   264.24420166015625,
+   155.6834259033203
+  ],
+  [
+   1537.991455078125,
+   204.45753479003906
+  ],
+  [
+   1422.560546875,
+   1896.48779296875
+  ],
+  [
+   184.91705322265625,
+   1829.9864501953125
+  ]
+ ],
+ "sharpness": 2.0301758872110254,
+ "sharpMin": 1.0,
+ "light": 255.0,
+ "terms": "cash",
+ "blanks": 31,
+ "reads": [
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "0000538",
+   "conf": 0.9999883685793195,
+   "alts": [],
+   "cropSize": [
+    149,
+    39
+   ]
+  },
+  {
+   "name": "date",
+   "type": "date",
+   "text": "Nov 10, 2026",
+   "conf": 0.942936842640241,
+   "alts": [
+    "Nov 70, 2026"
+   ],
+   "cropSize": [
+    209,
+    42
+   ]
+  },
+  {
+   "name": "customer_name",
+   "type": "text",
+   "text": "SANTOS GENERAL MERCHANDISE",
+   "conf": 0.9849322942587045,
+   "alts": [],
+   "cropSize": [
+    574,
+    48
+   ]
+  },
+  {
+   "name": "customer_tin",
+   "type": "tin",
+   "text": "345678901",
+   "conf": 0.9958677093187968,
+   "alts": [],
+   "cropSize": [
+    179,
+    41
+   ]
+  },
+  {
+   "name": "customer_address",
+   "type": "text",
+   "text": "Purok 3, San Mateo, Isabela",
+   "conf": 0.9848158646512915,
+   "alts": [],
+   "cropSize": [
+    478,
+    48
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "Four thousand five hundred twenty pesos only",
+   "conf": 0.9996443661776456,
+   "alts": [],
+   "cropSize": [
+    709,
+    48
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "4,035.77",
+   "conf": 0.975282795727253,
+   "alts": [
+    "4,035.71"
+   ],
+   "cropSize": [
+    118,
+    31
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "484.29",
+   "conf": 0.9999654094378153,
+   "alts": [],
+   "cropSize": [
+    93,
+    37
+   ]
+  },
+  {
+   "name": "vat_exempt",
+   "type": "amount",
+   "text": "0.00",
+   "conf": 0.9999018162488937,
+   "alts": [],
+   "cropSize": [
+    63,
+    33
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "4,520.00",
+   "conf": 0.999824047088623,
+   "alts": [],
+   "cropSize": [
+    110,
+    35
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "484.29",
+   "conf": 0.9999161064624786,
+   "alts": [],
+   "cropSize": [
+    105,
+    36
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "4,035.71",
+   "conf": 0.9973098859190941,
+   "alts": [],
+   "cropSize": [
+    106,
+    34
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "484.29",
+   "conf": 0.999961256980896,
+   "alts": [],
+   "cropSize": [
+    86,
+    32
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "4,520.00",
+   "conf": 0.9998540505766869,
+   "alts": [],
+   "cropSize": [
+    109,
+    33
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "50",
+   "conf": 0.9861093163490295,
+   "alts": [],
+   "cropSize": [
+    44,
+    35
+   ]
+  },
+  {
+   "name": "item1_unit",
+   "type": "text",
+   "text": "can",
+   "conf": 0.9998525182406107,
+   "alts": [],
+   "cropSize": [
+    57,
+    30
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Corned Beef",
+   "conf": 0.9994101632725109,
+   "alts": [],
+   "cropSize": [
+    178,
+    40
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "46.20",
+   "conf": 0.9999534606933593,
+   "alts": [],
+   "cropSize": [
+    91,
+    33
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "2,310.00",
+   "conf": 0.9909519329667091,
+   "alts": [
+    "2.310.00",
+    "2,370.00"
+   ],
+   "cropSize": [
+    137,
+    38
+   ]
+  },
+  {
+   "name": "item2_qty",
+   "type": "number",
+   "text": "2",
+   "conf": 0.9999904632568359,
+   "alts": [],
+   "cropSize": [
+    29,
+    33
+   ]
+  },
+  {
+   "name": "item2_unit",
+   "type": "text",
+   "text": "kg",
+   "conf": 0.9998275339603424,
+   "alts": [],
+   "cropSize": [
+    39,
+    38
+   ]
+  },
+  {
+   "name": "item2_description",
+   "type": "text",
+   "text": "Sugar",
+   "conf": 0.9999563455581665,
+   "alts": [],
+   "cropSize": [
+    85,
+    42
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "85.00",
+   "conf": 0.9776540994644165,
+   "alts": [],
+   "cropSize": [
+    90,
+    35
+   ]
+  },
+  {
+   "name": "item2_amount",
+   "type": "amount",
+   "text": "170.00",
+   "conf": 0.9997552037239075,
+   "alts": [],
+   "cropSize": [
+    105,
+    41
+   ]
+  },
+  {
+   "name": "item3_qty",
+   "type": "number",
+   "text": "24",
+   "conf": 0.9999780654907227,
+   "alts": [],
+   "cropSize": [
+    42,
+    33
+   ]
+  },
+  {
+   "name": "item3_unit",
+   "type": "text",
+   "text": "pack",
+   "conf": 0.999935507774353,
+   "alts": [],
+   "cropSize": [
+    81,
+    40
+   ]
+  },
+  {
+   "name": "item3_description",
+   "type": "text",
+   "text": "Lucky Me Pancit Canton",
+   "conf": 0.9887657030062242,
+   "alts": [],
+   "cropSize": [
+    343,
+    42
+   ]
+  },
+  {
+   "name": "item3_unit_price",
+   "type": "amount",
+   "text": "15.00",
+   "conf": 0.9991719603538514,
+   "alts": [],
+   "cropSize": [
+    92,
+    38
+   ]
+  },
+  {
+   "name": "item3_amount",
+   "type": "amount",
+   "text": "360.00",
+   "conf": 0.9995594223340353,
+   "alts": [],
+   "cropSize": [
+    94,
+    31
+   ]
+  },
+  {
+   "name": "item4_qty",
+   "type": "number",
+   "text": "24",
+   "conf": 0.9999693632125854,
+   "alts": [],
+   "cropSize": [
+    48,
+    36
+   ]
+  },
+  {
+   "name": "item4_unit",
+   "type": "text",
+   "text": "pc",
+   "conf": 0.9668714702129364,
+   "alts": [],
+   "cropSize": [
+    37,
+    29
+   ]
+  },
+  {
+   "name": "item4_description",
+   "type": "text",
+   "text": "Bread Loaf",
+   "conf": 0.970470255613327,
+   "alts": [],
+   "cropSize": [
+    164,
+    42
+   ]
+  },
+  {
+   "name": "item4_unit_price",
+   "type": "amount",
+   "text": "70.00",
+   "conf": 0.9992971420288086,
+   "alts": [],
+   "cropSize": [
+    80,
+    37
+   ]
+  },
+  {
+   "name": "item4_amount",
+   "type": "amount",
+   "text": "1,680.00",
+   "conf": 0.9829696267843246,
+   "alts": [
+    "7,680.00"
+   ],
+   "cropSize": [
+    122,
+    33
+   ]
+  }
+ ]
+}

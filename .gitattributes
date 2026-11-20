@@ -1,0 +1,4 @@
+# Exported from the Python reference (prototype/benchmark/export_core_fixtures.py): keep the bytes exactly as written.
+modules/scanner/assets/** -text
+fixtures/** -text
+assets/samples/** -text

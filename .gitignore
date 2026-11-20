@@ -39,3 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# MyBizMate Scan: native build output and the plan ledger
+modules/scanner/cpp/tests/build/
+modules/scanner/android/build/
+modules/scanner/android/.cxx/
