@@ -3,25 +3,28 @@ import { useMemo, useState, useSyncExternalStore } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BoxSheet } from '../components/BoxSheet';
-import { OutlinedButton, PrimaryButton } from '../components/Buttons';
+import { OutlinedButton, PrimaryButton, TextButton } from '../components/Buttons';
 import { Camera } from '../components/icons';
+import { PartySheet } from '../components/PartySheet';
 import { ReadingOverlay } from '../components/ReadingOverlay';
 import { SaleRow } from '../components/SaleRow';
 import { ScanImage } from '../components/ScanImage';
 import { Segmented } from '../components/Segmented';
 import { StatusCard } from '../components/StatusCard';
+import { SupplierSheet } from '../components/SupplierSheet';
 import { TermsSheet } from '../components/TermsSheet';
 import { TEAM_BUILD } from '../lib/build';
 import { candidates } from '../lib/checks/num';
 import { formatMs, peso, prettyDate, qty } from '../lib/format';
 import { FORMS, formFields } from '../lib/forms';
-import { lists, subscribeLists } from '../lib/lists';
+import { addItem, lists, subscribeLists } from '../lib/lists';
 import { boxValue, rawFromScan, saleOf, type SaleView } from '../lib/sale';
 import { compareWithSample, sampleInfo } from '../lib/samples';
 import { useScanFlow } from '../lib/scanFlow';
 import { getScan, type Kind, type StoredScan, subscribeRecent, updateScan } from '../lib/scans';
 import { settings, subscribeSettings } from '../lib/settings';
 import { bold, colors, sectionLabel } from '../lib/theme';
+import { toast } from '../lib/toast';
 
 const CUSTOMER_BOXES = ['customer_name', 'customer_tin', 'customer_address'];
 const TOTAL_BOXES = [
@@ -44,7 +47,11 @@ const KIND_CAPTION: Record<Kind, string> = {
   purchase: "Another business issued it to you. It becomes a row in MyBizMate's Purchases import.",
 };
 
-type OpenSheet = { kind: 'boxes'; title: string; boxes: string[] } | { kind: 'terms' };
+type OpenSheet =
+  | { kind: 'boxes'; title: string; boxes: string[]; row?: number } // row: an item row's sheet
+  | { kind: 'terms' }
+  | { kind: 'customer' }
+  | { kind: 'supplier' };
 
 // The result (the test app's ResultActivity): the checks' card, the scan view, the sale with every row opening what
 // the camera saw in its boxes (each box fixable, the checks run again at once), the footnote, and Retake.
@@ -100,12 +107,31 @@ export default function Result() {
         )}
       </View>
       {sheet?.kind === 'boxes' && (
-        <BoxSheet visible title={sheet.title} scan={scan} boxes={sheet.boxes} onClose={() => setSheet(null)} />
+        <BoxSheet visible title={sheet.title} scan={scan} boxes={sheet.boxes} onClose={() => setSheet(null)}>
+          {sheet.row !== undefined && sale && <NewItem scan={scan} sale={sale} row={sheet.row} />}
+        </BoxSheet>
       )}
       {sheet?.kind === 'terms' && <TermsSheet visible scan={scan} onClose={() => setSheet(null)} />}
+      {sheet?.kind === 'customer' && sale && (
+        <PartySheet visible scan={scan} sale={sale} onClose={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'supplier' && sale && (
+        <SupplierSheet visible scan={scan} sale={sale} onClose={() => setSheet(null)} />
+      )}
       <ReadingOverlay visible={flow.reading} />
     </View>
   );
+}
+
+/** On a sale, an item the lists don't have: one tap adds it, with its unit and the row's unit price. */
+function NewItem({ scan, sale, row }: { scan: StoredScan; sale: SaleView; row: number }) {
+  const item = sale.final.items.find((it) => it.row === row);
+  if (scan.kind !== 'sale' || !item || item.item_id !== null || !item.description) return null;
+  const add = async () => {
+    await addItem({ name: item.description, unit: boxValue(scan, `item${row}_unit`) ?? '', price: item.unit_price });
+    toast('Added to your items.');
+  };
+  return <TextButton label={`Add “${item.description}” to your items`} onPress={() => void add()} />;
 }
 
 /** The sale's sections: sale or purchase, the invoice, its items and its totals. */
@@ -118,8 +144,8 @@ function SaleSections({ scan, sale, open }: { scan: StoredScan; sale: SaleView; 
   const raw = rawFromScan(scan);
   const amount = (box: string) => candidates(raw.boxes[box])[0] ?? 0;
   const anyRead = (names: string[]) => names.some((b) => boxValue(scan, b) !== null);
-  const boxesOf = (title: string, names: readonly string[]) => () =>
-    open({ kind: 'boxes', title, boxes: fields.filter((f) => names.includes(f)) });
+  const boxesOf = (title: string, names: readonly string[], row?: number) => () =>
+    open({ kind: 'boxes', title, boxes: fields.filter((f) => names.includes(f)), row });
 
   const dc = final.date_choice;
   const dateSub = dc.rebuilt
@@ -187,11 +213,17 @@ function SaleSections({ scan, sale, open }: { scan: StoredScan; sale: SaleView; 
             value={party.shown}
             sub={customerSub[party.status]}
             flagged={party.status === 'unsure' || party.status === 'new'}
-            onPress={boxesOf('Customer', CUSTOMER_BOXES)}
+            onPress={() => open({ kind: 'customer' })}
           />
         ) : (
           <>
-            <SaleRow label="Supplier" value={party.shown} sub={supplierSub[party.status]} flagged={party.status === 'missing'} />
+            <SaleRow
+              label="Supplier"
+              value={party.shown}
+              sub={supplierSub[party.status]}
+              flagged={party.status === 'missing'}
+              onPress={() => open({ kind: 'supplier' })}
+            />
             <SaleRow
               label="Sold to"
               value={boxValue(scan, 'customer_name') || null}
@@ -229,7 +261,11 @@ function SaleSections({ scan, sale, open }: { scan: StoredScan; sale: SaleView; 
                 sub={sub}
                 amount={peso(it.amount)}
                 flagged={has(`row${row}`) || has(`item${row}`) || has(`price${row}`)}
-                onPress={boxesOf(title, ['qty', 'unit', 'description', 'unit_price', 'amount'].map((c) => `item${row}_${c}`))}
+                onPress={boxesOf(
+                  title,
+                  ['qty', 'unit', 'description', 'unit_price', 'amount'].map((c) => `item${row}_${c}`),
+                  row,
+                )}
               />
             );
           })
