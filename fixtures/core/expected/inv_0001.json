@@ -295,5 +295,13 @@
     41
    ]
   }
- ]
+ ],
+ "darkMax": 50,
+ "quality": {
+  "sharpness": 2.3472,
+  "sharp_min": 1.0,
+  "light": 255.0,
+  "dark_max": 50
+ },
+ "photoFlags": []
 }

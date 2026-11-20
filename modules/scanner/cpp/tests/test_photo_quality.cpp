@@ -9,6 +9,11 @@
 
 using namespace mbm::quality;
 
+TEST_CASE("the Service Invoice's thresholds") {
+  CHECK(SERVICE_SHARP_MIN == 0.5);
+  CHECK(SERVICE_LIVE_MIN == 0.7);
+}
+
 TEST_CASE("percentile matches numpy") {
   uint8_t values[] = {0, 10, 20, 30};
   cv::Mat m(2, 2, CV_8UC1, values);

@@ -1,61 +1,100 @@
-import { useLocalSearchParams } from 'expo-router';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Stack, useLocalSearchParams } from 'expo-router';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { BoxRow, TermsRow } from '../components/BoxRow';
+import { OutlinedButton, PrimaryButton } from '../components/Buttons';
+import { Camera } from '../components/icons';
+import { ReadingOverlay } from '../components/ReadingOverlay';
+import { ScanImage } from '../components/ScanImage';
+import { StatusCard } from '../components/StatusCard';
+import { TEAM_BUILD } from '../lib/build';
+import { formatMs } from '../lib/format';
+import { FORMS, fieldLabel } from '../lib/forms';
+import { compareWithSample, sampleInfo } from '../lib/samples';
+import { useScanFlow } from '../lib/scanFlow';
 import { getScan } from '../lib/scans';
+import { bold, colors, sectionLabel } from '../lib/theme';
 
+// The result (ResultActivity.java without the checks, which come in milestone 3): the photo checks, the scan view,
+// every box the camera saw, and Retake.
 export default function Result() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
+  const flow = useScanFlow();
   const scan = id ? getScan(id) : undefined;
   if (!scan) {
     return (
       <View style={styles.screen}>
-        <Text style={styles.hint}>This scan is no longer here. Go back and read the photo again.</Text>
+        <Text style={styles.gone}>This scan is no longer here. Go back and read the photo again.</Text>
       </View>
     );
   }
   const r = scan.result;
-  if (!r.aligned) {
-    return (
-      <View style={styles.screen}>
-        <Text style={styles.heading}>Couldn't find the form</Text>
-        <Text style={styles.hint}>Make sure the whole invoice and its 4 corner squares are in the photo.</Text>
-      </View>
-    );
+  const form = r.form ? FORMS[r.form] : null;
+
+  const total = formatMs(r.timing.totalMs);
+  const boxes = `${r.reads.length} ${r.reads.length === 1 ? 'box' : 'boxes'}`;
+  const footnote = !r.aligned
+    ? `Checked on this phone in ${total}. Nothing left the phone.`
+    : TEAM_BUILD
+      ? `${boxes} read on this phone in ${total} (straighten ${formatMs(r.timing.alignMs)}, read ${formatMs(r.timing.readMs)}). Nothing left the phone.`
+      : `${boxes} read on this phone in ${total}. Nothing left the phone.`;
+  let sampleLine: string | null = null;
+  if (scan.sampleId && r.aligned) {
+    const { exact, written } = compareWithSample(r.reads, sampleInfo(scan.sampleId));
+    sampleLine = `Sample invoice: ${exact} of ${written} boxes read exactly as written.`;
   }
-  // All rows render (45 at most): a ScrollView, not a list that renders only what's on screen.
+
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      {r.pageUri && <Image source={{ uri: r.pageUri }} style={styles.page} resizeMode="contain" />}
-      <Text style={styles.heading}>MyBizMate Sales Invoice</Text>
-      {r.turned && <Text style={styles.note}>Turned the right way up</Text>}
-      <Text style={styles.note}>{`Read in ${Math.round(r.timing.totalMs)} ms`}</Text>
-      {r.reads.map((b) => (
-        <View key={b.name} style={styles.row}>
-          <Image source={{ uri: b.cropUri }} style={styles.crop} resizeMode="contain" />
-          <Text style={styles.name}>{b.name}</Text>
-          <View style={styles.reading}>
-            <Text style={styles.text}>{b.text}</Text>
-            <Text style={styles.conf}>{`${Math.round(b.conf * 100)}%`}</Text>
-          </View>
-          {b.alts.length > 0 && <Text style={styles.alts}>{`Backup: ${b.alts.join(', ')}`}</Text>}
-        </View>
-      ))}
-    </ScrollView>
+    <View style={styles.screen}>
+      <Stack.Screen options={{ headerTitle: () => <Title subtitle={form?.title} /> }} />
+      <ScrollView contentContainerStyle={styles.content}>
+        <StatusCard result={r} />
+        <ScanImage result={r} />
+        {r.aligned && r.form && form && (
+          <>
+            <Text style={sectionLabel}>WHAT THE CAMERA SAW</Text>
+            <Text style={styles.caption}>Each box is cut out and read on its own.</Text>
+            {r.reads.map((b) => (
+              <BoxRow key={b.name} label={fieldLabel(r.form!, b.name)} read={b} />
+            ))}
+            {r.terms ? (
+              <TermsRow value={r.terms === 'cash' ? form.cash : form.account} />
+            ) : (
+              <TermsRow value="Unclear" note={`Tick ${form.cash} or ${form.account} clearly`} />
+            )}
+          </>
+        )}
+        <Text style={styles.footnote}>{footnote}</Text>
+        {sampleLine && <Text style={styles.footnote}>{sampleLine}</Text>}
+      </ScrollView>
+      <View style={styles.bottom}>
+        {r.aligned ? (
+          <OutlinedButton label="Retake" onPress={() => flow.retake(scan, from === 'recent')} />
+        ) : (
+          <PrimaryButton label="Retake" icon={Camera} onPress={() => flow.retake(scan, from === 'recent')} />
+        )}
+      </View>
+      <ReadingOverlay visible={flow.reading} />
+    </View>
+  );
+}
+
+function Title({ subtitle }: { subtitle?: string }) {
+  return (
+    <View>
+      <Text style={styles.title}>Scan</Text>
+      {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#FFFFFF' },
-  content: { padding: 16 },
-  page: { width: '100%', aspectRatio: 1200 / 1553, marginBottom: 12, backgroundColor: '#F4F4F4' },
-  heading: { fontSize: 18, fontWeight: '600', color: '#222222', marginBottom: 4 },
-  hint: { fontSize: 15, color: '#444444', padding: 16 },
-  note: { fontSize: 13, color: '#6B6B6B', marginBottom: 4 },
-  row: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#DDDDDD' },
-  crop: { width: '100%', height: 48, marginBottom: 4 }, // contain: a wide crop shrinks to fit, never overflows
-  name: { fontSize: 12, color: '#6B6B6B' },
-  reading: { flexDirection: 'row', justifyContent: 'space-between' },
-  text: { fontSize: 16, color: '#222222', flexShrink: 1 },
-  conf: { fontSize: 13, color: '#6B6B6B', marginLeft: 8 },
-  alts: { fontSize: 12, color: '#B13E03' },
+  screen: { flex: 1, backgroundColor: colors.paper },
+  content: { padding: 16, paddingBottom: 24 },
+  gone: { fontSize: 15, color: colors.ink, padding: 16 },
+  caption: { fontSize: 14, color: colors.mute, marginTop: 4, marginBottom: 4 },
+  footnote: { fontSize: 13, color: colors.mute, marginTop: 16, lineHeight: 18 },
+  bottom: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, backgroundColor: colors.panel },
+  title: { ...bold, fontSize: 18, color: colors.ink },
+  subtitle: { fontSize: 13, color: colors.mute },
 });

@@ -1,0 +1,429 @@
+{
+ "photo": "svc_0001.jpg",
+ "aligned": true,
+ "form": "service_invoice",
+ "photoSize": [
+  1563,
+  1970
+ ],
+ "turned": false,
+ "corners": [
+  [
+   195.46165466308594,
+   798.1549072265625
+  ],
+  [
+   1306.803466796875,
+   785.5240478515625
+  ],
+  [
+   1325.7415771484375,
+   1660.574462890625
+  ],
+  [
+   198.70306396484375,
+   1636.1585693359375
+  ]
+ ],
+ "sharpness": 0.7852780154601223,
+ "sharpMin": 0.5,
+ "light": 255.0,
+ "terms": "account",
+ "blanks": 4,
+ "reads": [
+  {
+   "name": "date",
+   "type": "date",
+   "text": "11-05-",
+   "conf": 0.9999414483706156,
+   "alts": [],
+   "cropSize": [
+    130,
+    47
+   ]
+  },
+  {
+   "name": "customer_name",
+   "type": "text",
+   "text": "Cruz Enterprises",
+   "conf": 0.9990061856806278,
+   "alts": [],
+   "cropSize": [
+    272,
+    52
+   ]
+  },
+  {
+   "name": "customer_tin",
+   "type": "tin",
+   "text": "67-788-990",
+   "conf": 0.9897942543029785,
+   "alts": [],
+   "cropSize": [
+    195,
+    48
+   ]
+  },
+  {
+   "name": "customer_address",
+   "type": "text",
+   "text": "Burgos St. Santiago City",
+   "conf": 0.9874562254318824,
+   "alts": [],
+   "cropSize": [
+    104,
+    53
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "Thirteen thousand four hundred fourteen pesos and 03/100",
+   "conf": 0.9995709300041199,
+   "alts": [],
+   "cropSize": [
+    500,
+    96
+   ]
+  },
+  {
+   "name": "amount_figure",
+   "type": "amount",
+   "text": "13.414",
+   "conf": 0.9981609185536703,
+   "alts": [],
+   "cropSize": [
+    111,
+    40
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Sardines",
+   "conf": 0.9999012798070908,
+   "alts": [],
+   "cropSize": [
+    134,
+    41
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "50",
+   "conf": 0.9999948143959045,
+   "alts": [],
+   "cropSize": [
+    43,
+    38
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "24.00",
+   "conf": 0.9998415470123291,
+   "alts": [],
+   "cropSize": [
+    86,
+    41
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "1,200.00",
+   "conf": 0.9999480471014977,
+   "alts": [],
+   "cropSize": [
+    137,
+    46
+   ]
+  },
+  {
+   "name": "item2_description",
+   "type": "text",
+   "text": "Nescafe 3in1",
+   "conf": 0.9993809560934702,
+   "alts": [],
+   "cropSize": [
+    215,
+    48
+   ]
+  },
+  {
+   "name": "item2_qty",
+   "type": "number",
+   "text": "1",
+   "conf": 0.9990791082382202,
+   "alts": [],
+   "cropSize": [
+    28,
+    44
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "9.03",
+   "conf": 0.9999898076057434,
+   "alts": [],
+   "cropSize": [
+    68,
+    40
+   ]
+  },
+  {
+   "name": "item2_amount",
+   "type": "amount",
+   "text": "9.03",
+   "conf": 0.9999788999557495,
+   "alts": [],
+   "cropSize": [
+    80,
+    48
+   ]
+  },
+  {
+   "name": "item3_description",
+   "type": "text",
+   "text": "Nails",
+   "conf": 0.9997768521308898,
+   "alts": [],
+   "cropSize": [
+    75,
+    40
+   ]
+  },
+  {
+   "name": "item3_qty",
+   "type": "number",
+   "text": "50",
+   "conf": 0.9999951720237732,
+   "alts": [],
+   "cropSize": [
+    47,
+    42
+   ]
+  },
+  {
+   "name": "item3_unit_price",
+   "type": "amount",
+   "text": "95.00",
+   "conf": 0.9997987985610962,
+   "alts": [],
+   "cropSize": [
+    88,
+    41
+   ]
+  },
+  {
+   "name": "item3_amount",
+   "type": "amount",
+   "text": "4,750.00",
+   "conf": 0.9995095953345299,
+   "alts": [],
+   "cropSize": [
+    128,
+    44
+   ]
+  },
+  {
+   "name": "item4_description",
+   "type": "text",
+   "text": "Cooking Oil 1L",
+   "conf": 0.9637621257986341,
+   "alts": [],
+   "cropSize": [
+    213,
+    51
+   ]
+  },
+  {
+   "name": "item4_qty",
+   "type": "number",
+   "text": "10",
+   "conf": 0.9999411702156067,
+   "alts": [],
+   "cropSize": [
+    45,
+    41
+   ]
+  },
+  {
+   "name": "item4_unit_price",
+   "type": "amount",
+   "text": "108.00",
+   "conf": 0.9999824166297913,
+   "alts": [],
+   "cropSize": [
+    110,
+    44
+   ]
+  },
+  {
+   "name": "item4_amount",
+   "type": "amount",
+   "text": "1,080.00",
+   "conf": 0.9994657188653946,
+   "alts": [],
+   "cropSize": [
+    152,
+    49
+   ]
+  },
+  {
+   "name": "item5_description",
+   "type": "text",
+   "text": "Suqar 1kg",
+   "conf": 0.9147204160690308,
+   "alts": [],
+   "cropSize": [
+    170,
+    52
+   ]
+  },
+  {
+   "name": "item5_qty",
+   "type": "number",
+   "text": "75",
+   "conf": 0.999985933303833,
+   "alts": [],
+   "cropSize": [
+    47,
+    39
+   ]
+  },
+  {
+   "name": "item5_unit_price",
+   "type": "amount",
+   "text": "85.00",
+   "conf": 0.9999916076660156,
+   "alts": [],
+   "cropSize": [
+    86,
+    44
+   ]
+  },
+  {
+   "name": "item5_amount",
+   "type": "amount",
+   "text": "6,375.00",
+   "conf": 0.9997840896248817,
+   "alts": [],
+   "cropSize": [
+    124,
+    42
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "11,976.81",
+   "conf": 0.9997179773118761,
+   "alts": [],
+   "cropSize": [
+    110,
+    38
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "1,437.22",
+   "conf": 0.9996175020933151,
+   "alts": [],
+   "cropSize": [
+    120,
+    40
+   ]
+  },
+  {
+   "name": "total_due_2",
+   "type": "amount",
+   "text": "13,414.03",
+   "conf": 0.9996857775582207,
+   "alts": [],
+   "cropSize": [
+    122,
+    44
+   ]
+  },
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "2143128",
+   "conf": 0.9999969005584717,
+   "alts": [],
+   "cropSize": [
+    206,
+    42
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "13,414.03",
+   "conf": 0.999618391195933,
+   "alts": [],
+   "cropSize": [
+    136,
+    41
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "1,437.22",
+   "conf": 0.9999737292528152,
+   "alts": [],
+   "cropSize": [
+    134,
+    41
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "11,976.81",
+   "conf": 0.9937180678049723,
+   "alts": [],
+   "cropSize": [
+    148,
+    48
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "1,437.22",
+   "conf": 0.9999772310256958,
+   "alts": [],
+   "cropSize": [
+    151,
+    48
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "13,414.03",
+   "conf": 0.9991974102126228,
+   "alts": [],
+   "cropSize": [
+    136,
+    40
+   ]
+  }
+ ],
+ "darkMax": 50,
+ "quality": {
+  "sharpness": 0.7853,
+  "sharp_min": 0.5,
+  "light": 255.0,
+  "dark_max": 50
+ },
+ "photoFlags": [],
+ "score": 0.9257286995515694
+}

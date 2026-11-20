@@ -2,10 +2,16 @@
 // platform-free.
 #include <jni.h>
 
+#include <cstdint>
 #include <exception>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
+#include <opencv2/imgcodecs.hpp>
+
+#include "core/enhance.h"
+#include "core/frame_input.h"
 #include "core/info.h"
 #include "core/result_json.h"
 #include "core/scanner.h"
@@ -38,10 +44,12 @@ extern "C" JNIEXPORT jstring JNICALL Java_expo_modules_scanner_NativeScanner_cor
 
 extern "C" JNIEXPORT jlong JNICALL Java_expo_modules_scanner_NativeScanner_create(JNIEnv* env, jobject, jbyteArray model,
                                                                                   jstring dict, jstring fieldMap,
-                                                                                  jbyteArray formPng, jint threads) {
+                                                                                  jbyteArray formPng,
+                                                                                  jstring serviceJson, jint threads) {
   try {
     auto* scanner = new mbm::Scanner(mbm::Assets{toBytes(env, model), toString(env, dict), toString(env, fieldMap),
-                                                 toBytes(env, formPng), static_cast<int>(threads)});
+                                                 toBytes(env, formPng), toString(env, serviceJson),
+                                                 static_cast<int>(threads)});
     return reinterpret_cast<jlong>(scanner);
   } catch (const std::exception& e) {
     throwJava(env, "java/lang/RuntimeException", e.what());
@@ -62,6 +70,51 @@ extern "C" JNIEXPORT jstring JNICALL Java_expo_modules_scanner_NativeScanner_sca
     throwJava(env, "java/lang/RuntimeException", e.what());
   }
   return nullptr;
+}
+
+// One camera frame's grey plane (a direct ByteBuffer). Returns [form (0 sales, 1 service), the outline's tl, tr, br, bl
+// as x, y, sharpness, sharpMin], or null when no form is in view.
+extern "C" JNIEXPORT jfloatArray JNICALL Java_expo_modules_scanner_NativeScanner_detectFrame(
+    JNIEnv* env, jobject, jlong handle, jobject yPlane, jint width, jint height, jint rowStride, jint rotation) {
+  try {
+    const auto* y = static_cast<const uint8_t*>(env->GetDirectBufferAddress(yPlane));
+    if (y == nullptr) {
+      throwJava(env, "java/lang/IllegalArgumentException", "the frame's plane isn't a direct buffer");
+      return nullptr;
+    }
+    const cv::Mat gray = mbm::uprightGray(y, width, height, rowStride, rotation);
+    const auto d = reinterpret_cast<const mbm::Scanner*>(handle)->detectFrame(gray);
+    if (!d) return nullptr;
+    float out[11];
+    out[0] = d->form == "sales_invoice" ? 0.0f : 1.0f;
+    for (int k = 0; k < 4; k++) {
+      out[1 + 2 * k] = d->outline[k].x;
+      out[2 + 2 * k] = d->outline[k].y;
+    }
+    out[9] = static_cast<float>(d->sharpness);
+    out[10] = static_cast<float>(d->sharpMin);
+    jfloatArray array = env->NewFloatArray(11);
+    env->SetFloatArrayRegion(array, 0, 11, out);
+    return array;
+  } catch (const std::exception& e) {
+    throwJava(env, "java/lang/RuntimeException", e.what());
+  }
+  return nullptr;
+}
+
+// The scan view's Enhanced (mode 0, JPEG q92) or B&W (mode 1, PNG) of a saved page.
+extern "C" JNIEXPORT void JNICALL Java_expo_modules_scanner_NativeScanner_enhance(JNIEnv* env, jobject, jstring pagePath,
+                                                                                 jint mode, jstring outPath) {
+  try {
+    const cv::Mat page = cv::imread(toString(env, pagePath), cv::IMREAD_COLOR);
+    if (page.empty()) throw std::runtime_error("can't open the page");
+    const std::string out = toString(env, outPath);
+    const bool ok = mode == 1 ? cv::imwrite(out, mbm::blackWhite(page))
+                              : cv::imwrite(out, mbm::enhanced(page), {cv::IMWRITE_JPEG_QUALITY, 92});
+    if (!ok) throw std::runtime_error("can't write " + out);
+  } catch (const std::exception& e) {
+    throwJava(env, "java/lang/RuntimeException", e.what());
+  }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_expo_modules_scanner_NativeScanner_destroy(JNIEnv*, jobject, jlong handle) {

@@ -10,12 +10,14 @@
       "supportsTablet": true
     },
     "android": {
+      "allowBackup": false,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
+      "permissions": ["android.permission.CAMERA"],
       "predictiveBackGestureEnabled": false,
       "package": "com.mybizmate.scan"
     },
@@ -34,7 +36,22 @@
         }
       ],
       "./plugins/with-windows-native-paths",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/brand/splash-logo.png",
+          "imageWidth": 104,
+          "backgroundColor": "#FAF7F0"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "The scanner needs the camera to see the invoice. Nothing it sees leaves the phone.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "scheme": "mybizmatescan"
   }

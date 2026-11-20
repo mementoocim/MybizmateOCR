@@ -1,0 +1,69 @@
+{
+ "photo": "inv_0051_dark2.jpg",
+ "aligned": true,
+ "form": "sales_invoice",
+ "photoSize": [
+  1736,
+  2201
+ ],
+ "turned": false,
+ "corners": [
+  [
+   154.89256286621094,
+   226.3964080810547
+  ],
+  [
+   1611.697265625,
+   189.907470703125
+  ],
+  [
+   1556.3284912109375,
+   1972.22998046875
+  ],
+  [
+   172.6062774658203,
+   1961.6549072265625
+  ]
+ ],
+ "sharpness": 2.466527445320715,
+ "sharpMin": 1.0,
+ "light": 46.0,
+ "terms": "account",
+ "blanks": 63,
+ "reads": [
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "Two thousand two hundred fifty-one pesos only",
+   "conf": 0.997464136282603,
+   "alts": [],
+   "cropSize": [
+    692,
+    48
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "247.18",
+   "conf": 0.9891429344813029,
+   "alts": [
+    "249.18"
+   ],
+   "cropSize": [
+    95,
+    36
+   ]
+  }
+ ],
+ "darkMax": 50,
+ "quality": {
+  "sharpness": 2.4665,
+  "sharp_min": 1.0,
+  "light": 46.0,
+  "dark_max": 50
+ },
+ "photoFlags": [
+  "dark"
+ ]
+}

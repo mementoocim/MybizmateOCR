@@ -1,0 +1,326 @@
+{
+ "photo": "svc_0002.jpg",
+ "aligned": true,
+ "form": "service_invoice",
+ "photoSize": [
+  1450,
+  1779
+ ],
+ "turned": false,
+ "corners": [
+  [
+   224.3094482421875,
+   795.0328369140625
+  ],
+  [
+   1180.272705078125,
+   749.5770263671875
+  ],
+  [
+   1207.7425537109375,
+   1459.5263671875
+  ],
+  [
+   288.8939208984375,
+   1537.835693359375
+  ]
+ ],
+ "sharpness": 0.6983734165392702,
+ "sharpMin": 0.5,
+ "light": 241.0,
+ "terms": "cash",
+ "blanks": 15,
+ "reads": [
+  {
+   "name": "date",
+   "type": "date",
+   "text": "11/07/2026",
+   "conf": 0.9826107084751129,
+   "alts": [],
+   "cropSize": [
+    184,
+    49
+   ]
+  },
+  {
+   "name": "customer_name",
+   "type": "text",
+   "text": "Navarro Water Refilling",
+   "conf": 0.9922971829124119,
+   "alts": [],
+   "cropSize": [
+    337,
+    50
+   ]
+  },
+  {
+   "name": "customer_tin",
+   "type": "tin",
+   "text": "445-566-778-00000",
+   "conf": 0.9991622777546153,
+   "alts": [],
+   "cropSize": [
+    300,
+    36
+   ]
+  },
+  {
+   "name": "customer_address",
+   "type": "text",
+   "text": "Brgy Tagaran, duuyanCo",
+   "conf": 0.6769548580050468,
+   "alts": [],
+   "cropSize": [
+    116,
+    46
+   ]
+  },
+  {
+   "name": "amount_words",
+   "type": "text",
+   "text": "One thousand four hundred eighty-one pesos and 05/100",
+   "conf": 0.9706568531692028,
+   "alts": [],
+   "cropSize": [
+    506,
+    91
+   ]
+  },
+  {
+   "name": "amount_figure",
+   "type": "amount",
+   "text": "1,481.05",
+   "conf": 0.937128946185112,
+   "alts": [
+    "7,481.05"
+   ],
+   "cropSize": [
+    146,
+    41
+   ]
+  },
+  {
+   "name": "item1_description",
+   "type": "text",
+   "text": "Nails",
+   "conf": 0.9999526500701904,
+   "alts": [],
+   "cropSize": [
+    94,
+    51
+   ]
+  },
+  {
+   "name": "item1_qty",
+   "type": "number",
+   "text": "2",
+   "conf": 0.9999973773956299,
+   "alts": [],
+   "cropSize": [
+    30,
+    34
+   ]
+  },
+  {
+   "name": "item1_unit_price",
+   "type": "amount",
+   "text": "104.50",
+   "conf": 0.9994147419929504,
+   "alts": [],
+   "cropSize": [
+    102,
+    37
+   ]
+  },
+  {
+   "name": "item1_amount",
+   "type": "amount",
+   "text": "209.00",
+   "conf": 0.9999577502409617,
+   "alts": [],
+   "cropSize": [
+    111,
+    39
+   ]
+  },
+  {
+   "name": "item2_description",
+   "type": "text",
+   "text": "Cement 40kg",
+   "conf": 0.9994887113571167,
+   "alts": [],
+   "cropSize": [
+    188,
+    47
+   ]
+  },
+  {
+   "name": "item2_qty",
+   "type": "number",
+   "text": "5",
+   "conf": 0.9983966946601868,
+   "alts": [],
+   "cropSize": [
+    30,
+    38
+   ]
+  },
+  {
+   "name": "item2_unit_price",
+   "type": "amount",
+   "text": "270.00",
+   "conf": 0.9999764164288839,
+   "alts": [],
+   "cropSize": [
+    105,
+    39
+   ]
+  },
+  {
+   "name": "item2_amount",
+   "type": "amount",
+   "text": "1,350.00",
+   "conf": 0.9838453009724617,
+   "alts": [
+    "7,350.00"
+   ],
+   "cropSize": [
+    139,
+    40
+   ]
+  },
+  {
+   "name": "vatable_sales",
+   "type": "amount",
+   "text": "1,397.96",
+   "conf": 0.9738366231322289,
+   "alts": [
+    "1,391.96",
+    "7,397.96"
+   ],
+   "cropSize": [
+    122,
+    46
+   ]
+  },
+  {
+   "name": "vat",
+   "type": "amount",
+   "text": "167.04",
+   "conf": 0.9998390078544617,
+   "alts": [],
+   "cropSize": [
+    88,
+    34
+   ]
+  },
+  {
+   "name": "total_due_2",
+   "type": "amount",
+   "text": "7,481.05",
+   "conf": 0.9423015713691711,
+   "alts": [
+    "7,487.05",
+    "1,481.05"
+   ],
+   "cropSize": [
+    106,
+    33
+   ]
+  },
+  {
+   "name": "invoice_no",
+   "type": "printed_digits",
+   "text": "8195852",
+   "conf": 0.9998665196555001,
+   "alts": [],
+   "cropSize": [
+    206,
+    42
+   ]
+  },
+  {
+   "name": "total_sales",
+   "type": "amount",
+   "text": "1,559.00",
+   "conf": 0.9729077368974686,
+   "alts": [
+    "7,559.00"
+   ],
+   "cropSize": [
+    136,
+    39
+   ]
+  },
+  {
+   "name": "less_vat",
+   "type": "amount",
+   "text": "167.04",
+   "conf": 0.9971141417821249,
+   "alts": [],
+   "cropSize": [
+    116,
+    42
+   ]
+  },
+  {
+   "name": "net_of_vat",
+   "type": "amount",
+   "text": "1,391.96",
+   "conf": 0.9326390624046326,
+   "alts": [
+    "7,391.96",
+    "1,397.96"
+   ],
+   "cropSize": [
+    145,
+    45
+   ]
+  },
+  {
+   "name": "discount",
+   "type": "amount",
+   "text": "77.95",
+   "conf": 0.9999492168426514,
+   "alts": [],
+   "cropSize": [
+    97,
+    42
+   ]
+  },
+  {
+   "name": "add_vat",
+   "type": "amount",
+   "text": "167.04",
+   "conf": 0.9989104866981506,
+   "alts": [],
+   "cropSize": [
+    115,
+    44
+   ]
+  },
+  {
+   "name": "total_due",
+   "type": "amount",
+   "text": "1,481.05",
+   "conf": 0.9302095323801041,
+   "alts": [
+    "7,481.05",
+    "1,487.05"
+   ],
+   "cropSize": [
+    151,
+    42
+   ]
+  }
+ ],
+ "darkMax": 50,
+ "quality": {
+  "sharpness": 0.6984,
+  "sharp_min": 0.5,
+  "light": 241.0,
+  "dark_max": 50
+ },
+ "photoFlags": [],
+ "score": 0.9557174887892377
+}

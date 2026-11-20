@@ -373,5 +373,15 @@
     43
    ]
   }
+ ],
+ "darkMax": 50,
+ "quality": {
+  "sharpness": 0.977,
+  "sharp_min": 1.0,
+  "light": 253.0,
+  "dark_max": 50
+ },
+ "photoFlags": [
+  "blurry"
  ]
 }

@@ -1,0 +1,222 @@
+{
+ "date": [
+  [
+   222,
+   44
+  ]
+ ],
+ "customer_name": [
+  [
+   337,
+   42
+  ]
+ ],
+ "customer_tin": [
+  [
+   186,
+   41
+  ]
+ ],
+ "customer_address": [
+  [
+   96,
+   24
+  ],
+  [
+   103,
+   26
+  ]
+ ],
+ "amount_words": [
+  [
+   484,
+   53
+  ]
+ ],
+ "amount_words2": [
+  [
+   174,
+   44
+  ]
+ ],
+ "amount_figure": [
+  [
+   134,
+   38
+  ]
+ ],
+ "item1_description": [
+  [
+   147,
+   45
+  ]
+ ],
+ "item1_qty": [
+  [
+   27,
+   32
+  ]
+ ],
+ "item1_unit_price": [
+  [
+   62,
+   38
+  ]
+ ],
+ "item1_amount": [
+  [
+   64,
+   37
+  ]
+ ],
+ "item2_description": [
+  [
+   83,
+   48
+  ]
+ ],
+ "item2_qty": [
+  [
+   47,
+   35
+  ]
+ ],
+ "item2_unit_price": [
+  [
+   49,
+   42
+  ]
+ ],
+ "item2_amount": [
+  [
+   84,
+   35
+  ]
+ ],
+ "item3_description": [
+  [
+   194,
+   51
+  ]
+ ],
+ "item3_qty": [
+  [
+   31,
+   39
+  ]
+ ],
+ "item3_unit_price": [
+  [
+   65,
+   37
+  ]
+ ],
+ "item3_amount": [
+  [
+   89,
+   40
+  ]
+ ],
+ "item4_description": [
+  [
+   119,
+   47
+  ]
+ ],
+ "item4_qty": [
+  [
+   25,
+   33
+  ]
+ ],
+ "item4_unit_price": [
+  [
+   77,
+   44
+  ]
+ ],
+ "item4_amount": [
+  [
+   97,
+   42
+  ]
+ ],
+ "item5_description": [
+  [
+   186,
+   51
+  ]
+ ],
+ "item5_qty": [
+  [
+   26,
+   32
+  ]
+ ],
+ "item5_unit_price": [
+  [
+   99,
+   42
+  ]
+ ],
+ "item5_amount": [
+  [
+   67,
+   39
+  ]
+ ],
+ "vatable_sales": [
+  [
+   114,
+   39
+  ]
+ ],
+ "vat": [
+  [
+   91,
+   34
+  ]
+ ],
+ "total_due_2": [
+  [
+   110,
+   34
+  ]
+ ],
+ "invoice_no": [
+  [
+   207,
+   43
+  ]
+ ],
+ "total_sales": [
+  [
+   132,
+   37
+  ]
+ ],
+ "less_vat": [
+  [
+   120,
+   38
+  ]
+ ],
+ "net_of_vat": [
+  [
+   141,
+   43
+  ]
+ ],
+ "add_vat": [
+  [
+   108,
+   37
+  ]
+ ],
+ "total_due": [
+  [
+   158,
+   44
+  ]
+ ]
+}

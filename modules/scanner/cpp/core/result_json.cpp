@@ -18,11 +18,13 @@ std::string toJson(const ScanResult& r) {
     j["sharpness"] = r.sharpness;
     j["sharpMin"] = r.sharpMin;
     j["light"] = r.light;
+    j["darkMax"] = r.darkMax;
   } else {
     j["corners"] = nullptr;
     j["sharpness"] = nullptr;
     j["sharpMin"] = nullptr;
     j["light"] = nullptr;
+    j["darkMax"] = nullptr;
   }
   j["terms"] = r.terms ? json(*r.terms) : json(nullptr);
   j["blanks"] = r.blanks;
@@ -38,6 +40,8 @@ std::string toJson(const ScanResult& r) {
   }
   j["reads"] = reads;
   j["pageFile"] = r.pageFile.empty() ? json(nullptr) : json(r.pageFile);
+  j["originalFile"] = r.originalFile.empty() ? json(nullptr) : json(r.originalFile);
+  j["scanDir"] = r.scanDir.empty() ? json(nullptr) : json(r.scanDir);
   j["timing"] = {{"alignMs", r.timing.alignMs},
                  {"cropMs", r.timing.cropMs},
                  {"readMs", r.timing.readMs},

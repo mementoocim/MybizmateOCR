@@ -1,7 +1,11 @@
 import { Asset } from 'expo-asset';
 
-// The 8 synthetic sample invoices bundled with the app (written by prototype/benchmark/export_core_fixtures.py).
-export type Sample = { id: string; label: string; source: number };
+import type { BoxRead } from '../modules/scanner';
+
+// The 8 synthetic sample invoices bundled with the app, each with what was written in its boxes and what the laptop
+// (the Python reference) read (written by prototype/benchmark/export_core_fixtures.py).
+export type SampleInfo = { font: string; truth: Record<string, string>; laptop: Record<string, string> };
+export type Sample = { id: string; label: string; font: string; source: number };
 
 const sources: Record<string, number> = {
   inv_0001: require('../assets/samples/inv_0001.jpg'),
@@ -14,11 +18,30 @@ const sources: Record<string, number> = {
   inv_0091: require('../assets/samples/inv_0091.jpg'),
 };
 
+const infos: Record<string, SampleInfo> = {
+  inv_0001: require('../assets/samples/inv_0001.json'),
+  inv_0007: require('../assets/samples/inv_0007.json'),
+  inv_0011: require('../assets/samples/inv_0011.json'),
+  inv_0017: require('../assets/samples/inv_0017.json'),
+  inv_0027: require('../assets/samples/inv_0027.json'),
+  inv_0041: require('../assets/samples/inv_0041.json'),
+  inv_0051: require('../assets/samples/inv_0051.json'),
+  inv_0091: require('../assets/samples/inv_0091.json'),
+};
+
 export const SAMPLES: Sample[] = Object.entries(sources).map(([id, source]) => ({
   id,
   label: id.replace('inv_', 'Sample '),
+  font: infos[id].font,
   source,
 }));
+
+/** What was written in a sample's boxes, and what the laptop read in them. */
+export function sampleInfo(id: string): SampleInfo {
+  const info = infos[id];
+  if (!info) throw new Error(`No sample ${id}`);
+  return info;
+}
 
 /** A local file URI for a sample, which the scanner can open. */
 export async function sampleUri(id: string): Promise<string> {
@@ -26,4 +49,23 @@ export async function sampleUri(id: string): Promise<string> {
   if (!sample) throw new Error(`No sample ${id}`);
   const asset = await Asset.fromModule(sample.source).downloadAsync();
   return asset.localUri ?? asset.uri;
+}
+
+/**
+ * A scan of a sample against the sample: boxes read exactly as written (out of the boxes with writing), and boxes
+ * read the way the laptop read them (out of the laptop's reads).
+ */
+export function compareWithSample(
+  reads: readonly BoxRead[],
+  info: SampleInfo,
+): { exact: number; written: number; sameAsLaptop: number; laptopBoxes: number } {
+  const text = new Map(reads.map((b) => [b.name, b.text]));
+  const written = Object.entries(info.truth).filter(([, t]) => t !== '');
+  const laptop = Object.entries(info.laptop);
+  return {
+    exact: written.filter(([name, t]) => text.get(name) === t).length,
+    written: written.length,
+    sameAsLaptop: laptop.filter(([name, t]) => text.get(name) === t).length,
+    laptopBoxes: laptop.length,
+  };
 }
