@@ -34,6 +34,37 @@ class ScannerHolderTest {
   }
 
   @Test
+  fun aFrameCheckDoesNotWaitForAScan() {
+    val holder = ScannerHolder(create = { 1L }, destroy = {})
+    val inScan = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val scan = thread {
+      holder.use {
+        inScan.countDown()
+        release.await(5, TimeUnit.SECONDS)
+      }
+    }
+    assertTrue(inScan.await(5, TimeUnit.SECONDS))
+    val checked = CountDownLatch(1)
+    val frame = thread { holder.use { checked.countDown() } }
+    assertTrue("the frame check waited for the scan", checked.await(1, TimeUnit.SECONDS))
+    release.countDown()
+    scan.join()
+    frame.join()
+  }
+
+  @Test
+  fun twoUsesAtOnceCreateTheScannerOnce() {
+    val created = java.util.concurrent.atomic.AtomicInteger()
+    val holder = ScannerHolder(create = { Thread.sleep(200); created.incrementAndGet().toLong() }, destroy = {})
+    val start = CountDownLatch(1)
+    val users = List(2) { thread { start.await(); holder.use { } } }
+    start.countDown()
+    users.forEach { it.join() }
+    assertEquals(1, created.get())
+  }
+
+  @Test
   fun useAfterCloseFailsWithoutCreatingAScanner() {
     var created = 0
     val holder = ScannerHolder(create = { created++; 1L }, destroy = {})
