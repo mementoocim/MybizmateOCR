@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Animated, Image, StyleSheet, Text, View } from 'react-native';
 
 import { sampleUri } from '../lib/samples';
-import { loadRecent } from '../lib/scans';
+import { loadAppData } from '../lib/startup';
 import { bold, colors } from '../lib/theme';
 import { preload, scanPhoto } from '../modules/scanner';
 import { LoadingBar } from './ReadingOverlay';
@@ -12,8 +12,10 @@ const MIN_MS = 1200; // the splash shows at least this long
 const FADE_MS = 300;
 
 /**
- * The brand while the scanner gets ready (the test app's SplashActivity): the model loads, the recent scans come back,
- * and one sample is read once so the first real scan is quick. Then it fades out and calls onReady.
+ * The brand while the scanner gets ready (the test app's SplashActivity): the model loads, what the app keeps on the
+ * phone comes back (recent scans, lists, settings), and one sample is read once so the first real scan is quick. Then
+ * it fades out and calls onReady. The logo sits where the phone's own splash drew it (104 dp, centred), so it doesn't
+ * jump; only the words under it fade in.
  */
 export function BrandSplash({ onReady }: { onReady: () => void }) {
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +29,7 @@ export function BrandSplash({ onReady }: { onReady: () => void }) {
     (async () => {
       try {
         await preload();
-        await loadRecent();
+        await loadAppData();
         try {
           await scanPhoto(await sampleUri('inv_0001'), { keepFiles: false });
         } catch {
@@ -49,13 +51,15 @@ export function BrandSplash({ onReady }: { onReady: () => void }) {
   const rise = brandIn.interpolate({ inputRange: [0, 1], outputRange: [12, 0] });
   return (
     <Animated.View style={[styles.screen, { opacity: out }]} onLayout={() => void SplashScreen.hideAsync().catch(() => {})}>
-      <Animated.View style={[styles.brand, { opacity: brandIn, transform: [{ translateY: rise }] }]}>
-        <Image source={require('../assets/brand/logo_mark.png')} style={styles.logo} />
-        <Text style={styles.wordmark}>
-          mybizmate<Text style={styles.io}>.io</Text>
-        </Text>
-        <Text style={styles.tagline}>Scan invoices. Even offline.</Text>
-      </Animated.View>
+      <View testID="splash-brand" style={styles.brand}>
+        <Image testID="splash-logo" source={require('../assets/brand/logo_mark.png')} style={styles.logo} />
+        <Animated.View style={[styles.words, { opacity: brandIn, transform: [{ translateY: rise }] }]}>
+          <Text style={styles.wordmark}>
+            mybizmate<Text style={styles.io}>.io</Text>
+          </Text>
+          <Text style={styles.tagline}>Scan invoices. Even offline.</Text>
+        </Animated.View>
+      </View>
       <View style={styles.bottom}>
         {error ? (
           <Text style={styles.error}>{error}</Text>
@@ -81,7 +85,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  brand: { alignItems: 'center', gap: 12 },
+  // The logo's centre at the screen's centre, as the phone's splash draws it.
+  brand: { position: 'absolute', top: '50%', marginTop: -52, left: 0, right: 0, alignItems: 'center', gap: 12 },
+  words: { alignItems: 'center', gap: 12 },
   logo: { width: 104, height: 104 },
   wordmark: { ...bold, fontSize: 32, color: colors.ink },
   io: { color: colors.coralText },

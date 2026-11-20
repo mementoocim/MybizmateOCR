@@ -1,38 +1,9 @@
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
+import { memoryFs } from '../test-utils/memoryFs';
 
-// expo-file-system, in memory: files by URI, and the folders that exist
-const mockFiles = new Map<string, string>();
-const mockDirs = new Set<string>();
-jest.mock('expo-file-system', () => {
-  const join = (parts: unknown[]) => parts.map((p) => (typeof p === 'string' ? p : (p as { uri: string }).uri)).join('/');
-  class Directory {
-    uri: string;
-    constructor(...parts: unknown[]) {
-      this.uri = join(parts);
-    }
-    get exists() {
-      return mockDirs.has(this.uri);
-    }
-  }
-  class File {
-    uri: string;
-    constructor(...parts: unknown[]) {
-      this.uri = join(parts);
-    }
-    get exists() {
-      return mockFiles.has(this.uri);
-    }
-    async text() {
-      return mockFiles.get(this.uri) ?? '';
-    }
-    async write(content: string) {
-      mockFiles.set(this.uri, content);
-    }
-  }
-  return { File, Directory, Paths: { document: new Directory('file:///docs') } };
-});
+jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 
 const flush = () => new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
 
@@ -41,8 +12,7 @@ function result(dir: string): ScanResult {
 }
 
 beforeEach(() => {
-  mockFiles.clear();
-  mockDirs.clear();
+  memoryFs.reset();
   jest.resetModules();
 });
 
@@ -62,8 +32,8 @@ test('saves the list and loads it back, without scans whose folder is gone', asy
   first.addScan({ label: 'Photo from gallery', source: 'gallery', result: result('/s/a') });
   first.addScan({ label: 'Sample 0007', source: 'sample', sampleId: 'inv_0007', result: result('/s/b') });
   await flush();
-  expect(mockFiles.has('file:///docs/recent.json')).toBe(true);
-  mockDirs.add('file:///s/b'); // the system kept only b's folder
+  expect(memoryFs.files.has('file:///docs/recent.json')).toBe(true);
+  memoryFs.dirs.add('file:///s/b'); // the system kept only b's folder
   jest.resetModules();
   const second = require('../lib/scans');
   expect(second.recentScans()).toEqual([]);
