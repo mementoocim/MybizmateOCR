@@ -28,7 +28,11 @@ export function BrandSplash({ onReady }: { onReady: () => void }) {
       try {
         await preload();
         await loadRecent();
-        await scanPhoto(await sampleUri('inv_0001'), { keepFiles: false });
+        try {
+          await scanPhoto(await sampleUri('inv_0001'), { keepFiles: false });
+        } catch {
+          // the warm-up only makes the first real scan quicker: the app opens without it
+        }
         await new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, MIN_MS - (Date.now() - start))));
         if (!live) return;
         Animated.timing(out, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start();

@@ -55,6 +55,24 @@ test('ready after the scanner and a warm-up scan, and not before 1200 ms', async
   expect(onReady).toHaveBeenCalledTimes(1);
 });
 
+test('a warm-up read that fails still opens the app (it only makes the first scan quicker)', async () => {
+  mockPreload.mockResolvedValue(undefined);
+  mockScan.mockRejectedValue(new Error('unreadable'));
+  const onReady = jest.fn();
+  await render(<BrandSplash onReady={onReady} />);
+  await settle();
+  await act(async () => {
+    jest.advanceTimersByTime(1200); // the splash's shortest time
+  });
+  await settle();
+  await act(async () => {
+    jest.advanceTimersByTime(300); // the fade
+  });
+  await settle();
+  expect(onReady).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText(/couldn't start/)).toBeNull();
+});
+
 test('a scanner that fails to start says so and goes no further', async () => {
   mockPreload.mockRejectedValue(new Error('boom'));
   const onReady = jest.fn();
