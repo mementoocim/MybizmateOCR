@@ -1,0 +1,30 @@
+{
+ "stem": "bir2307_photo_0",
+ "kind": "photo",
+ "form": "bir_2307",
+ "pageCount": null,
+ "values": {
+  "period_from": "10012025",
+  "period_to": "12312025",
+  "payee_tin": "52463974100002",
+  "payee_name": "Northstar Office Solutions Inc.",
+  "payee_address": "22 Burgos St., Santiago City, Isabela",
+  "payee_zip": "3311",
+  "payor_tin": "55667788900000",
+  "payor_name": "Flores Grocery",
+  "payor_address": "Centro East, Alicia, Isabela",
+  "payor_zip": "3306",
+  "ewt1_payment": "Office supplies",
+  "ewt1_atc": "WC158",
+  "ewt1_m1": "1,114.00",
+  "ewt1_m2": "136,165.03",
+  "ewt1_m3": "282,347.00",
+  "ewt1_total": "419,626.03",
+  "ewt1_tax": "4,196.26",
+  "ewt_total_m1": "1,114.00",
+  "ewt_total_m2": "136,165.03",
+  "ewt_total_m3": "282,347.00",
+  "ewt_total_total": "419,626.03",
+  "ewt_total_tax": "4,196.26"
+ }
+}
