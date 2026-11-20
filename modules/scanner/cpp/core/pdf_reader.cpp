@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <new>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 
 #include <opencv2/imgproc.hpp>
@@ -14,7 +16,9 @@
 #include "cpp/fpdf_scopers.h"
 #include "fpdf_edit.h"
 #include "fpdf_flatten.h"
+#include "fpdf_formfill.h"
 #include "fpdf_text.h"
+#include "fpdf_transformpage.h"
 #include "fpdfview.h"
 
 namespace mbm {
@@ -70,6 +74,23 @@ cv::Point2f onRender(FPDF_PAGE page, cv::Size size, double x, double y) {
 // Whether a character puts ink on the page: not a space, a line break or another control character.
 bool inks(char32_t c) { return c > 0x20 && !(c >= 0x7F && c <= 0xA0); }
 
+// Page 1 as the form environment knows it: FORM_OnAfterLoadPage once it is loaded, FORM_OnBeforeClosePage before it is
+// closed (both do nothing without an environment).
+struct FormPageCloser {
+  FPDF_FORMHANDLE form = nullptr;
+  void operator()(FPDF_PAGE page) const {
+    FORM_OnBeforeClosePage(page, form);
+    FPDF_ClosePage(page);
+  }
+};
+using FormPage = std::unique_ptr<std::remove_pointer<FPDF_PAGE>::type, FormPageCloser>;
+
+FormPage loadPage1(FPDF_DOCUMENT doc, FPDF_FORMHANDLE form) {
+  FPDF_PAGE page = FPDF_LoadPage(doc, 0);
+  if (page) FORM_OnAfterLoadPage(page, form);
+  return FormPage(page, FormPageCloser{form});
+}
+
 }  // namespace
 
 PdfPage renderPdf(const std::string& path) {
@@ -82,20 +103,37 @@ PdfPage renderPdf(const std::string& path) {
   initPdfium();
   ScopedFPDFDocument doc(FPDF_LoadDocument(path.c_str(), nullptr));
   if (!doc) throw refusal(loadErrorCode());
+  // A form environment with no callbacks. Loading the page under it has pdfium draw an appearance for a filled field
+  // that has none of its own (a form marked /NeedAppearances), so flattening keeps that value too. Nothing ever sends it
+  // a form action or an input event, and this build runs no JavaScript. formInfo must outlive the environment.
+  FPDF_FORMFILLINFO formInfo{};
+  formInfo.version = 1;
+  ScopedFPDFFormHandle form(FPDFDOC_InitFormFillEnvironment(doc.get(), &formInfo));
   PdfPage out;
   out.pageCount = FPDF_GetPageCount(doc.get());
-  ScopedFPDFPage page(out.pageCount > 0 ? FPDF_LoadPage(doc.get(), 0) : nullptr);
+  if (out.pageCount < 1) throw refusal("broken");
+  FormPage page = loadPage1(doc.get(), form.get());
   if (!page) throw refusal("broken");
   const float w = FPDF_GetPageWidthF(page.get()), h = FPDF_GetPageHeightF(page.get());  // as shown, /Rotate applied
   if (!(w > 0 && h > 0)) throw refusal("broken");
   if (std::max(w, h) > MAX_PDF_PAGE_PT) throw refusal("page_too_big");
 
-  // Form fields' values become page content: without a form handle, pdfium neither draws them nor lists their text.
-  // The flattened page is read again from the document.
+  // Form fields' values become page content: FPDF_RenderPageBitmap doesn't draw them and the text page doesn't list
+  // them. Flattening writes the page's own MediaBox and CropBox, from the boxes the page itself holds, else Letter, so a
+  // box the page inherits from /Pages would be lost: the box it shows is written onto the page first. The flattened page
+  // is read again from the document, and must still have the size it showed.
+  FS_RECTF box;
+  if (FPDF_GetPageBoundingBox(page.get(), &box)) {
+    FPDFPage_SetMediaBox(page.get(), box.left, box.bottom, box.right, box.top);
+    FPDFPage_SetCropBox(page.get(), box.left, box.bottom, box.right, box.top);
+  }
   if (FPDFPage_Flatten(page.get(), FLAT_NORMALDISPLAY) == FLATTEN_SUCCESS) {
     page.reset();
-    page.reset(FPDF_LoadPage(doc.get(), 0));
+    page = loadPage1(doc.get(), form.get());
     if (!page) throw refusal("broken");
+    if (std::abs(FPDF_GetPageWidthF(page.get()) - w) > 0.01f || std::abs(FPDF_GetPageHeightF(page.get()) - h) > 0.01f) {
+      throw refusal("broken");
+    }
   }
 
   const double scale = static_cast<double>(MAX_SIDE) / std::max(w, h);

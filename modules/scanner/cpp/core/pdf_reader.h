@@ -1,6 +1,7 @@
 // Page 1 of a PDF for the scanner, by pdfium (bblanchon/pdfium-binaries chromium/8125, built without V8: no JavaScript,
-// no form actions, nothing fetched): rendered at the photo pipeline's size, with its visible text and where each
-// character sits on that render.
+// nothing fetched): rendered at the photo pipeline's size, with its visible text and where each character sits on that
+// render. A form environment with no callbacks lets pdfium draw a filled form field that has no appearance of its own;
+// it is never sent a form action or an input event.
 #pragma once
 
 #include <cstdint>
@@ -36,8 +37,8 @@ struct PdfError : std::runtime_error {
   std::string code;
 };
 
-// Page 1 of the PDF at `path`, its form fields' values flattened into the page first. Calls run one at a time (pdfium
-// isn't thread-safe). Throws PdfError.
+// Page 1 of the PDF at `path`, its form fields' values flattened into the page first (the page keeps the box it shows,
+// even one it inherits). Calls run one at a time (pdfium isn't thread-safe). Throws PdfError.
 PdfPage renderPdf(const std::string& path);
 
 }  // namespace mbm

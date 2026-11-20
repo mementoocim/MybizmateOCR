@@ -109,25 +109,49 @@ std::string padded(size_t size) {
   return out + "\n" + tail;
 }
 
-// A one-page PDF made here: a w x h pt page turned by `rotate` degrees. `text` is drawn in 40 pt Helvetica at
-// (100, 600) pt, and `field` is a filled-in text field, its widget drawing it in 30 pt within (100, 300)-(400, 360).
-std::string makePdf(int w, int h, int rotate, const std::string& text, const std::string& field = "") {
-  const std::string content = text.empty() ? "" : "BT /F1 40 Tf 100 600 Td (" + text + ") Tj ET";
-  const std::string look = "BT /F1 30 Tf 10 18 Td (" + field + ") Tj ET";
+// A one-page PDF made here.
+struct MadePdf {
+  int w = 612, h = 792;     // the page, in points
+  int rotate = 0;           // its /Rotate
+  bool boxOnPages = false;  // the MediaBox sits on /Pages, and the page only inherits it
+  int cropW = 0, cropH = 0;  // when set, the page's own CropBox [0 0 cropW cropH]
+  std::string text;         // drawn in 40 pt Helvetica from (100, textY) pt
+  int textY = 600;
+  std::string field;        // a filled-in text field within (100, 300)-(400, 360) pt
+  bool fieldLook = true;    // its widget draws the value (its own /AP, 30 pt from (110, 318) pt); otherwise the form
+                            // leaves that to the reader (/NeedAppearances, the field's /DA in 20 pt)
+};
+
+std::string makePdf(const MadePdf& p) {
+  const std::string box = "/MediaBox [0 0 " + std::to_string(p.w) + " " + std::to_string(p.h) + "]";
+  const std::string crop =
+      p.cropW > 0 ? " /CropBox [0 0 " + std::to_string(p.cropW) + " " + std::to_string(p.cropH) + "]" : "";
+  const std::string content =
+      p.text.empty() ? "" : "BT /F1 40 Tf 100 " + std::to_string(p.textY) + " Td (" + p.text + ") Tj ET";
+  const std::string look = "BT /F1 30 Tf 10 18 Td (" + p.field + ") Tj ET";
+  const bool field = !p.field.empty();
+  const std::string form =
+      !field ? ""
+      : p.fieldLook
+          ? " /AcroForm << /Fields [6 0 R] >>"
+          : " /AcroForm << /Fields [6 0 R] /NeedAppearances true /DR << /Font << /Helv 4 0 R >> >> /DA (/Helv 0 Tf 0 g) >>";
   std::vector<std::string> objects = {
-      "<< /Type /Catalog /Pages 2 0 R" + std::string(field.empty() ? "" : " /AcroForm << /Fields [6 0 R] >>") + " >>",
-      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + std::to_string(w) + " " + std::to_string(h) + "] /Rotate " +
-          std::to_string(rotate) + " /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R" +
-          (field.empty() ? "" : " /Annots [6 0 R]") + " >>",
+      "<< /Type /Catalog /Pages 2 0 R" + form + " >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1" + (p.boxOnPages ? " " + box : std::string()) + " >>",
+      "<< /Type /Page /Parent 2 0 R" + (p.boxOnPages ? std::string() : " " + box) + crop + " /Rotate " +
+          std::to_string(p.rotate) + " /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R" +
+          (field ? " /Annots [6 0 R]" : "") + " >>",
       "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
       "<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream",
   };
-  if (!field.empty()) {
-    objects.push_back("<< /Type /Annot /Subtype /Widget /FT /Tx /T (value) /V (" + field +
-                      ") /Rect [100 300 400 360] /F 4 /P 3 0 R /AP << /N 7 0 R >> >>");
-    objects.push_back("<< /Type /XObject /Subtype /Form /BBox [0 0 300 60] /Resources << /Font << /F1 4 0 R >> >> "
-                      "/Length " + std::to_string(look.size()) + " >>\nstream\n" + look + "\nendstream");
+  if (field) {
+    objects.push_back("<< /Type /Annot /Subtype /Widget /FT /Tx /T (value) /V (" + p.field +
+                      ") /Rect [100 300 400 360] /F 4 /P 3 0 R " +
+                      (p.fieldLook ? "/AP << /N 7 0 R >>" : "/DA (/Helv 20 Tf 0 g)") + " >>");
+    if (p.fieldLook) {
+      objects.push_back("<< /Type /XObject /Subtype /Form /BBox [0 0 300 60] /Resources << /Font << /F1 4 0 R >> >> "
+                        "/Length " + std::to_string(look.size()) + " >>\nstream\n" + look + "\nendstream");
+    }
   }
   std::string pdf = "%PDF-1.4\n";
   std::vector<size_t> at;
@@ -144,6 +168,34 @@ std::string makePdf(int w, int h, int rotate, const std::string& text, const std
   }
   return pdf + "trailer\n<< /Size " + std::to_string(objects.size() + 1) + " /Root 1 0 R >>\nstartxref\n" +
          std::to_string(xref) + "\n%%EOF\n";
+}
+
+// The page's letters (its characters but spaces and line breaks) in pdfium's order, once each letter's box is checked
+// to cover ink of the render and no ink is found outside the letters' boxes.
+std::string lettersOnInk(const mbm::PdfPage& page) {
+  cv::Mat gray;
+  cv::cvtColor(page.bgr, gray, cv::COLOR_BGR2GRAY);
+  const cv::Mat ink = gray < 160;
+  cv::Mat boxes = cv::Mat::zeros(ink.size(), CV_8U);
+  std::string letters;
+  for (const auto& c : page.chars) {
+    if (isSpace(c.ch)) continue;
+    appendUtf8(letters, c.ch);
+    CHECK(cv::countNonZero(ink(pixelsOf(c.box, 0, ink.size()))) > 0);
+    boxes(pixelsOf(c.box, 3, ink.size())).setTo(255);
+  }
+  CHECK(cv::countNonZero(ink) > 1000);
+  CHECK(cv::countNonZero(ink & ~boxes) == 0);
+  return letters;
+}
+
+// The box of the page's first character `ch`.
+cv::Rect2f boxOf(const mbm::PdfPage& page, char32_t ch) {
+  for (const auto& c : page.chars) {
+    if (c.ch == ch) return c.box;
+  }
+  FAIL("no character " << static_cast<int>(ch));
+  return {};
 }
 
 }  // namespace
@@ -204,8 +256,8 @@ TEST_CASE("two pages") {
 
 TEST_CASE("a PDF page over 2000 pt is too big") {
   const std::string dir = tmpDir();
-  writeFile(dir + "/2000.pdf", makePdf(2000, 1000, 0, ""));
-  writeFile(dir + "/2001.pdf", makePdf(1000, 2001, 0, ""));
+  writeFile(dir + "/2000.pdf", makePdf({2000, 1000}));
+  writeFile(dir + "/2001.pdf", makePdf({1000, 2001}));
   const auto page = mbm::renderPdf(dir + "/2000.pdf");
   CHECK(page.bgr.cols == 2400);
   CHECK(page.bgr.rows == 1200);
@@ -219,27 +271,65 @@ TEST_CASE("a PDF's characters sit on their own ink, a form field's and a turned 
   // which run comes first is pdfium's choice (on the page turned 90 degrees, the field's).
   for (int rotate : {0, 90, 180, 270}) {
     CAPTURE(rotate);
+    MadePdf made;
+    made.rotate = rotate;
+    made.text = "HELLO";
+    made.field = "FIELD";
     const std::string file = tmpDir() + "/hello.pdf";
-    writeFile(file, makePdf(612, 792, rotate, "HELLO", "FIELD"));
+    writeFile(file, makePdf(made));
     const auto page = mbm::renderPdf(file);
     const bool turned = rotate % 180 != 0;
     CHECK(page.bgr.cols == (turned ? 2400 : 1855));
     CHECK(page.bgr.rows == (turned ? 1855 : 2400));
     CHECK_FALSE(page.picture);
-    cv::Mat gray;
-    cv::cvtColor(page.bgr, gray, cv::COLOR_BGR2GRAY);
-    const cv::Mat ink = gray < 160;
-    cv::Mat boxes = cv::Mat::zeros(ink.size(), CV_8U);
-    std::string letters;
-    for (const auto& c : page.chars) {
-      if (isSpace(c.ch)) continue;
-      appendUtf8(letters, c.ch);
-      CHECK(cv::countNonZero(ink(pixelsOf(c.box, 0, ink.size()))) > 0);
-      boxes(pixelsOf(c.box, 3, ink.size())).setTo(255);
-    }
+    const std::string letters = lettersOnInk(page);
     CAPTURE(letters);
     CHECK((letters == "HELLOFIELD" || letters == "FIELDHELLO"));
-    CHECK(cv::countNonZero(ink) > 1000);
-    CHECK(cv::countNonZero(ink & ~boxes) == 0);
   }
+}
+
+TEST_CASE("a PDF page keeps the box it shows when its fields are flattened") {
+  // Flattening writes a MediaBox and a CropBox onto the page itself, from the boxes the page holds. A page whose box
+  // comes from /Pages (here the 2307's 612 x 936 pt) must not fall back to Letter, and a CropBox of its own reaching past
+  // its MediaBox must not grow it: the render isn't stretched, and the text near its top stays on it.
+  MadePdf inherited;
+  inherited.boxOnPages = true;
+  MadePdf cropped;
+  cropped.cropW = 700;
+  cropped.cropH = 1000;
+  for (MadePdf made : {inherited, cropped}) {
+    CAPTURE(made.boxOnPages);
+    made.h = 936;
+    made.text = "TOP";
+    made.textY = 880;
+    made.field = "FIELD";
+    const std::string file = tmpDir() + "/boxes.pdf";
+    writeFile(file, makePdf(made));
+    const auto page = mbm::renderPdf(file);
+    CHECK(page.bgr.cols == 1569);
+    CHECK(page.bgr.rows == 2400);
+    const std::string letters = lettersOnInk(page);
+    CAPTURE(letters);
+    CHECK((letters == "TOPFIELD" || letters == "FIELDTOP"));
+    // The baselines, TOP's at 880 pt and the field value's at 318 pt, lie (936 - y) * 2400 / 936 px down the render.
+    const float scale = 2400.0f / 936;
+    CHECK(std::abs(boxOf(page, 'T').br().y - (936 - 880) * scale) < 3);
+    CHECK(std::abs(boxOf(page, 'F').br().y - (936 - 318) * scale) < 3);
+  }
+}
+
+TEST_CASE("a PDF's filled field without an appearance of its own is drawn and read") {
+  // A form that leaves drawing its fields to the reader (/NeedAppearances, and no /AP on the widget), as some programs
+  // that fill forms do: pdfium draws the value from the field's /DA, and it is read like the page's own text.
+  MadePdf made;
+  made.text = "TOP";
+  made.field = "FIELD";
+  made.fieldLook = false;
+  const std::string file = tmpDir() + "/no_look.pdf";
+  writeFile(file, makePdf(made));
+  const auto page = mbm::renderPdf(file);
+  CHECK_FALSE(page.picture);
+  const std::string letters = lettersOnInk(page);
+  CAPTURE(letters);
+  CHECK((letters == "TOPFIELD" || letters == "FIELDTOP"));
 }
