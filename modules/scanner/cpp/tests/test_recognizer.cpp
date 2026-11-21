@@ -60,3 +60,22 @@ TEST_CASE("readings match the Python on inv_0007's crops") {
 }
 
 TEST_CASE("no crops, no work") { CHECK(rec().recognize({}, "text", 0).empty()); }
+
+TEST_CASE("the 2307's digits and code boxes read only their characters") {
+  const std::string dir = fixturesDir() + "/crops/inv_0007/";
+  const cv::Mat number = cv::imread(dir + "invoice_no.png", cv::IMREAD_COLOR);  // printed "0007655"
+  const cv::Mat date = cv::imread(dir + "date.png", cv::IMREAD_COLOR);          // written "Sep 20, 2026"
+  REQUIRE_FALSE(number.empty());
+  REQUIRE_FALSE(date.empty());
+  CHECK(rec().recognize({number}, "digits", 0)[0].text == "0007655");
+  CHECK(rec().recognize({number}, "code", 0)[0].text == "0007655");
+  const std::string digits = rec().recognize({date}, "digits", 0)[0].text;
+  const std::string code = rec().recognize({date}, "code", 0)[0].text;
+  CAPTURE(digits);
+  CAPTURE(code);
+  CHECK_FALSE(digits.empty());
+  CHECK(digits.find_first_not_of("0123456789") == std::string::npos);
+  CHECK_FALSE(code.empty());
+  CHECK(code.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") == std::string::npos);
+  CHECK(code.find('S') != std::string::npos);  // the capital S of "Sep" reads as itself
+}

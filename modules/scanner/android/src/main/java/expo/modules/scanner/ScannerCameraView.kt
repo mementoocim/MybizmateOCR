@@ -236,7 +236,7 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
       val fw = if (upright) image.width else image.height
       val fh = if (upright) image.height else image.width
       val found = scannerModule()?.detectFrame(plane.buffer, image.width, image.height, plane.rowStride, rotation)
-      onDetection(found?.let(::toDetection), fw, fh)
+      onDetection(found?.let(::detectionOf), fw, fh)
     } catch (e: Exception) {
       // a frame that couldn't be checked is skipped, like a frame dropped while another was checked
     } finally {
@@ -314,13 +314,6 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
 
   private fun scannerModule(): ScannerModule? = appContext.registry.getModule<ScannerModule>()
 
-  private fun toDetection(f: FloatArray) = Detection(
-    if (f[0] == 0f) "sales_invoice" else "service_invoice",
-    f.copyOfRange(1, 9),
-    f[9].toDouble(),
-    f[10].toDouble(),
-  )
-
   // ---- the test image (debuggable builds only)
 
   private fun startTest() {
@@ -346,7 +339,7 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
           if (capturing || !running.get()) return@execute
           try {
             val found = scannerModule()?.detectFrame(frame, TEST_W, TEST_H, TEST_W, 0)
-            onDetection(found?.let(::toDetection), TEST_W, TEST_H)
+            onDetection(found?.let(::detectionOf), TEST_W, TEST_H)
           } catch (e: Exception) {
             // skipped, like a camera frame
           }

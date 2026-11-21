@@ -1,10 +1,12 @@
-// Finding the Service Invoice in a photo by its printed table border: a port of
-// prototype/benchmark/frame_template.py (FrameAligner, the arbiter) by way of the Android test app's FrameTemplate.java.
+// Finding a frame form in a photo by its printed border (the Service Invoice's table border, the BIR 2307's outer
+// border): a port of prototype/benchmark/frame_template.py (FrameAligner, the arbiter for the Service Invoice) by way of
+// the Android test app's FrameTemplate.java. One aligner per template.
 //
-// Long straight lines (HoughLinesP) are the candidates for the border's sides. Every pair of near-horizontal and
-// near-vertical lines that stops at its corners makes a candidate, tried in all 4 rotations. Each candidate is scored
-// by how much of the template's printed grid lands on ink, minus the ink just beside it. The best one scoring at least
-// 0.75 wins; its sides can then be refitted to the ink at full resolution.
+// Long straight lines (HoughLinesP) are the candidates for the border's sides: the template's maxLines longest in each
+// direction. Every pair of near-horizontal and near-vertical lines that stops at its corners makes a candidate, tried
+// in all 4 rotations. Each candidate is scored by how much of the template's printed grid lands on ink, minus the ink
+// just beside it. The best one scoring at least 0.75 wins; its sides can then be refitted to the ink at full
+// resolution.
 #pragma once
 
 #include <array>
@@ -37,6 +39,7 @@ class FrameAligner {
 
   Quad dst_;        // the border's corners on the page (float32, as the Python's)
   float aspect_;    // its width over its height
+  size_t maxLines_;  // candidate lines kept per direction (the template's maxLines)
   std::vector<cv::Point2f> on_, beside_;  // points on the printed rules, and OFF px either side of them
 };
 

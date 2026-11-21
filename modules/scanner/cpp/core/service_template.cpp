@@ -25,6 +25,7 @@ ServiceTemplate ServiceTemplate::parse(const std::string& json) {
   t.frame = {pointOf(fr.at("tl")), pointOf(fr.at("tr")), pointOf(fr.at("br")), pointOf(fr.at("bl"))};
   for (const auto& r : j.at("grid").at("h")) t.gridH.emplace_back(r[0].get<float>(), r[1].get<float>(), r[2].get<float>());
   for (const auto& r : j.at("grid").at("v")) t.gridV.emplace_back(r[0].get<float>(), r[1].get<float>(), r[2].get<float>());
+  t.maxLines = j.value("max_lines", t.maxLines);
   const auto& slack = j.at("slack");
   t.slackHeader = {slack.at("header")[0].get<int>(), slack.at("header")[1].get<int>()};
   t.slackTable = {slack.at("table")[0].get<int>(), slack.at("table")[1].get<int>()};
@@ -33,9 +34,11 @@ ServiceTemplate ServiceTemplate::parse(const std::string& json) {
     ServiceField field;
     field.name = f.at("name").get<std::string>();
     field.type = f.at("type").get<std::string>();
+    field.label = f.value("label", std::string());
     field.box = rectOf(f.at("bbox"));
     if (f.contains("grab")) field.grab = rectOf(f.at("grab"));
     field.multiline = f.value("multiline", false);
+    field.comb = f.value("comb", false);
     t.fields.push_back(std::move(field));
   }
   return t;

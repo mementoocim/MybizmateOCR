@@ -1,7 +1,8 @@
 // One invoice photo in, every box's reading out: the port of OcrEngine.scan (Android test app) with the Python
 // reference as the arbiter. That reference is prototype/benchmark: pipelines.ApproachB with the demo's photo cap, and
 // frame_template.FrameReader for the Service Invoice. The MyBizMate Sales Invoice is found by its corner squares;
-// failing that, the Service Invoice by its table border.
+// failing that, a frame form by its printed border: the Service Invoice by its table border, or BIR Form 2307 (page 1;
+// no Python reference) by its outer border, whichever is found with the higher score.
 #pragma once
 
 #include <array>
@@ -27,6 +28,7 @@ struct Assets {
   std::string fieldMap;          // field_map.json (the MyBizMate Sales Invoice)
   std::vector<uint8_t> formPng;  // form_small.png (grey, 425 x 550)
   std::string serviceJson;       // service_invoice.json (the Service Invoice)
+  std::string bir2307Json;       // bir_2307.json (BIR Form 2307, page 1)
   int threads = 4;
 };
 
@@ -44,14 +46,14 @@ struct Timing {
 
 struct ScanResult {
   bool aligned = false;
-  std::string form;  // "sales_invoice", "service_invoice", or empty when no form was found
+  std::string form;  // "sales_invoice", "service_invoice", "bir_2307", or empty when no form was found
   cv::Size photoSize;  // after the MAX_SIDE cap
-  bool turned = false;  // the page was upside down and was turned back (the Sales Invoice; the Service Invoice's
-                        // finder handles any turn itself)
-  std::array<cv::Point2f, 4> corners{};  // in the photo, tl, tr, br, bl: the corner squares, or the table border
+  bool turned = false;  // the page was upside down and was turned back (the Sales Invoice; a frame form's finder
+                        // handles any turn itself)
+  std::array<cv::Point2f, 4> corners{};  // in the photo, tl, tr, br, bl: the corner squares, or the frame's border
   double sharpness = 0, sharpMin = 0, light = 0, darkMax = 0;
   std::optional<std::string> terms;  // "cash", "account", or none when the ticks are unclear
-  int blanks = 0;  // boxes with no writing (not counting the checkboxes)
+  int blanks = 0;  // boxes with no writing (not counting the checkboxes): they aren't read
   std::vector<BoxRead> reads;  // in field order
   std::string pageFile;  // the straightened page (JPEG), or empty when not aligned
   std::string originalFile;  // the photo with the found outline drawn (JPEG), when files are kept
@@ -62,7 +64,7 @@ struct ScanResult {
 // What the live camera finds in one grey, upright frame: which form, the whole sheet's outline, and how sharp the
 // frame is (straightened onto the form's page) against that form's live minimum.
 struct FrameDetection {
-  std::string form;                         // "sales_invoice" or "service_invoice"
+  std::string form;                         // "sales_invoice", "service_invoice" or "bir_2307"
   std::array<cv::Point2f, 4> outline{};     // the sheet in the frame: tl, tr, br, bl
   double sharpness = 0, sharpMin = 0;
 };
@@ -100,9 +102,9 @@ class Scanner {
   // An already decoded and capped photo (BGR). Scans run one at a time.
   ScanResult scanImage(const cv::Mat& bgr, const std::string& outDir);
 
-  // The live camera's check of one frame (grey, upright; see frame_input.h): the corner squares first, else the
-  // Service Invoice's border without its corner refit (the test app's OcrEngine.detect). Reads only what the scanner
-  // loaded, so it never waits for a scan.
+  // The live camera's check of one frame (grey, upright; see frame_input.h): the corner squares first, else the frame
+  // forms' borders, as a scan finds them but without the corner refit (the test app's OcrEngine.detect). The outline
+  // is the found form's sheet (a frame form's paper). Reads only what the scanner loaded, so it never waits for a scan.
   std::optional<FrameDetection> detectFrame(const cv::Mat& gray) const;
 
  private:

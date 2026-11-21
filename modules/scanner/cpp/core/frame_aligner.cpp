@@ -21,7 +21,6 @@ namespace {
 
 constexpr int WORK_SIDE = 1400;       // lines are searched on a copy this big (longest side)
 constexpr double MIN_SCORE = 0.75;    // printed grid on ink, minus ink just beside it
-constexpr size_t MAX_LINES = 40;      // longest candidate lines kept per direction
 constexpr double SIDE_INK = 0.7;      // share of a border side that must be inked between its corners
 constexpr double OFF = 12;            // template px beside a rule where there should be paper
 constexpr double PARALLEL = 0.26;     // sin of the widest angle between opposite sides (15 degrees)
@@ -245,7 +244,7 @@ std::vector<double> arange(double start, double stop, double step) {  // numpy.a
 
 }  // namespace
 
-FrameAligner::FrameAligner(const ServiceTemplate& t) : dst_(t.frame) {
+FrameAligner::FrameAligner(const ServiceTemplate& t) : dst_(t.frame), maxLines_(t.maxLines) {
   aspect_ = (dst_[1].x - dst_[0].x) / (dst_[3].y - dst_[0].y);
   for (const auto& r : t.gridH) {  // [y, x0, x1]
     const double y = r[0];
@@ -344,7 +343,7 @@ std::optional<FrameFound> FrameAligner::find(const cv::Mat& gray, bool refit) co
   auto keep = [&](bool horizontal) {
     std::vector<Line> out;
     for (const auto& l : merge(segs, horizontal, cv::Size(w, h), tol)) {
-      if (out.size() == MAX_LINES) break;
+      if (out.size() == maxLines_) break;
       if (l.covered >= mn * 0.15) out.push_back(l);
     }
     return out;

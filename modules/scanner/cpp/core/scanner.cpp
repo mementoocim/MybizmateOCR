@@ -168,21 +168,47 @@ cv::Mat decodePhoto(const std::string& path) {
 }
 
 struct Scanner::Impl {
+  // A form found by its printed border and cut box by box: the Service Invoice, or BIR Form 2307 (page 1). Each has
+  // its own finder, and its own minimum sharpness for a scan (sharpMin) and for the camera's photo (liveMin).
+  struct FrameForm {
+    ServiceTemplate tmpl;
+    FrameAligner aligner;
+    double sharpMin, liveMin;
+
+    FrameForm(const std::string& json, double sharp, double live)
+        : tmpl(ServiceTemplate::parse(json)), aligner(tmpl), sharpMin(sharp), liveMin(live) {}
+  };
+
+  // A frame form found in a photo: which one, and where.
+  struct FrameMatch {
+    const FrameForm* form;
+    FrameFound found;
+  };
+
   FormTemplate form;
-  ServiceTemplate service;
-  FrameAligner aligner;
+  std::vector<FrameForm> frames;  // tried when there are no corner squares; a tie goes to the first
   Recognizer recognizer;
   cv::Mat formInk;  // the blank form's printed ink, to tell an upside-down page
   std::mutex mutex;
 
-  explicit Impl(const Assets& a)
-      : form(FormTemplate::parse(a.fieldMap)),
-        service(ServiceTemplate::parse(a.serviceJson)),
-        aligner(service),
-        recognizer(a.model, a.dict, a.threads) {
+  explicit Impl(const Assets& a) : form(FormTemplate::parse(a.fieldMap)), recognizer(a.model, a.dict, a.threads) {
+    frames.reserve(2);
+    frames.emplace_back(a.serviceJson, quality::SERVICE_SHARP_MIN, quality::SERVICE_LIVE_MIN);
+    frames.emplace_back(a.bir2307Json, quality::BIR2307_SHARP_MIN, quality::BIR2307_LIVE_MIN);
     cv::Mat blank = cv::imdecode(a.formPng, cv::IMREAD_GRAYSCALE);
     if (blank.empty()) throw std::invalid_argument("form_small.png can't be decoded");
     formInk = quality::inkMap(blank);
+  }
+
+  // The frame form whose border is found with the highest score (a finder finds nothing scoring under 0.75), or none.
+  // refit: refine the corners (scans); the live camera skips it.
+  std::optional<FrameMatch> findFrame(const cv::Mat& gray, bool refit) const {
+    std::optional<FrameMatch> best;
+    for (const auto& f : frames) {
+      auto found = f.aligner.find(gray, refit);
+      if (found && (!best || found->score > best->found.score)) best = FrameMatch{&f, *found};
+    }
+    return best;
   }
 
   // The MyBizMate Sales Invoice: straightened by its corner squares (H: photo -> page).
@@ -267,19 +293,21 @@ struct Scanner::Impl {
     if (!outDir.empty()) r.pageFile = writePage(page, outDir);  // the whole page is the sheet here
   }
 
-  // The Service Invoice: straightened by its table border, read as frame_template.FrameReader.read_page reads it.
-  void readService(const cv::Mat& bgr, const FrameFound& found, const std::string& outDir,
-                   std::chrono::steady_clock::time_point t0, ScanResult& r) {
+  // A frame form (the Service Invoice, the BIR 2307): straightened by its border, read as
+  // frame_template.FrameReader.read_page reads the Service Invoice. A box with no writing isn't read.
+  void readFrameForm(const FrameForm& frame, const cv::Mat& bgr, const FrameFound& found, const std::string& outDir,
+                     std::chrono::steady_clock::time_point t0, ScanResult& r) {
+    const ServiceTemplate& t = frame.tmpl;
     cv::Mat page;
-    cv::warpPerspective(bgr, page, cv::Mat(found.H), service.page, cv::INTER_LINEAR, cv::BORDER_CONSTANT,
+    cv::warpPerspective(bgr, page, cv::Mat(found.H), t.page, cv::INTER_LINEAR, cv::BORDER_CONSTANT,
                         cv::Scalar(255, 255, 255));
     cv::Mat pageGray;
     cv::cvtColor(page, pageGray, cv::COLOR_BGR2GRAY);
     r.aligned = true;
-    r.form = "service_invoice";
+    r.form = t.name;
     r.sharpness = quality::sharpness(pageGray);  // the whole page, white border included, as the Python measures it
     r.light = quality::paperLight(pageGray);
-    r.sharpMin = quality::SERVICE_SHARP_MIN;
+    r.sharpMin = frame.sharpMin;
     r.darkMax = quality::DARK_MAX;
     r.corners = found.corners;
     r.timing.alignMs = msSince(t0);
@@ -288,14 +316,14 @@ struct Scanner::Impl {
     const auto t1 = std::chrono::steady_clock::now();
     std::map<std::string, std::vector<cv::Mat>> parts;
     double cash = 0, account = 0;
-    for (const auto& f : service.fields) {
+    for (const auto& f : t.fields) {
       if (f.type == "checkbox") {
         const double ratio = inkRatio(page, f.box, 3);
         if (f.name == "terms_cash") cash = ratio;
         if (f.name == "terms_account") account = ratio;
         continue;
       }
-      const cv::Vec2i slack = f.box.y < service.frame[0].y ? service.slackHeader : service.slackTable;
+      const cv::Vec2i slack = f.box.y < t.frame[0].y ? t.slackHeader : t.slackTable;
       auto cut = cropBox(page, f, slack);
       if (cut.empty()) {
         r.blanks++;
@@ -314,7 +342,7 @@ struct Scanner::Impl {
     };
     std::vector<std::string> types;
     std::map<std::string, std::vector<Piece>> byType;
-    for (const auto& f : service.fields) {
+    for (const auto& f : t.fields) {
       const auto it = parts.find(f.name);
       if (it == parts.end()) continue;
       if (byType.find(f.type) == byType.end()) types.push_back(f.type);
@@ -361,7 +389,7 @@ struct Scanner::Impl {
         }
       }
     }
-    // The amount in words takes 2 lines on this form: one reading, joined by a space, dropped when empty.
+    // The Service Invoice's amount in words takes 2 lines: one reading, joined by a space, dropped when empty.
     {
       std::string text;
       float conf = std::numeric_limits<float>::infinity();
@@ -380,7 +408,7 @@ struct Scanner::Impl {
     }
     r.timing.readMs = msSince(t2);
 
-    for (const auto& f : service.fields) {
+    for (const auto& f : t.fields) {
       if (f.type == "checkbox" || f.name == "amount_words2") continue;
       const auto it = raw.find(f.name);
       if (it == raw.end()) continue;
@@ -404,7 +432,7 @@ struct Scanner::Impl {
       }
       r.reads.push_back(std::move(b));
     }
-    if (!outDir.empty()) r.pageFile = writePage(page(service.paper), outDir);
+    if (!outDir.empty()) r.pageFile = writePage(page(t.paper), outDir);
   }
 };
 
@@ -429,8 +457,8 @@ ScanResult Scanner::scanImage(const cv::Mat& bgr, const std::string& outDir) {
   cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
   if (auto H = findMarkers(gray, impl_->form)) {
     impl_->readSales(bgr, *H, outDir, t0, r);
-  } else if (auto found = impl_->aligner.find(gray, true)) {  // no corner squares: maybe the Service Invoice
-    impl_->readService(bgr, *found, outDir, t0, r);
+  } else if (auto match = impl_->findFrame(gray, true)) {  // no corner squares: maybe a frame form
+    impl_->readFrameForm(*match->form, bgr, match->found, outDir, t0, r);
   } else {
     r.timing.alignMs = msSince(t0);
   }
@@ -460,12 +488,13 @@ std::optional<FrameDetection> Scanner::detectFrame(const cv::Mat& gray) const {
     return detection("sales_invoice", *H, {{0, 0}, {w, 0}, {w, h}, {0, h}}, cv::Size(PAGE_W, PAGE_H),
                      quality::SALES_LIVE_MIN);
   }
-  if (auto found = im.aligner.find(gray, false)) {  // the live outline skips the corner refit
-    const cv::Rect& p = im.service.paper;
+  if (auto match = im.findFrame(gray, false)) {  // the live outline skips the corner refit
+    const ServiceTemplate& t = match->form->tmpl;
+    const cv::Rect& p = t.paper;
     const auto x0 = static_cast<float>(p.x), y0 = static_cast<float>(p.y);
     const auto x1 = static_cast<float>(p.x + p.width), y1 = static_cast<float>(p.y + p.height);
-    return detection("service_invoice", cv::Mat(found->H), {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}, im.service.page,
-                     quality::SERVICE_LIVE_MIN);
+    return detection(t.name, cv::Mat(match->found.H), {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}, t.page,
+                     match->form->liveMin);
   }
   return std::nullopt;
 }

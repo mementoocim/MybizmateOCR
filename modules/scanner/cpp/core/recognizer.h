@@ -30,7 +30,7 @@ class Recognizer {
   Recognizer& operator=(const Recognizer&) = delete;
 
   // Reads BGR crops, limited to the characters a box of this type allows: printed_digits, date, tin, amount,
-  // number or text. Results are in the crops' order.
+  // number, text, digits or code. Results are in the crops' order.
   std::vector<Reading> recognize(const std::vector<cv::Mat>& bgrCrops, const std::string& type, int nAlts);
 
   // "<blank>" + the dictionary + " ".

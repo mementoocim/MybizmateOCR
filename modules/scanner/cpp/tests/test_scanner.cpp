@@ -23,7 +23,8 @@ const std::vector<std::string> kSamples = {"inv_0001", "inv_0007", "inv_0011", "
 mbm::Scanner& scanner() {
   static mbm::Scanner s(mbm::Assets{readBytes(assetsDir() + "/inference_latin.onnx"), readText(assetsDir() + "/dict.txt"),
                                     readText(assetsDir() + "/field_map.json"), readBytes(assetsDir() + "/form_small.png"),
-                                    readText(assetsDir() + "/service_invoice.json"), 4});
+                                    readText(assetsDir() + "/service_invoice.json"),
+                                    readText(assetsDir() + "/bir_2307.json"), 4});
   return s;
 }
 

@@ -36,6 +36,14 @@ void throwJava(JNIEnv* env, const char* className, const char* message) {
   env->ThrowNew(env->FindClass(className), message);
 }
 
+// detectFrame's number for a form (AutoCapture.kt's detectionOf reads it back).
+float formCode(const std::string& form) {
+  if (form == "sales_invoice") return 0;
+  if (form == "service_invoice") return 1;
+  if (form == "bir_2307") return 2;
+  throw std::logic_error("detectFrame has no number for the form " + form);
+}
+
 }  // namespace
 
 extern "C" JNIEXPORT jstring JNICALL Java_expo_modules_scanner_NativeScanner_coreInfo(JNIEnv* env, jobject) {
@@ -45,11 +53,12 @@ extern "C" JNIEXPORT jstring JNICALL Java_expo_modules_scanner_NativeScanner_cor
 extern "C" JNIEXPORT jlong JNICALL Java_expo_modules_scanner_NativeScanner_create(JNIEnv* env, jobject, jbyteArray model,
                                                                                   jstring dict, jstring fieldMap,
                                                                                   jbyteArray formPng,
-                                                                                  jstring serviceJson, jint threads) {
+                                                                                  jstring serviceJson,
+                                                                                  jstring bir2307Json, jint threads) {
   try {
     auto* scanner = new mbm::Scanner(mbm::Assets{toBytes(env, model), toString(env, dict), toString(env, fieldMap),
                                                  toBytes(env, formPng), toString(env, serviceJson),
-                                                 static_cast<int>(threads)});
+                                                 toString(env, bir2307Json), static_cast<int>(threads)});
     return reinterpret_cast<jlong>(scanner);
   } catch (const std::exception& e) {
     throwJava(env, "java/lang/RuntimeException", e.what());
@@ -72,8 +81,8 @@ extern "C" JNIEXPORT jstring JNICALL Java_expo_modules_scanner_NativeScanner_sca
   return nullptr;
 }
 
-// One camera frame's grey plane (a direct ByteBuffer). Returns [form (0 sales, 1 service), the outline's tl, tr, br, bl
-// as x, y, sharpness, sharpMin], or null when no form is in view.
+// One camera frame's grey plane (a direct ByteBuffer). Returns [form (0 sales, 1 service, 2 BIR 2307), the outline's tl,
+// tr, br, bl as x, y, sharpness, sharpMin], or null when no form is in view.
 extern "C" JNIEXPORT jfloatArray JNICALL Java_expo_modules_scanner_NativeScanner_detectFrame(
     JNIEnv* env, jobject, jlong handle, jobject yPlane, jint width, jint height, jint rowStride, jint rotation) {
   try {
@@ -86,7 +95,7 @@ extern "C" JNIEXPORT jfloatArray JNICALL Java_expo_modules_scanner_NativeScanner
     const auto d = reinterpret_cast<const mbm::Scanner*>(handle)->detectFrame(gray);
     if (!d) return nullptr;
     float out[11];
-    out[0] = d->form == "sales_invoice" ? 0.0f : 1.0f;
+    out[0] = formCode(d->form);
     for (int k = 0; k < 4; k++) {
       out[1 + 2 * k] = d->outline[k].x;
       out[2 + 2 * k] = d->outline[k].y;

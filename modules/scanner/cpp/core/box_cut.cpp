@@ -16,6 +16,12 @@ namespace {
 
 constexpr int BRIDGE = 12;  // px: pen on both sides of a rule, within this distance, means a stroke crosses it
 constexpr int PAD = 6;
+// A comb's tick: the short line standing on a comb box's bottom rule between two digit cells, as measured on the
+// 2307's photos and PDF pages once that rule is erased (174 ticks). A typed digit there is 10 px wide or more, at least
+// 0.52 of the box's height, and 7 px or more above the rule.
+constexpr int TICK_W = 5;         // px: at most this wide (2-4 measured)
+constexpr double TICK_H = 0.5;    // of the box's height: at most this tall (0.28-0.35 measured)
+constexpr int TICK_FOOT = 4;      // px: its foot within this of a printed horizontal rule's ink (0 measured)
 
 // _rules: the printed rules' ink in a box, horizontal and vertical (0/1). The horizontal kernel is short so a rule
 // that bows a few pixels across the page still counts as one.
@@ -32,6 +38,35 @@ void findRules(const cv::Mat& ink, int coreW, int coreH, cv::Mat& hz, cv::Mat& v
   cv::dilate(vt, vt, k3);
   cv::bitwise_and(hz, ink, hz);
   cv::bitwise_and(vt, ink, vt);
+}
+
+// A comb box's ticks (0/1): the strokes in its pen (its ink less the rules) that are thin, short and stand on a printed
+// horizontal rule. There is no Python reference: the 2307 is new.
+cv::Mat combTicks(const cv::Mat& pen, const cv::Mat& hz, int coreH) {
+  cv::Mat labels, stats, cents;
+  const int n = cv::connectedComponentsWithStats(pen, labels, stats, cents, 8, CV_32S);
+  cv::Mat foot;  // a horizontal rule's ink and the TICK_FOOT px above it
+  cv::dilate(hz, foot, cv::Mat::ones(TICK_FOOT + 1, 1, CV_8U), cv::Point(0, 0));
+  std::vector<char> standing(n, 0);
+  for (int y = 0; y < pen.rows; y++) {
+    const int* l = labels.ptr<int>(y);
+    const uint8_t* f = foot.ptr<uint8_t>(y);
+    for (int x = 0; x < pen.cols; x++) {
+      if (l[x] != 0 && f[x] != 0) standing[l[x]] = 1;
+    }
+  }
+  std::vector<char> tick(n, 0);
+  for (int i = 1; i < n; i++) {
+    tick[i] = standing[i] && stats.at<int>(i, cv::CC_STAT_WIDTH) <= TICK_W &&
+              stats.at<int>(i, cv::CC_STAT_HEIGHT) <= TICK_H * coreH;
+  }
+  cv::Mat ticks = cv::Mat::zeros(pen.size(), CV_8U);
+  for (int y = 0; y < pen.rows; y++) {
+    const int* l = labels.ptr<int>(y);
+    uint8_t* t = ticks.ptr<uint8_t>(y);
+    for (int x = 0; x < pen.cols; x++) t[x] = tick[l[x]] ? 1 : 0;
+  }
+  return ticks;
 }
 
 // _reach: 1 where the mask has ink within BRIDGE px up (dy -1), down (dy 1), left (dx -1) or right (dx 1), give or
@@ -146,6 +181,13 @@ std::vector<cv::Mat> cropBox(const cv::Mat& page, const ServiceField& field, cv:
   cv::bitwise_or(hz, vt, ruled);
   cv::subtract(cv::Scalar(1), ruled, notRuled);
   cv::bitwise_and(ink, notRuled, pen);
+  if (field.comb) {
+    // A comb's ticks are erased with the rules, and never kept as a crossing (one stands between two digits). A TIN's
+    // grey dash cells need nothing more: each is solid ink as tall as the box, so the vertical rules take it whole.
+    const cv::Mat ticks = combTicks(pen, hz, coreH);
+    cv::bitwise_or(ruled, ticks, ruled);
+    pen.setTo(0, ticks);
+  }
   cv::Mat across, along, bridge;  // pen on both sides of a rule: a stroke crossing it
   cv::bitwise_and(hz, reach(pen, -1, 0), across);
   cv::bitwise_and(across, reach(pen, 1, 0), across);

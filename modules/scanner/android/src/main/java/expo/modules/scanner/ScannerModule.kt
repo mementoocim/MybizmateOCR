@@ -59,6 +59,7 @@ class ScannerModule : Module() {
         String(bytes("field_map.json"), Charsets.UTF_8),
         bytes("form_small.png"),
         String(bytes("service_invoice.json"), Charsets.UTF_8),
+        String(bytes("bir_2307.json"), Charsets.UTF_8),
         4,
       )
     },

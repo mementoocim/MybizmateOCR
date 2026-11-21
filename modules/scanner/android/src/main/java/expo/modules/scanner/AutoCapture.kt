@@ -9,6 +9,13 @@ internal class Detection(val form: String, val outline: FloatArray, val sharpnes
     get() = sharpness >= sharpMin
 }
 
+/** The forms NativeScanner.detectFrame gives by number, in its order (scanner_jni.cpp). */
+private val FRAME_FORMS = listOf("sales_invoice", "service_invoice", "bir_2307")
+
+/** NativeScanner.detectFrame's result, [form, the outline's tl, tr, br, bl as x, y, sharpness, sharpMin], as a Detection. */
+internal fun detectionOf(f: FloatArray) =
+  Detection(FRAME_FORMS[f[0].toInt()], f.copyOfRange(1, 9), f[9].toDouble(), f[10].toDouble())
+
 internal enum class CameraStatus { LOOKING, HOLDING, BLURRY, FOUND, CAPTURE }
 
 /** What one frame means: the status to show, how settled the outline is (0..1), and whether to take the photo now. */

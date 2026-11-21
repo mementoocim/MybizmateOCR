@@ -19,7 +19,8 @@ const mbm::Scanner& liveScanner() {
   static const mbm::Scanner s(mbm::Assets{readBytes(assetsDir() + "/inference_latin.onnx"),
                                           readText(assetsDir() + "/dict.txt"), readText(assetsDir() + "/field_map.json"),
                                           readBytes(assetsDir() + "/form_small.png"),
-                                          readText(assetsDir() + "/service_invoice.json"), 2});
+                                          readText(assetsDir() + "/service_invoice.json"),
+                                          readText(assetsDir() + "/bir_2307.json"), 2});
   return s;
 }
 

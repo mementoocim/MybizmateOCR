@@ -759,6 +759,7 @@
    ]
   ]
  },
+ "max_lines": 60,
  "slack": {
   "header": [
    16,
@@ -785,7 +786,8 @@
     339
    ],
    "type": "digits",
-   "label": "Period from"
+   "label": "Period from",
+   "comb": true
   },
   {
    "name": "period_to",
@@ -796,7 +798,8 @@
     339
    ],
    "type": "digits",
-   "label": "Period to"
+   "label": "Period to",
+   "comb": true
   },
   {
    "name": "payee_tin",
@@ -807,7 +810,8 @@
     424
    ],
    "type": "tin",
-   "label": "Payee's TIN"
+   "label": "Payee's TIN",
+   "comb": true
   },
   {
    "name": "payee_name",
@@ -840,7 +844,8 @@
     579
    ],
    "type": "digits",
-   "label": "Payee's ZIP code"
+   "label": "Payee's ZIP code",
+   "comb": true
   },
   {
    "name": "payor_tin",
@@ -851,7 +856,8 @@
     745
    ],
    "type": "tin",
-   "label": "Payor's TIN"
+   "label": "Payor's TIN",
+   "comb": true
   },
   {
    "name": "payor_name",
@@ -884,7 +890,8 @@
     899
    ],
    "type": "digits",
-   "label": "Payor's ZIP code"
+   "label": "Payor's ZIP code",
+   "comb": true
   },
   {
    "name": "ewt1_payment",

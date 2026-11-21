@@ -11,13 +11,14 @@ internal object NativeScanner {
   /** {"opencv": "...", "onnxruntime": "..."}: the libraries the core was built with. */
   external fun coreInfo(): String
 
-  /** Loads the model and both forms once; returns a handle for scanPhoto, detectFrame and destroy. */
+  /** Loads the model and the three forms once; returns a handle for scanPhoto, detectFrame and destroy. */
   external fun create(
     model: ByteArray,
     dict: String,
     fieldMap: String,
     formPng: ByteArray,
     serviceJson: String,
+    bir2307Json: String,
     threads: Int,
   ): Long
 
@@ -29,8 +30,8 @@ internal object NativeScanner {
 
   /**
    * One camera frame's grey plane (a direct buffer, rows rowStride bytes apart, turned rotation degrees clockwise from
-   * upright). Returns [form (0 sales, 1 service), tl, tr, br, bl as x, y in the upright frame, sharpness, sharpMin], or
-   * null when no form is in view. Never waits for a scan.
+   * upright). Returns [form (0 sales, 1 service, 2 BIR 2307), tl, tr, br, bl as x, y in the upright frame, sharpness,
+   * sharpMin] (see detectionOf), or null when no form is in view. Never waits for a scan.
    */
   external fun detectFrame(handle: Long, y: ByteBuffer, width: Int, height: Int, rowStride: Int, rotation: Int): FloatArray?
 
