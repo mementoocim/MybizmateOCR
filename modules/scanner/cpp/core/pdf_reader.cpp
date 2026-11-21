@@ -159,9 +159,17 @@ PdfPage renderPdf(const std::string& path) {
     }
     double left = 0, right = 0, bottom = 0, top = 0;
     if (!shown || !FPDFText_GetCharBox(text.get(), i, &left, &right, &bottom, &top)) continue;
-    // Two opposite corners make the box (on a turned page they swap places).
-    out.chars.push_back({static_cast<char32_t>(FPDFText_GetUnicode(text.get(), i)),
-                         cv::Rect2f(onRender(page.get(), size, left, top), onRender(page.get(), size, right, bottom))});
+    // Two opposite corners make a box (on a turned page they swap places).
+    const cv::Rect2f glyph(onRender(page.get(), size, left, top), onRender(page.get(), size, right, bottom));
+    // The loose box, mapped as the glyph's box is. When it has no area (pdfium gives a character it adds its empty
+    // glyph box), the glyph's box stands in.
+    cv::Rect2f loose = glyph;
+    FS_RECTF l;
+    if (FPDFText_GetLooseCharBox(text.get(), i, &l)) {
+      const cv::Rect2f r(onRender(page.get(), size, l.left, l.top), onRender(page.get(), size, l.right, l.bottom));
+      if (r.width > 0 && r.height > 0) loose = r;
+    }
+    out.chars.push_back({static_cast<char32_t>(FPDFText_GetUnicode(text.get(), i)), glyph, loose});
   }
   out.picture = std::none_of(out.chars.begin(), out.chars.end(), [](const PdfChar& c) { return inks(c.ch); });
   return out;

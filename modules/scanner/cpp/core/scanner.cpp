@@ -188,10 +188,11 @@ std::vector<std::string> textInBoxes(const std::vector<PdfChar>& chars, const cv
     }
   }
 
-  // Each character goes to the box holding its centre: the one it is deepest in, should two (boxes that share an edge).
+  // Each character goes to the box holding its loose box's centre (its line's middle, not its glyph's: a caption's
+  // comma hangs under its line): the box it is deepest in, should two (boxes that share an edge).
   std::vector<std::vector<char32_t>> held(boxes.size());
   for (const auto& c : chars) {
-    const cv::Point2f centre(c.box.x + c.box.width / 2, c.box.y + c.box.height / 2);
+    const cv::Point2f centre(c.loose.x + c.loose.width / 2, c.loose.y + c.loose.height / 2);
     int best = -1;
     double depth = 0;
     for (size_t k = 0; k < quads.size(); k++) {
@@ -225,6 +226,23 @@ std::vector<std::string> textInBoxes(const std::vector<PdfChar>& chars, const cv
     }
     out.push_back(std::move(text));
   }
+  return out;
+}
+
+std::optional<BoxReading> joinLines(const std::vector<const BoxReading*>& lines) {
+  BoxReading out;
+  out.conf = std::numeric_limits<float>::infinity();
+  out.fromText = true;
+  bool any = false;
+  for (const BoxReading* line : lines) {
+    if (!line) continue;
+    if (any) out.text += " ";
+    out.text += line->text;
+    out.conf = std::min(out.conf, line->conf);
+    out.fromText = out.fromText && line->fromText;
+    any = true;
+  }
+  if (out.text.empty()) return std::nullopt;
   return out;
 }
 
@@ -490,13 +508,7 @@ struct Scanner::Impl {
       const ServiceField* field;
       const cv::Mat* crop;
     };
-    struct Raw {
-      std::string text;
-      float conf = 0;
-      std::vector<std::string> alts;
-      bool fromText = false;
-    };
-    std::map<std::string, Raw> raw;
+    std::map<std::string, BoxReading> raw;
     std::vector<std::string> types;
     std::map<std::string, std::vector<Piece>> byType;
     for (const auto& f : t.fields) {
@@ -545,24 +557,17 @@ struct Scanner::Impl {
         }
       }
     }
-    // The Service Invoice's amount in words takes 2 lines: one reading, joined by a space, dropped when empty. It is
-    // the PDF's own text only when both lines are.
+    // The Service Invoice's amount in words takes 2 lines: one reading (joinLines), dropped when empty.
     {
-      std::string text;
-      float conf = std::numeric_limits<float>::infinity();
-      bool any = false, fromText = true;
+      std::vector<const BoxReading*> lines;
       for (const char* name : {"amount_words", "amount_words2"}) {
         const auto it = raw.find(name);
-        if (it == raw.end()) continue;
-        if (any) text += " ";
-        text += it->second.text;
-        conf = std::min(conf, it->second.conf);
-        fromText = fromText && it->second.fromText;
-        any = true;
+        lines.push_back(it == raw.end() ? nullptr : &it->second);
       }
+      std::optional<BoxReading> words = joinLines(lines);
       raw.erase("amount_words");
       raw.erase("amount_words2");
-      if (!text.empty()) raw["amount_words"] = {text, conf, {}, fromText};
+      if (words) raw["amount_words"] = std::move(*words);
     }
     r.timing.readMs = msSince(t2);
 

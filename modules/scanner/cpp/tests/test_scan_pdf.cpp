@@ -20,6 +20,7 @@
 #include "core/pdf_reader.h"
 #include "core/result_json.h"
 #include "core/scanner.h"
+#include "core/service_template.h"
 
 namespace {
 
@@ -67,9 +68,8 @@ void checkReadFromText(const mbm::ScanResult& r, const nlohmann::json& values) {
   }
 }
 
-// A character drawn at a place on the page, as renderPdf gives it on a render that H (render -> page) maps onto the
-// page: the box it covers on the render.
-mbm::PdfChar onRender(char32_t ch, const cv::Rect2f& onPage, const cv::Matx33d& H) {
+// A box on the page, as it lies on a render that H (render -> page) maps onto the page.
+cv::Rect2f onRender(const cv::Rect2f& onPage, const cv::Matx33d& H) {
   const std::vector<cv::Point2f> corners = {onPage.tl(), {onPage.x + onPage.width, onPage.y}, onPage.br(),
                                             {onPage.x, onPage.y + onPage.height}};
   std::vector<cv::Point2f> q;
@@ -81,19 +81,61 @@ mbm::PdfChar onRender(char32_t ch, const cv::Rect2f& onPage, const cv::Matx33d& 
     x1 = std::max(x1, p.x);
     y1 = std::max(y1, p.y);
   }
-  return {ch, cv::Rect2f(x0, y0, x1 - x0, y1 - y0)};
+  return {x0, y0, x1 - x0, y1 - y0};
 }
 
-// A run of text on the page: characters 20 x 30 px from (x, y), then the line break pdfium adds after a run (an empty
-// box just after its last character).
+// A run of text on the page as renderPdf gives it on the render: characters in 20 x 30 px cells from (x, y), each its
+// glyph's box and its loose box alike, then the line break pdfium adds after a run (an empty box just after its last
+// character).
 std::vector<mbm::PdfChar> run(const std::u32string& text, float x, float y, const cv::Matx33d& H) {
   std::vector<mbm::PdfChar> out;
   for (char32_t c : text) {
-    out.push_back(onRender(c, {x, y, 20, 30}, H));
+    const cv::Rect2f cell = onRender({x, y, 20, 30}, H);
+    out.push_back({c, cell, cell});
     x += 20;
   }
-  for (char32_t c : {U'\r', U'\n'}) out.push_back(onRender(c, {x, y + 30, 0, 0}, H));
+  for (char32_t c : {U'\r', U'\n'}) {
+    const cv::Rect2f none = onRender({x, y + 30, 0, 0}, H);
+    out.push_back({c, none, none});
+  }
   return out;
+}
+
+// A line of text on the page in 20 px type, a 20 px advance per character, on its baseline: each character's glyph box
+// as its shape makes it (capitals, small letters, descenders, a comma hanging under the baseline), and its loose box,
+// the font's ascent (15.6 px) to its descent (4.4 px) for every character alike. Then pdfium's line break.
+std::vector<mbm::PdfChar> line(const std::u32string& text, float x, float baseline, const cv::Matx33d& H) {
+  const std::u32string descenders = U"gjpqy", tall = U"ABCDEFGHIJKLMNOPQRSTUVWXYZbdfhklt0123456789";
+  std::vector<mbm::PdfChar> out;
+  for (char32_t c : text) {
+    float top = baseline - 10.4f, bottom = baseline;  // a small letter
+    if (tall.find(c) != std::u32string::npos) top = baseline - 14.4f;
+    if (descenders.find(c) != std::u32string::npos) bottom = baseline + 4.2f;
+    if (c == U'(' || c == U')') {
+      top = baseline - 15;
+      bottom = baseline + 4;
+    }
+    if (c == U',') {
+      top = baseline - 2;
+      bottom = baseline + 8;
+    }
+    const bool space = c == U' ';
+    const cv::Rect2f glyph = space ? cv::Rect2f(x, baseline, 0, 0) : cv::Rect2f(x + 2, top, 16, bottom - top);
+    out.push_back({c, onRender(glyph, H), onRender({x, baseline - 15.6f, 20, 20}, H)});
+    x += 20;
+  }
+  for (char32_t c : {U'\r', U'\n'}) {
+    const cv::Rect2f none = onRender({x, baseline, 0, 0}, H);
+    out.push_back({c, none, none});
+  }
+  return out;
+}
+
+// The render seen at a slant: H maps it onto a page of this size, as a found form's homography does.
+cv::Matx33d slanted(float pageW, float pageH) {
+  const std::vector<cv::Point2f> render = {{60, 40}, {pageW * 0.9f, 90}, {pageW * 0.88f, pageH * 0.92f}, {20, pageH * 0.89f}};
+  const std::vector<cv::Point2f> page = {{0, 0}, {pageW, 0}, {pageW, pageH}, {0, pageH}};
+  return cv::getPerspectiveTransform(render, page);
 }
 
 void writeFile(const std::string& path, const std::string& bytes) {
@@ -141,10 +183,7 @@ TEST_CASE("a text 2307 reads exactly from its text") {
 }
 
 TEST_CASE("text goes to the box that holds its centre") {
-  // The render seen at a slant: H maps it onto the form's page, as a found form's homography does.
-  const std::vector<cv::Point2f> render = {{60, 40}, {1580, 90}, {1540, 2390}, {20, 2310}};
-  const std::vector<cv::Point2f> page = {{0, 0}, {1700, 0}, {1700, 2600}, {0, 2600}};
-  const cv::Matx33d H = cv::getPerspectiveTransform(render, page);
+  const cv::Matx33d H = slanted(1700, 2600);  // a 2307's page
   const std::vector<mbm::TextBox> boxes = {
       {cv::Rect(611, 1014, 200, 38), "amount"},  // a 2307 row's 1st month
       {cv::Rect(811, 1014, 206, 38), "amount"},  // its 2nd month, which shares that edge
@@ -164,6 +203,78 @@ TEST_CASE("text goes to the box that holds its centre") {
   CHECK(texts[0] == "1,500.00");
   CHECK(texts[1] == "250.00");
   CHECK(texts[2] == "Dela Cruz, Juan");
+}
+
+TEST_CASE("a caption's comma stays out of the box below it, though its glyph hangs into the box") {
+  // A character goes by its loose box's centre: its line's middle, whatever its glyph's shape. A caption set close
+  // above a box (a 2307's "Last Name, First Name, ...") has commas whose glyphs hang under its baseline, into the box.
+  const cv::Matx33d H = slanted(1700, 2600);
+  const std::vector<mbm::TextBox> boxes = {{cv::Rect(94, 456, 1551, 44), "text"}};  // the payee's name
+  std::vector<mbm::PdfChar> chars;
+  const auto add = [&chars](const std::vector<mbm::PdfChar>& more) { chars.insert(chars.end(), more.begin(), more.end()); };
+  add(line(U"Name (Last, First)", 100, 455, H));  // its baseline 1 px over the box: its comma's glyph is y 453-463
+  add(line(U"Dela Cruz, Juan", 110, 486, H));      // the name on its line in the box, its comma's glyph too
+  const std::vector<std::string> texts = mbm::textInBoxes(chars, H, boxes);
+  REQUIRE(texts.size() == 1);
+  CHECK(texts[0] == "Dela Cruz, Juan");
+  // Placed by its glyph's own box instead, the caption's comma would go in: the case the loose box is for.
+  std::vector<mbm::PdfChar> byGlyph = chars;
+  for (auto& c : byGlyph) c.loose = c.box;
+  CHECK(mbm::textInBoxes(byGlyph, H, boxes).at(0) == ",Dela Cruz, Juan");
+}
+
+TEST_CASE("the amount in words over two lines: one reading, the PDF's own text only when both lines are") {
+  // The Service Invoice writes its amount in words over two boxes, a line each: amount_words, then amount_words2. From a
+  // PDF's text each line is its box's text, and joinLines makes the two the one reading the scan gives.
+  const auto t = mbm::ServiceTemplate::parse(readText(assetsDir() + "/service_invoice.json"));
+  std::vector<mbm::TextBox> boxes;
+  for (const char* name : {"amount_words", "amount_words2"}) {
+    for (const auto& f : t.fields) {
+      if (f.name == name) boxes.push_back({f.box, f.type});
+    }
+  }
+  REQUIRE(boxes.size() == 2);
+  const cv::Matx33d H = slanted(1160, 1860);  // the Service Invoice's page
+  std::vector<mbm::PdfChar> chars;
+  const auto add = [&chars](const std::vector<mbm::PdfChar>& more) { chars.insert(chars.end(), more.begin(), more.end()); };
+  add(run(U"Twenty-four thousand three hundred", 420, 735, H));  // in amount_words (x 412-1140, y 722-778)
+  add(run(U"seventy-seven pesos only", 80, 795, H));             // in amount_words2 (x 72-700, y 782-838)
+  const std::vector<std::string> texts = mbm::textInBoxes(chars, H, boxes);
+  REQUIRE(texts.size() == 2);
+  CHECK(texts[0] == "Twenty-four thousand three hundred");
+  CHECK(texts[1] == "seventy-seven pesos only");
+  const std::string words = "Twenty-four thousand three hundred seventy-seven pesos only";
+
+  // Each line as the scan takes a box's PDF text: exact, conf 1, no backup readings. Both lines so: the PDF's own.
+  const mbm::BoxReading first{texts[0], 1.0f, {}, true}, second{texts[1], 1.0f, {}, true};
+  const auto both = mbm::joinLines({&first, &second});
+  REQUIRE(both.has_value());
+  CHECK(both->text == words);
+  CHECK(both->fromText);
+  CHECK(both->conf == 1.0f);
+  CHECK(both->alts.empty());
+
+  // One line from the text and the other read by the model, either way round: not the PDF's own, the lower conf.
+  const mbm::BoxReading model1{texts[0], 0.91f, {"Twenty-four thousand three hundrcd"}, false};
+  const mbm::BoxReading model2{texts[1], 0.93f, {"seventy-seven pesos 0nly"}, false};
+  const auto textThenModel = mbm::joinLines({&first, &model2});
+  REQUIRE(textThenModel.has_value());
+  CHECK(textThenModel->text == words);
+  CHECK_FALSE(textThenModel->fromText);
+  CHECK(textThenModel->conf == 0.93f);
+  CHECK(textThenModel->alts.empty());
+  const auto modelThenText = mbm::joinLines({&model1, &second});
+  REQUIRE(modelThenText.has_value());
+  CHECK(modelThenText->text == words);
+  CHECK_FALSE(modelThenText->fromText);
+  CHECK(modelThenText->conf == 0.91f);
+
+  // One line only (the other box blank): its own reading, the PDF's own text. Neither line: no reading.
+  const auto one = mbm::joinLines({&first, nullptr});
+  REQUIRE(one.has_value());
+  CHECK(one->text == texts[0]);
+  CHECK(one->fromText);
+  CHECK_FALSE(mbm::joinLines({nullptr, nullptr}).has_value());
 }
 
 TEST_CASE("each box keeps only what its type allows from the PDF's text") {

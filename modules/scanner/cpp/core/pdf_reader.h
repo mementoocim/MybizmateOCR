@@ -16,11 +16,14 @@ namespace mbm {
 constexpr std::uintmax_t MAX_PDF_BYTES = 20u * 1024 * 1024;  // a bigger file is refused: "too_big"
 constexpr float MAX_PDF_PAGE_PT = 2000;  // a page 1 whose long side is longer (in points) is refused: "page_too_big"
 
-// One character of page 1's text and its box on the render, in pixels. A character pdfium adds itself (a space or a
-// line break between two runs of text) has an empty box, just after the character before it.
+// One character of page 1's text and its boxes on the render, in pixels. A character pdfium adds itself (a space or a
+// line break between two runs of text) has an empty box of both kinds, just after the character before it.
 struct PdfChar {
   char32_t ch;
-  cv::Rect2f box;
+  cv::Rect2f box;    // its glyph's own box (the ink it draws)
+  cv::Rect2f loose;  // its loose box: its advance along the line, the font's ascent to its descent across it
+                     // (FPDFText_GetLooseCharBox), so its centre is the line's middle whatever the glyph; its glyph's
+                     // box when pdfium gives none with an area (a character pdfium adds)
 };
 
 struct PdfPage {

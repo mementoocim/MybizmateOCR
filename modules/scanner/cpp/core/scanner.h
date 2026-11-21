@@ -103,9 +103,11 @@ struct TextBox {
 
 // Each box's text from a PDF page: renderPdf's characters, on the render that renderToPage (the form's homography, as
 // found in it) maps onto the form's page.
-// - A character belongs to the box whose rect, mapped onto the render with the homography's inverse, holds the
-//   character's centre (the one it lies deepest in, should two). So a character straddling a box's edge goes where
-//   most of it is, and a neighbour's or a printed caption's character close by stays out.
+// - A character belongs to the box whose rect, mapped onto the render with the homography's inverse, holds the centre
+//   of its loose box (the one it lies deepest in, should two). That centre is the middle of its line whatever its
+//   glyph: a comma's glyph hangs under the line, so a caption's commas would otherwise reach the box printed under it.
+//   So a character straddling a box's edge goes where most of it is, and a neighbour's or a printed caption's
+//   character close by stays out.
 // - A box's characters are joined in pdfium's order, keeping only what its type allows: 0-9 for digits, tin and
 //   printed_digits (a 2307's comb boxes come as one digit per cell, and its TIN boxes also hold the form's own printed
 //   "-"); A-Z and 0-9 for code; 0-9, "," and "." for amount; a number's and a date's characters as the model reads
@@ -115,6 +117,21 @@ struct TextBox {
 // An empty text: the box holds nothing of the page's text that its type keeps.
 std::vector<std::string> textInBoxes(const std::vector<PdfChar>& chars, const cv::Matx33d& renderToPage,
                                      const std::vector<TextBox>& boxes);
+
+// A frame form's box as read, before it becomes a BoxRead: the model's reading, or the PDF's own text (conf 1, no
+// backup readings, fromText).
+struct BoxReading {
+  std::string text;
+  float conf = 0;
+  std::vector<std::string> alts;
+  bool fromText = false;
+};
+
+// One reading written over several boxes, a line each (the Service Invoice's amount in words: amount_words, then
+// amount_words2), given the lines in order, null for a line not read (its box blank): the lines read, joined by a
+// space, with the lowest conf and no backup readings. It is the PDF's own text only when every line read is. None when
+// no line was read, or when that leaves no text.
+std::optional<BoxReading> joinLines(const std::vector<const BoxReading*>& lines);
 
 class Scanner {
  public:

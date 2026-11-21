@@ -288,6 +288,56 @@ TEST_CASE("a PDF's characters sit on their own ink, a form field's and a turned 
   }
 }
 
+TEST_CASE("each character's loose box spans its line, the font's ascent to its descent, on a turned page too") {
+  // FPDFText_GetLooseCharBox: across the line, the font's ascent to its descent; along it, the character's advance. So
+  // the letters of a line share one band whatever their glyphs, and the band holds the baseline with more of it above
+  // than below. A comma's glyph hangs low, near the baseline; its loose box's centre is the line's middle. The loose box
+  // is turned with the page, as box is.
+  for (int rotate : {0, 90, 180, 270}) {
+    CAPTURE(rotate);
+    MadePdf made;
+    made.rotate = rotate;
+    made.text = "Ag, yo";
+    const std::string file = tmpDir() + "/loose.pdf";
+    writeFile(file, makePdf(made));
+    const auto page = mbm::renderPdf(file);
+    // A box across the line, as an interval that grows toward the font's ascent (up the page, which /Rotate turns), and
+    // along the line.
+    const auto up = [rotate](const cv::Rect2f& r) {
+      switch (rotate) {
+        case 90: return std::make_pair(r.x, r.x + r.width);
+        case 180: return std::make_pair(r.y, r.y + r.height);
+        case 270: return std::make_pair(-(r.x + r.width), -r.x);
+        default: return std::make_pair(-(r.y + r.height), -r.y);
+      }
+    };
+    const auto along = [rotate](const cv::Rect2f& r) {
+      return rotate % 180 == 0 ? std::make_pair(r.x, r.x + r.width) : std::make_pair(r.y, r.y + r.height);
+    };
+    const cv::Rect2f a = boxOf(page, U'A');
+    const float baseline = up(a).first;  // "A" stands on the baseline
+    const auto band = up(page.chars[0].loose);
+    CHECK(band.first < baseline);
+    CHECK(band.second > baseline);
+    CHECK(band.second - baseline > baseline - band.first);  // more ascent than descent
+    CHECK(band.second - band.first > up(a).second - up(a).first);  // taller than a capital's glyph
+    std::vector<std::pair<float, float>> advances;
+    for (const auto& c : page.chars) {
+      if (c.loose.area() == 0) continue;  // a character pdfium adds: no box of either kind
+      CAPTURE(static_cast<int>(c.ch));
+      CHECK(std::abs(up(c.loose).first - band.first) < 0.5);  // one band for the line
+      CHECK(std::abs(up(c.loose).second - band.second) < 0.5);
+      if (c.ch != U' ') CHECK((c.loose & c.box).area() > 0);  // over its own glyph
+      advances.push_back(along(c.loose));
+    }
+    CHECK(advances.size() == 6);
+    std::sort(advances.begin(), advances.end());  // along the line, each advance starts where the one before ends
+    for (size_t i = 1; i < advances.size(); i++) CHECK(std::abs(advances[i].first - advances[i - 1].second) < 0.5);
+    const auto comma = up(boxOf(page, U','));
+    CHECK((comma.first + comma.second) / 2 < (band.first + band.second) / 2 - 15);  // the glyph well under the middle
+  }
+}
+
 TEST_CASE("a PDF page keeps the box it shows when its fields are flattened") {
   // Flattening writes a MediaBox and a CropBox onto the page itself, from the boxes the page holds. A page whose box
   // comes from /Pages (here the 2307's 612 x 936 pt) must not fall back to Letter, and a CropBox of its own reaching past
