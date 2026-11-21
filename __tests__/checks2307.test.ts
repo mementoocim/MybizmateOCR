@@ -220,6 +220,28 @@ test('blank rows are skipped and commas parse', () => {
   expect(words.rows.map((r) => r.row)).toEqual([1, 2]);
 });
 
+test("a dash, a speck or a template's zeros don't make a row", () => {
+  // bir2307_photo_0 has one EWT row and no business-tax rows. A row counts when its ATC has a code, or one of its
+  // amounts isn't zero: Excel's accounting format shows 0 as "-", and a template's formula cells print 0.00.
+  const rowsOf = (cert: Cert2307) => cert.rows.map((r) => `${r.table}${r.row}`);
+  const nothings: Record<string, string>[] = [
+    { ewt2_total: '-', ewt2_tax: '-' },
+    { ewt2_total: '0.00', ewt2_tax: '0.00' },
+    { bt1_total: '-', bt1_tax: '-' },
+    { bt1_total: '0.00', bt1_tax: '0.00' },
+    { ewt3_m1: '.', ewt3_atc: '|' }, // a speck, a rule line
+  ];
+  for (const nothing of nothings) {
+    const cert = check('bir2307_photo_0', nothing);
+    expect([nothing, rowsOf(cert), cert.flags]).toEqual([nothing, ['ewt1'], []]);
+  }
+  // a code makes a row, even with nothing withheld
+  const zero = check('bir2307_photo_0', { ewt2_atc: 'WC158', ewt2_total: '0.00', ewt2_tax: '0.00' });
+  expect([rowsOf(zero), zero.flags]).toEqual([['ewt1', 'ewt2'], []]);
+  const bt = check('bir2307_photo_0', { bt1_atc: 'WV010', bt1_total: '0.00', bt1_tax: '0.00' });
+  expect([rowsOf(bt), bt.flags]).toEqual([['ewt1', 'bt1'], []]);
+});
+
 test('the payor against the customers', () => {
   // bir2307_text_0's payor is the pack's Reyes Sari-Sari Store, TIN 456-789-012-00000
   expect(check('bir2307_text_0').payorMatch).toEqual({ id: 'p-C005', status: 'auto' });

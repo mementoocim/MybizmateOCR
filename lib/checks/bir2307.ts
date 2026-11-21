@@ -79,10 +79,12 @@ function quarterOf(from: string | null, to: string | null): string | null {
   return to === last ? `${y}-Q${(m + 2) / 3}` : null;
 }
 
-/** A row as its boxes say, and its flags; null when none of its amounts or its ATC is written. */
+/** A row as its boxes say, and its flags; null when it has no ATC code and no amount other than zero. */
 function checkRow(raw: Raw, table: Table, row: number): { row: CertRow; flags: string[] } | null {
   const box = (column: string) => raw.boxes[`${table}${row}_${column}`];
-  if (![box('atc'), ...AMOUNTS.map(box)].some((b) => textOf(b) !== '')) return null; // blank, or only words
+  const code = textOf(box('atc')).toUpperCase().replace(/[^A-Z0-9]/g, '') || null;
+  // Words alone don't make a row, nor a dash for nil, a speck, or the zeros a template's formula cells print.
+  if (code === null && !AMOUNTS.some((column) => candidates(box(column)).some((v) => v !== 0))) return null;
   const flags: string[] = [];
   // The months and the total: the first readings that add up, as an invoice row's amount, quantity and price.
   const [m1s, m2s, m3s, totals] = (['m1', 'm2', 'm3', 'total'] as const).map((c) => amountOptions(box(c)));
@@ -106,7 +108,6 @@ function checkRow(raw: Raw, table: Table, row: number): { row: CertRow; flags: s
   }
   const [m1, m2, m3, total] = found;
   // The tax: the total times the ATC's rate, to the centavo give or take 5. A code without a rate isn't checked.
-  const code = textOf(box('atc')).toUpperCase().replace(/[^A-Z0-9]/g, '') || null;
   const atc = code === null ? undefined : ATC.get(code);
   const known = atc !== undefined && atc.table === table; // a business tax's code doesn't go on an income payment
   const rate = known ? atc.rate : null;
