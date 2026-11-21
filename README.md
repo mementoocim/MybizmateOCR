@@ -1,13 +1,15 @@
 # MyBizMate Scan
 
 The MyBizMate Scan app: an Expo (React Native) app that reads handwritten MyBizMate Sales Invoices and Service
-Invoices on the phone, offline. Its scanner is one C++ core (OpenCV 5.1.0 and ONNX Runtime 1.32.0, PP-OCRv6 small
-cut to 98 Latin characters) inside a local Expo module, so Android and iPhone will read a photo the same way.
+Invoices, and BIR Form 2307s, on the phone, offline, from a photo or a PDF. Its scanner is one C++ core (OpenCV 5.1.0,
+ONNX Runtime 1.32.0 with PP-OCRv6 small cut to 98 Latin characters, and pdfium for PDFs) inside a local Expo module,
+so Android and iPhone will read a photo or a PDF the same way.
 
 - Design: `../docs/2026-11-19-expo-scanner-design.md`
 - Plans: milestone 1, `../docs/superpowers/plans/2026-11-19-scanner-m1-core-reads-a-photo.md`; milestone 2,
   `../docs/superpowers/plans/2026-11-20-scanner-m2-camera-and-both-forms.md`; milestone 3,
-  `../docs/superpowers/plans/2026-11-20-scanner-m3-edit-checks-lists-export.md`
+  `../docs/superpowers/plans/2026-11-20-scanner-m3-edit-checks-lists-export.md`; milestone 5,
+  `../docs/superpowers/plans/2026-11-20-scanner-m5-pdf-and-2307.md`
 - MyBizMate's import templates, and which of the scanner's boxes go in which column: `../docs/mybizmate-templates/`
 - The Python reference the core is checked against: `../prototype/benchmark/`
 
@@ -93,6 +95,57 @@ cut to 98 Latin characters) inside a local Expo module, so Android and iPhone wi
   Nothing leaves the phone but the files the person shares. An export is written to the app's cache for the share
   sheet, and the next export replaces it.
 
+### PDF import and BIR Form 2307 (milestone 5)
+
+- **Import PDF** (Home): Android's file picker, for PDFs. Page 1 is read; when there are more pages, the result says
+  "Only page 1 of N was read." The scan is labelled "PDF: <the file's name>", or just "PDF" when the file's app gives
+  no name. A file that is a PDF neither by its name nor by its type gets "Choose a PDF file."
+- **Found like a photo, then read from the text:** page 1 is rendered at the photo pipeline's size, and the form is
+  found and straightened as in a photo, so any faithful copy of the form works, whatever program made the PDF. Each
+  box then takes the PDF's own text inside it (typed text, or a value typed into a fillable PDF's field), exact, with
+  no OCR; the box's sheet says "From the PDF's text". A box with no text is read from the page. The footnote says
+  "Read from the PDF: N boxes from its text, M read from the page." Typed values are checked like written ones.
+- **A picture PDF** (a scan, or a photo saved as a PDF) has no visible text. It is read like a photo, photo checks
+  included, and says "The PDF is a picture: read like a photo." The hidden text a scanner app lays over its scans is
+  that app's own OCR, so it is ignored.
+- **Refused, each with its message** (a toast, and no scan is added):
+  - over 20 MB (20 × 1024 × 1024 bytes): "That PDF is over 20 MB. Choose a smaller file." It is refused before any
+    of it is copied when its app gives its size, else as soon as the copy passes 20 MB;
+  - a page over 2000 pt on its long side: "That PDF's page is too big to read.";
+  - a password: "That PDF has a password. Save a copy without one, then import it.";
+  - broken, or not a PDF inside: "Couldn't read that PDF."
+- **Safe to open:** pdfium's build has no JavaScript and no XFA, runs no form actions and fetches nothing. The PDF is
+  only read: a picked file is copied into the scanner's work folder for the read, and the copy is deleted afterwards.
+- **BIR Form 2307, page 1** (`modules/scanner/assets/scanner/bir_2307.json`, 160 boxes): the period From and To; the
+  payee's and the payor's TIN, name, registered address and ZIP; Part III's 10 income payment rows and 10 business
+  tax rows (the payment, its ATC, the quarter's 3 months, the total and the tax withheld), and each table's total
+  row. It is found by its printed border, like the Service Invoice, in the camera, a photo or a PDF; the camera's
+  status line says "BIR Form 2307 · hold still". The ticks and grey dash cells between the period's, TINs' and ZIPs'
+  digits are erased before reading.
+- **On the scan screen:** PERIOD ("Oct 1 – Dec 31, 2026 (Q4)"), PAYEE, PAYOR (matched against your customers, like
+  an invoice's customer), INCOME PAYMENTS (one row per payment: "<ATC> · <payment>", its total and the tax withheld),
+  BUSINESS TAX (when that table has rows) and TOTALS. Every row opens its boxes, as on an invoice.
+- **The checks** (`lib/checks/bir2307.ts`): the period is one calendar quarter; each TIN is 9 digits, or 9 and a
+  3- or 5-digit branch code; the payor is in your customers (when you have a list); each row's 3 months add up to its
+  total, its tax is the total times its ATC's rate (within ₱0.05: a tax withheld month by month is rounded each
+  month), and its ATC is in its own table's list; each table's rows add up to its total row; and a photo or a picture
+  PDF gets the photo checks. The card lists what to check, or says "Ready to save". The ATC list
+  (`lib/checks/atc2307.json`, 161 codes) is MyBizMate's own (its income tax codes for the income payments, its VAT and
+  business tax codes for the second table, with their rates), plus the 12 codes only the form's page 2 prints; a code
+  with no rate skips the tax check.
+- **Save 2307:** the payor, the period, the tax withheld, and the offset account MyBizMate's import needs, asked at the
+  first save and then kept (⋮ → Settings → "Offset account for 2307s"). A 2307 can't be saved without its period
+  ("Add the period first: tap Period."), a payor ("Add the payor first: tap Payor.") or a payment ("No income
+  payments were read."). Saved 2307s are in Saved invoices ("2307 · Q4 2026 · Tax ₱…" under the payor), and a recent
+  scan says "Ready to save" or "Saved as a 2307".
+- **Export 2307s** (Saved invoices, under Export sales and Export purchases): `MyBizMate 2307-CWT import <date>.xlsx`,
+  in MyBizMate's 2307-CWT import layout (Sheets → CWT → Import), one row per payment: Date * (the period's last day),
+  Customer * (the payor's code when it matched one of your customers, else the name as written), Tax Base (Net) (the
+  payment's total), CWT IT and IT Amt for an income payment or CWT VT and VT Amt for a business tax, Offset Account *,
+  and Particulars ("BIR 2307 for Oct–Dec 2026"). Cert No. and Branch stay blank: the paper has no certificate number,
+  and the branch is the business's own. The ranges, the warning for 2307s exported before and the "Mark as exported"
+  question are the same as for sales; the ranges go by the period's last day.
+
 ## Team builds
 
 Debug builds are team builds. A release is a client build unless it's built with `EXPO_PUBLIC_TEAM_BUILD=1`:
@@ -129,9 +182,25 @@ Expo Go can't run this app (it has native code); it uses a development build.
    `npx expo run:android` with `JAVA_HOME` set to Android Studio's JDK (`C:\Program Files\Android\Android Studio\jbr`).
    Opened later from its icon, a debug build shows the dev client's launcher: pick the development server.
 
-The debug APK is about 230 MB (the full OpenCV and ONNX Runtime, CameraX). Android wants that much plus about 500 MB
-free on the emulator; if an install fails with `INSUFFICIENT_STORAGE`, uninstall the old build first
-(`adb uninstall com.mybizmate.scan`) and remove the core tests' files (`adb shell rm -rf /data/local/tmp/scanner_tests`).
+The debug APK is about 245 MB (the full OpenCV, ONNX Runtime and pdfium, CameraX). Replacing an installed build
+(`adb install -r`) needs about 780 MB free on the emulator: the new APK beside the old one, and Android's own reserve.
+If an install fails with `INSUFFICIENT_STORAGE`, remove the core tests' files
+(`adb shell rm -rf /data/local/tmp/scanner_tests`); if that isn't enough, uninstall the old build first
+(`adb uninstall com.mybizmate.scan`). Uninstalling deletes the app's data (the lists, Settings, saved invoices and
+recent scans), so back it up first and put it back before the first launch (Git Bash, with `MSYS_NO_PATHCONV=1`;
+PowerShell's `>` would change the bytes):
+
+```bash
+adb exec-out run-as com.mybizmate.scan tar -cf - -C /data/data/com.mybizmate.scan . > scan-appdata.tar
+```
+
+Then, after the new build is installed:
+
+```bash
+adb push scan-appdata.tar /data/local/tmp/
+adb shell "run-as com.mybizmate.scan tar -xf /data/local/tmp/scan-appdata.tar -C /data/data/com.mybizmate.scan ./files ./shared_prefs ./no_backup"
+adb shell rm /data/local/tmp/scan-appdata.tar
+```
 
 In a debug build, the dev client's Tools button starts over Home's ⋮ menu: drag it aside. On the emulator, a tap sent
 with `adb shell input` can open Gboard's "Try out your stylus" once; Cancel it.
@@ -156,16 +225,148 @@ adb shell "run-as com.mybizmate.scan cp /data/local/tmp/svc_0000.jpg cache/"
 adb shell am start -a android.intent.action.VIEW -d "mybizmatescan://camera?test=file:///data/user/0/com.mybizmate.scan/cache/svc_0000.jpg" com.mybizmate.scan
 ```
 
+A 2307 works the same way, with `fixtures/core/bir2307/bir2307_photo_0.jpg`. Delete the copies afterwards, from
+`/data/local/tmp/` and from the app's `cache/` (`adb shell "run-as com.mybizmate.scan rm cache/svc_0000.jpg"`).
+
+### PDFs on the emulator
+
+Push a PDF to Downloads and have Android index it, as for the made-up lists (below):
+
+```powershell
+adb push fixtures/core/pdf/bir2307_text_0.pdf /sdcard/Download/
+```
+```powershell
+adb shell content call --uri content://media --method scan_file --arg /sdcard/Download/bir2307_text_0.pdf
+```
+
+Then Home → Import PDF → Downloads. To remove it, delete it (`adb shell rm /sdcard/Download/bir2307_text_0.pdf`) and
+run the same `scan_file` again.
+
+## pdfium (reading PDFs)
+
+- **Which:** release `chromium/8125` of [bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries)
+  (PDFium 158.0.8125.0), its Android builds without V8 and XFA (`pdf_enable_v8 = false` and `pdf_enable_xfa = false`
+  in each build's `args.gn`): no JavaScript.
+- **License:** PDFium is BSD-3-Clause (Copyright 2014 The PDFium Authors). The binaries project adds its own notice
+  (MIT, Copyright 2014-2025 Benoit Blanchon), and `libpdfium.so` also holds third-party code under its own licenses
+  (FreeType, HarfBuzz, ICU, libjpeg-turbo, OpenJPEG, libpng, Little CMS, zlib, Abseil and others). Every text is in
+  each ABI's folder (below): `LICENSE` and `licenses/`. BSD-3-Clause asks for its notice to go with the binary, so a
+  release has to carry it: the app doesn't show any notices yet.
+- **The fetch script:** `scripts/fetch-pdfium.mjs` downloads the release's four Android archives, checks each against
+  the SHA-256 pinned in the script, and unpacks it into a cache folder outside the repo, one folder per ABI with
+  `include/` and `lib/libpdfium.so`: `%LOCALAPPDATA%\mbs-cxx\pdfium\chromium-8125\<ABI>` on Windows,
+  `~/.cache/mbs-pdfium/chromium-8125/<ABI>` elsewhere. An archive that doesn't match isn't unpacked. A folder already
+  unpacked from its pinned archive is left as it is, so the next run downloads nothing. Nothing of it is committed.
+- **The pins** (the script holds them; from the first download, 2026-11-21, the same digests GitHub lists for the
+  release's files):
+
+  | Archive | ABI | SHA-256 |
+  |---|---|---|
+  | `pdfium-android-arm64.tgz` | arm64-v8a | `0495e57163429937caaee1bdd9b07924a7098dbd51d1b97645d124e349f097b4` |
+  | `pdfium-android-arm.tgz` | armeabi-v7a | `ac4ac5319ded88ba5d885747a6b2641e7f712c9797de0770465104abe4dbf7da` |
+  | `pdfium-android-x64.tgz` | x86_64 | `bd68707f29f2316c20f9d5c793b8731796a4a65408ac4d3c30bc606390354e41` |
+  | `pdfium-android-x86.tgz` | x86 | `9d4f7edf5b46e1ab155d9da3e56520f2554900997c74e21951f524ea7928c622` |
+
+- **When it runs:** the scanner module's `fetchPdfium` Gradle task runs it on every Gradle build, before CMake (about
+  0.1 s when nothing is missing), and `npm run test:core` runs it too. The first run needs the internet.
+- **In the app:** each ABI the app builds packages its own `libpdfium.so`, aligned for 16 KB pages (LOAD alignment
+  0x4000, checked on arm64 with the NDK's `llvm-readelf -l`).
+- **A new version:** change `RELEASE`, the folder name `chromium-8125` (in the script and in
+  `modules/scanner/android/build.gradle`) and the four SHA-256s together.
+
 ## Tests
 
 - `npm test`: the screens and the TypeScript side (jest).
 - `npm run test:core`: the C++ core's tests (doctest). They are built for the x86_64 emulator with NDK 28.2 and run
   there (the emulator must be running). Pass doctest arguments after `--`, for example
-  `npm run test:core -- -tc="*parity*"`. They compare the core with the Python on every fixture photo, both forms.
-- From `android/`: `./gradlew :scanner:testDebugUnitTest`: the module's Kotlin tests (auto capture, image sizes).
+  `npm run test:core -- -tc="*parity*"`. They compare the core with the Python on every fixture photo, both forms,
+  and read the 2307s and PDFs against the values written into them. They push about 200 MB to
+  `/data/local/tmp/scanner_tests` (265 MB after a run); remove that folder when the emulator is short of space.
+- From `android/`: `./gradlew :scanner:testDebugUnitTest`: the module's Kotlin tests (auto capture, image sizes, the
+  scanner holder, the PDF's size limit and work copy, a picked file's name).
 - `npx tsc --noEmit`: the typecheck. `npm run lint`: ESLint (Expo's config).
 - From `../prototype/benchmark`: `..\..\.venv\Scripts\python.exe test_export_check_fixtures.py`: the test of the
   exporter that writes `fixtures/checks/` and `fixtures/lists/`.
+- From the same folder: `test_make_2307_template.py` (the 2307's template and ATC list), `test_synth_2307.py` (the
+  synthetic 2307s and PDFs) and `test_export_core_fixtures.py` (everything the core's exporter writes).
+
+## Checked on the emulator (milestone 5)
+
+A debug build on the emulator (Medium Phone, API 36, x86_64), 2026-11-22, with the made-up lists; the JavaScript came
+from Metro. On the final tree, every suite passed: jest (38 suites, 277 tests), the typecheck and ESLint, the core's
+doctest (68 test cases, 8938 assertions), the module's Kotlin tests (29), and the Python tests: the 2307's template
+(5 of 5), the synthetic 2307s (9 of 9) and the core's exporter (30 of 30).
+
+1. **A text 2307** (`bir2307_text_0.pdf`, from the picker's Downloads): "Ready to save". All 28 written boxes came
+   from the PDF's text and equal what was written: "Read from the PDF: 28 boxes from its text, 0 read from the page."
+   Read in 631 ms.
+2. **A picture 2307** (`bir2307_picture_1.pdf`, with its hidden layer of wrong text): "The PDF is a picture: read like
+   a photo." 41 of 41 boxes read exactly as written, none from the hidden text. "Ready to save", in 4.0 s.
+3. **Two pages** (`two_pages.pdf`): "Read from the PDF: 55 boxes from its text, 0 read from the page. Only page 1 of
+   2 was read." 55 of 55 boxes as written.
+4. **The refusals:** `password.pdf`, `broken.pdf`, a 22.4 MB PDF and a PDF whose page is 2142 × 3276 pt each gave
+   their message, and no scan was added.
+5. **The MyBizMate-printed test 2307** (certificate 2307I-000001 of the test company, pushed under a neutral name and
+   deleted afterwards): 17 boxes, every one from the PDF's text, and every one the same as what MyBizMate printed
+   (read on the laptop with pypdfium2): the period; the payee's name, address, TIN and ZIP; the payor's name and TIN;
+   the payment (its description, ATC, month, total and tax); and both total rows. "Only page 1 of 2 was read." It
+   showed 4 things to check: the payee's TIN (only a branch code is printed), the payor's TIN (a 4-digit branch
+   code), the payor (not in the made-up customers), and Totals (see below).
+6. **The camera:** `bir2307_photo_0.jpg` as the test photo: the outline, "BIR Form 2307 · hold still", the photo taken
+   by itself, 22 of 22 boxes exact, "Ready to save". `svc_0000.jpg` still shows "Service Invoice · hold still", reads
+   as a Service Invoice (35 of 35 boxes the same as the laptop) and says "Ready to post".
+7. **Saving:** the first 2307 saved (the text one) asked for the offset account; saved with `1105` (Accounts
+   Receivable - Trade, from the 2307-CWT template's list). The photo 2307 and the picture 2307 then started with
+   `1105`. Each scan then said it was saved and not exported yet.
+8. **Export 2307s:** "3 2307s · tax ₱83,476.11". The share sheet was closed and the answer was "Not yet", so nothing
+   was sent and they stay "To export". The file (5,720 bytes) tests clean as a zip, and its row 1 equals the 2307-CWT
+   template's 11 headers, cell by cell. Its 6 rows: `2025-12-31`, `C015`, 419626.03, `WC158`, 4196.26; `2026-03-31`,
+   `C005`, 114402.88, `WC610`, 1144.03; `2026-03-31`, `C005`, 444788.1, `WC160`, 8895.76; `2026-06-30`, `C009`,
+   546839, `WI060`, 27341.95; `2026-06-30`, `C009`, 646962.98, `WI010`, 32348.15; and `2026-06-30`, `C009`,
+   318332.15, with `WB082` and 9549.96 under CWT VT and VT Amt. Each has Offset Account `1105` and Particulars "BIR
+   2307 for Oct–Dec 2025", "… Jan–Mar 2026" or "… Apr–Jun 2026"; Cert No. and Branch are blank.
+9. **Saved invoices' bottom bar** fits: Export sales and Export purchases side by side, Export 2307s under them, each
+   label on one line.
+10. **The time of a full 2307:** synthetic 2307 photos with Part III filled, from the camera's test photo in the app
+    and from the core's test program, on the same emulator. The one with both tables full (160 boxes) read 159 of its
+    boxes exactly, the one with the income payments full (85 boxes) 84, and both said "Ready to save".
+
+    | Photo | Boxes | Core test program (release build) | The app (debug build) |
+    |---|---|---|---|
+    | `bir2307_photo_0.jpg` | 22 | 1.7–1.9 s | 3.5 s |
+    | Income payments table full | 85 | 4.6–4.8 s | 7.0 s |
+    | All of Part III full | 160 | 7.8–8.1 s | 12.0–12.2 s |
+
+    When the 2307 was added, the fixture 2307s (22 to 41 boxes) took 1.95–2.88 s in the same test program. Reading
+    takes about 45 ms per box, so a full Part III is well over the design's 3 s target on the emulator. The app's
+    debug build compiles the core without optimization; the test program is a release build. Only a phone's numbers
+    count.
+
+**MyBizMate's 2307-CWT importer:** pending. The exported file hasn't been imported into MyBizMate yet; that check
+waits for the user's go-ahead, and its result goes here. The file's customers are the made-up list's codes (`C005`,
+`C009`, `C015`), so they need a match in the company it's imported into.
+
+**Still open:**
+- **The totals check on MyBizMate's own 2307.** The printed certificate has only the total row's Total and Tax; its 3
+  months are blank. The check counts a blank total cell as 0, so the certificate shows "Totals" to check, and so would
+  any 2307 printed that way. It needs a ruling (for example, a blank total cell isn't checked).
+- **A 4-digit branch code.** The printed certificate's payor TIN has a 4-digit branch code (13 digits), which the TIN
+  check flags. Worth checking how MyBizMate prints branch codes before deciding.
+- **The payor chooser.** A 2307's payor can't be chosen from your customers yet. Only a payor matched in your
+  customers goes out with its code; an unsure match goes out as written, and its "Tap to compare" has no compare yet.
+- **A phone's time.** A full Part III takes 8 s in the emulator's release-built core; a phone's time, with a team
+  release, is still to measure (with milestone 2's phone checks, below).
+- **The picker's lasting access.** expo-file-system's picker takes a lasting (persistable) grant on every PDF (and
+  CSV) picked, read and, when offered, write, and nothing releases it: the app keeps access to every file imported.
+- **ONNX Runtime's telemetry line.** At start, onnxruntime-android 1.32.0's Java layer logs "ORTTelemetry: Unable to
+  initialize telemetry" with an UnsatisfiedLinkError. The scanner reads through the C++ core; check what that Java
+  layer is for, and that nothing in it can go online.
+- **renderPdf, for the final review.** Three cases an unusual PDF could hit: on a page 1 with a visible annotation (a
+  field, a link, a comment), flattening hides the `/Resources` the page inherits from `/Pages`, so images vanish and
+  fonts fall back; text in render mode 7 (clip only, never painted) counts as visible; and OCR text drawn under a
+  page-sized image counts as the page's text, so a scan's own OCR would fill its boxes.
+- **Open-source notices.** The app shows none yet. A release needs them: pdfium's (above), and those of the other
+  libraries it ships.
 
 ## Checked on the emulator (milestone 3)
 
@@ -258,6 +459,28 @@ synthetic: no client data.
 `fixtures/checks/` (the Python's own results for the checks: fuzzy scores, numbers, dates, and whole results on the
 fixtures and on variants of them) and `fixtures/lists/` are written by `export_check_fixtures.py`, from the same
 folder (its test: `test_export_check_fixtures.py`). Git keeps their bytes as written (`.gitattributes`).
+
+### The 2307s and PDFs
+
+The core's PDF and 2307 tests read files written by `synth_2307.py`, through the same exporter (its test:
+`test_synth_2307.py`). Every value is made up: payees, payors (the made-up customers), TINs, addresses and amounts that
+add up, on the official blank form (January 2018 ENCS, from bir.gov.ph):
+
+- `fixtures/core/pdf/bir2307_text_{0,1,2}.pdf`: the values as PDF text (Helvetica);
+- `fixtures/core/pdf/bir2307_picture_{0,1}.pdf`: the page as a picture only; `picture_1` also has a hidden layer of
+  wrong text, like a scanner app's OCR;
+- `fixtures/core/bir2307/bir2307_photo_{0,1,2}.jpg`: the page photographed (kept apart from `photos/`, so the Python
+  parity suite's counts stay as they are);
+- `fixtures/core/pdf/two_pages.pdf` (with the form's page 2, the ATC table), `broken.pdf` (cut in half) and
+  `password.pdf` (password "secret");
+- `fixtures/core/pdf/sales_text_0.pdf` and `sales_picture_0.pdf`: a Sales Invoice with typed values, and a sample
+  photo saved as a PDF;
+- `fixtures/core/expected2307/<name>.json`: what was written in each box.
+
+The 2307's template (`modules/scanner/assets/scanner/bir_2307.json`) and ATC list (`lib/checks/atc2307.json`) are
+written by `make_2307_template.py`, from the official blank form (page 1's ruled lines, page 2's ATC table) and
+MyBizMate's own ATC list (its income tax codes and its VAT and business tax codes; final taxes go on a 2306, so
+they're left out). Its test: `test_make_2307_template.py`.
 
 ### The made-up lists
 
