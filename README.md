@@ -431,6 +431,19 @@ doctest (68 test cases, 8938 assertions), the module's Kotlin tests (29), and th
     takes about 45 ms per box, so a full Part III is well over the design's 3 s target on the emulator. The app's
     debug build compiles the core without optimization; the test program is a release build. Only a phone's numbers
     count.
+11. **After the final review's fixes** (2026-11-22, the x86_64 debug build from `7c86e30`). It was reinstalled
+    keeping the app's data, as in "Reinstalling without losing the app's data": the backup was whole, and its 352
+    files were restored with the same names and sizes.
+    - Home showed the restored data ("Saved invoices, 4 to export" and the recent scans), and Sample 0007 read
+      "Ready to post".
+    - `bir2307_text_0.pdf`, pushed under a neutral name, read all 28 of its boxes from its text, exactly as written.
+    - The same 2307 scaled to 2615 × 4000 pt, which the old 2000 pt limit refused, read the same 28 boxes from its
+      text, rendered 1569 × 2400, in 699 ms.
+    - After each read, the app held no lasting access to the picked file (`dumpsys activity permissions`:
+      `persisted=0x0`).
+    - The log, from the emulator's boot through all of it, had no `ORTTelemetry` line, no `UnsatisfiedLinkError`
+      and no crash; `libscanner.so` loaded in the app's process. ONNX Runtime's telemetry is off (the core's
+      `DisableTelemetryEvents`), and its provider is out of the merged manifest (`npm run check:apk`).
 
 **MyBizMate's 2307-CWT importer** (2026-11-22, at the user's go-ahead): passed. The file above went into the test
 company's 2307-CWT import (Sales Bizmate → Sheets → CWT → Import), with only its Customer codes replaced by the
@@ -445,12 +458,6 @@ Base times that rate, and the offset account 1105. The rows stay as drafts, date
   under it ("Closest match: …"); fixing the payor's name or TIN is the only way to settle it.
 - **A phone's time.** A full Part III takes 8 s in the emulator's release-built core; a phone's time, with a team
   release, is still to measure (with milestone 2's phone checks, below).
-- **ONNX Runtime's telemetry, on the emulator.** The core switches ONNX Runtime's own telemetry off
-  (`DisableTelemetryEvents` on its environment), and the scanner module's manifest removes the provider that
-  onnxruntime-android 1.32.0 adds to start its telemetry client when the app does (Microsoft's, which reads the phone's
-  `android_id`; before, it failed at each launch with "ORTTelemetry: Unable to initialize telemetry"). The x86_64
-  debug build's merged manifest and APK have no `TelemetryInitializer` (`npm run check:apk`, 2026-11-22). That the
-  app's log no longer has the ORTTelemetry line at launch is still to check on the emulator, with the next reinstall.
 - **Open-source notices.** The app shows none yet. A release needs them: pdfium's (above), and those of the other
   libraries it ships.
 
