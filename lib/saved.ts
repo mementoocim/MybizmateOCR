@@ -5,7 +5,17 @@ import { type ExportRow, exportRow, saveBlock } from './exportRows';
 import { readJson, writeJson } from './jsonFile';
 import { lists } from './lists';
 import { saleOf } from './sale';
-import { cacheScan, forgetScan, getScan, type Kind, type SaveDetails, type StoredScan, updateScan } from './scans';
+import {
+  cacheScan,
+  forgetScan,
+  getScan,
+  type KeptResult,
+  type Kind,
+  type SaveDetails,
+  type StoredScan,
+  updateScan,
+  withPdfFields,
+} from './scans';
 import { settings, updateSettings } from './settings';
 
 // Saved invoices: the scans the person saved as a sale or a purchase, each one an import row. A saved scan's folder
@@ -93,9 +103,12 @@ async function moveToSaved(scan: StoredScan): Promise<ScanResult> {
   };
 }
 
+/** A saved scan as scan.json keeps it; one saved before PDFs gets their fields (a photo's). */
 async function readScan(id: string): Promise<StoredScan | null> {
-  const saved = await readJson<Omit<StoredScan, 'at'> & { at: string }>(`saved/${id}/scan.json`);
-  return saved ? { ...saved, at: new Date(saved.at) } : null;
+  const saved = await readJson<Omit<StoredScan, 'at' | 'result'> & { at: string; result: KeptResult }>(
+    `saved/${id}/scan.json`,
+  );
+  return saved ? { ...saved, at: new Date(saved.at), result: withPdfFields(saved.result) } : null;
 }
 
 /** At start: the summaries, plus any saved scan whose summary a kill cut short. */

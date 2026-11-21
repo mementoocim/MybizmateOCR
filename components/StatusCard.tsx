@@ -16,7 +16,7 @@ export function StatusCard({ result, problems }: { result: ScanResult; problems:
       <Card
         warn
         title="Couldn't find the form"
-        body="Get the whole form in the photo: all 4 black corner squares of a MyBizMate Sales Invoice, or the whole table of a Service Invoice. Then retake it."
+        body="Get the whole form in the photo: all 4 black corner squares of a MyBizMate Sales Invoice, the whole table of a Service Invoice, or the whole page of a BIR Form 2307. Then retake it."
       />
     );
   }

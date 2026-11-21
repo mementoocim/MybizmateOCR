@@ -29,6 +29,7 @@ import { getScan, type Kind, type StoredScan, subscribeRecent, updateScan } from
 import { settings, subscribeSettings } from '../lib/settings';
 import { bold, colors, sectionLabel } from '../lib/theme';
 import { toast } from '../lib/toast';
+import type { ScanResult } from '../modules/scanner';
 
 const CUSTOMER_BOXES = ['customer_name', 'customer_tin', 'customer_address'];
 const TOTAL_BOXES = [
@@ -65,6 +66,18 @@ const BLOCKED: Record<string, string> = {
 };
 const dayOf = (iso: string) => prettyDate(localIsoDate(new Date(iso)));
 
+/**
+ * A PDF's own footnote: where its boxes came from (its text, or its rendered page; a picture PDF is read like a photo)
+ * and, when it has more pages, that only page 1 was read. null when there's nothing to tell.
+ */
+function pdfFootnote(r: ScanResult): string | null {
+  const text = r.reads.filter((b) => b.fromText).length;
+  const boxes = `${text} ${text === 1 ? 'box' : 'boxes'} from its text, ${r.reads.length - text} read from the page`;
+  const how = r.picture ? 'The PDF is a picture: read like a photo.' : r.aligned ? `Read from the PDF: ${boxes}.` : null;
+  const pages = r.pageCount !== null && r.pageCount > 1 ? `Only page 1 of ${r.pageCount} was read.` : null;
+  return [how, pages].filter((s) => s !== null).join(' ') || null;
+}
+
 // The result (the test app's ResultActivity): the checks' card, the scan view, the sale with every row opening what
 // the camera saw in its boxes (each box fixable, the checks run again at once), the footnote, and Retake.
 export default function Result() {
@@ -96,6 +109,8 @@ export default function Result() {
     : TEAM_BUILD
       ? `${boxes} read on this phone in ${total} (straighten ${formatMs(r.timing.alignMs)}, read ${formatMs(r.timing.readMs)}). Nothing left the phone.`
       : `${boxes} read on this phone in ${total}. Nothing left the phone.`;
+  // r.source is what the scanner read (a photo or a PDF); scan.source is how the scan came in
+  const pdfLine = r.source === 'pdf' ? pdfFootnote(r) : null;
   let sampleLine: string | null = null;
   if (scan.sampleId && r.aligned) {
     const { exact, written } = compareWithSample(r.reads, sampleInfo(scan.sampleId));
@@ -130,6 +145,7 @@ export default function Result() {
         <ScanImage result={r} />
         {sale && <SaleSections scan={scan} sale={sale} open={setSheet} />}
         <Text style={styles.footnote}>{footnote}</Text>
+        {pdfLine && <Text style={styles.footnote}>{pdfLine}</Text>}
         {sampleLine && <Text style={styles.footnote}>{sampleLine}</Text>}
         {isSample && r.aligned && (
           <Text style={styles.footnote}>{"Sample invoices are made up, so they can't be saved."}</Text>

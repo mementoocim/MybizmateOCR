@@ -1,6 +1,6 @@
 import { Directory } from 'expo-file-system';
 
-import type { ScanResult } from '../modules/scanner';
+import type { BoxRead, ScanResult } from '../modules/scanner';
 import type { Terms } from './checks/finalize';
 import { readJson, writeJson } from './jsonFile';
 import type { TaxType } from './settings';
@@ -11,7 +11,8 @@ import type { TaxType } from './settings';
 // newest 6 folders too); the list is a JSON file in the app's documents. A saved scan opened from Saved invoices is
 // kept here too while the app runs.
 
-export type ScanSource = 'camera' | 'camera_app' | 'gallery' | 'sample';
+/** How the scan came in. Not the result's own source, which is what the scanner read: a photo or a PDF. */
+export type ScanSource = 'camera' | 'camera_app' | 'gallery' | 'sample' | 'pdf';
 export type Kind = 'sale' | 'purchase';
 /** The person's pick: a party from the lists, a supplier's name typed in, or the various (walk-in) suppliers. */
 export type PartyChoice = { listId: string } | { name: string } | { various: true };
@@ -19,7 +20,7 @@ export type SaveDetails = { taxType: TaxType; account: string; terms: Terms; atc
 
 export type StoredScan = {
   id: string;
-  label: string; // "Camera photo", "Photo from gallery", "Sample 0051"
+  label: string; // "Camera photo", "Photo from gallery", "Sample 0051", "PDF: <file name>"
   source: ScanSource;
   sampleId?: string;
   at: Date;
@@ -30,6 +31,26 @@ export type StoredScan = {
   party: PartyChoice | null;
   saved: { savedAt: string; details: SaveDetails } | null;
 };
+
+/**
+ * A result as recent.json and the saved scans keep it. Kept results aren't parsed again (parseScanResult), so one kept
+ * before PDFs (milestone 5) has none of their fields.
+ */
+export type KeptResult = Omit<ScanResult, 'source' | 'pageCount' | 'picture' | 'reads'> &
+  Partial<Pick<ScanResult, 'source' | 'pageCount' | 'picture'>> & {
+    reads: (Omit<BoxRead, 'fromText'> & { fromText?: boolean })[];
+  };
+
+/** A kept result with every field: one from before PDFs is a photo's, as parseScanResult reads an old JSON. */
+export function withPdfFields(r: KeptResult): ScanResult {
+  return {
+    ...r,
+    source: r.source ?? 'photo',
+    pageCount: r.pageCount ?? null,
+    picture: r.picture ?? null,
+    reads: r.reads.map((b) => ({ ...b, fromText: b.fromText ?? false })),
+  };
+}
 
 const KEEP = 6;
 const FILE = 'recent.json';
@@ -124,11 +145,11 @@ export function recentScans(): readonly StoredScan[] {
 /** At start: the saved list, without scans whose folder is gone. Older entries get the new fields' starting values. */
 export async function loadRecent(): Promise<void> {
   try {
-    const saved = await readJson<(Omit<StoredScan, 'at'> & { at: string })[]>(FILE);
+    const saved = await readJson<(Omit<StoredScan, 'at' | 'result'> & { at: string; result: KeptResult })[]>(FILE);
     if (!saved) return;
     recent = saved
       .filter((s) => s.result.scanDir && new Directory(s.result.scanDir).exists)
-      .map((s) => ({ ...FRESH, ...s, at: new Date(s.at) }))
+      .map((s) => ({ ...FRESH, ...s, at: new Date(s.at), result: withPdfFields(s.result) }))
       .slice(0, KEEP);
   } catch {
     recent = [];

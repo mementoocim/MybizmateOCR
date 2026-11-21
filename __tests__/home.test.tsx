@@ -12,6 +12,7 @@ let mockTeam = false;
 const mockPush = jest.fn();
 const mockScanPhoto = jest.fn();
 const mockLibrary = jest.fn();
+const mockPick = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
@@ -35,7 +36,10 @@ jest.mock('expo-image-picker', () => ({
 jest.mock('expo-asset', () => ({
   Asset: { fromModule: () => ({ downloadAsync: async () => ({ localUri: 'file:///bundle/sample.jpg' }) }) },
 }));
-jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
+jest.mock('expo-file-system', () => {
+  const memory = require('../test-utils/memoryFs').memoryFs.module;
+  return { ...memory, File: Object.assign(memory.File, { pickFileAsync: (options: object) => mockPick(options) }) };
+});
 
 beforeAll(() => {
   pinToday(new Date(2026, 10, 20, 9, 0)); // a gallery scan is checked as of the day it's read
@@ -80,6 +84,13 @@ test('Choose from gallery reads the photo and opens its result', async () => {
   // person's photo.
   expect(mockScanPhoto).toHaveBeenCalledWith('content://media/1', { deletePhoto: true });
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
+});
+
+test('the Import PDF button', async () => {
+  mockPick.mockResolvedValue({ canceled: true, result: null });
+  await render(<Home />);
+  await act(async () => fireEvent.press(screen.getByText('Import PDF')));
+  expect(mockPick).toHaveBeenCalledWith({ mimeTypes: ['application/pdf'] });
 });
 
 test('two quick presses scan once', async () => {

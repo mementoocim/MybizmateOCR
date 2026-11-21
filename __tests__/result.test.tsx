@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 
 import Result from '../app/result';
 import { peso, qty } from '../lib/format';
-import { addScan, setEdit } from '../lib/scans';
+import { addScan, loadRecent, setEdit } from '../lib/scans';
 import type { ScanSource } from '../lib/scans';
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
@@ -17,6 +17,8 @@ const mockEnhance = jest.fn(async (_uri: string, mode: string) => `file:///x/${m
 const mockSave = jest.fn();
 const mockToast = jest.fn();
 const mockLibrary = jest.fn(async () => ({ canceled: true }));
+const mockPick = jest.fn();
+const mockReadPdf = jest.fn();
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
@@ -31,6 +33,7 @@ jest.mock('../modules/scanner', () => ({
   enhance: (uri: string, mode: string) => mockEnhance(uri, mode),
   saveToPictures: (uri: string) => mockSave(uri),
   scanPhoto: jest.fn(),
+  readPdf: (uri: string) => mockReadPdf(uri),
 }));
 jest.mock('../lib/toast', () => ({ toast: (m: string) => mockToast(m) }));
 jest.mock('../lib/build', () => ({
@@ -44,7 +47,10 @@ jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn(),
 }));
 jest.mock('expo-asset', () => ({ Asset: { fromModule: () => ({ downloadAsync: async () => ({ localUri: 'file:///s' }) }) } }));
-jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
+jest.mock('expo-file-system', () => {
+  const memory = require('../test-utils/memoryFs').memoryFs.module;
+  return { ...memory, File: Object.assign(memory.File, { pickFileAsync: (options: object) => mockPick(options) }) };
+});
 
 // The Python's own answers for the fixture photos (fixtures/checks/finalize.json).
 const FZ = require('../fixtures/checks/finalize.json');
@@ -174,7 +180,7 @@ test('no form', async () => {
   expect(screen.getByText("Couldn't find the form")).toBeTruthy();
   expect(
     screen.getByText(
-      'Get the whole form in the photo: all 4 black corner squares of a MyBizMate Sales Invoice, or the whole table of a Service Invoice. Then retake it.',
+      'Get the whole form in the photo: all 4 black corner squares of a MyBizMate Sales Invoice, the whole table of a Service Invoice, or the whole page of a BIR Form 2307. Then retake it.',
     ),
   ).toBeTruthy();
   expect(screen.getByText('Retake')).toBeTruthy();
@@ -202,6 +208,96 @@ test('footnote', async () => {
   expect(
     screen.getByText('45 boxes read on this phone in 1.4 s (straighten 57 ms, read 1.2 s). Nothing left the phone.'),
   ).toBeTruthy();
+});
+
+test("a PDF's footnote and its page count", async () => {
+  // a text PDF: every box from its own text
+  await show('sales_text_0', { source: 'pdf' });
+  expect(screen.getByText('8 boxes read on this phone in 0 ms. Nothing left the phone.')).toBeTruthy();
+  expect(screen.getByText('Read from the PDF: 8 boxes from its text, 0 read from the page.')).toBeTruthy();
+
+  // a box with no text in it is read from the rendered page; a PDF with more pages
+  await show('sales_text_0', {
+    source: 'pdf',
+    edit: (r) => {
+      r.reads[0].fromText = false;
+      r.pageCount = 3;
+    },
+  });
+  expect(
+    screen.getByText('Read from the PDF: 7 boxes from its text, 1 read from the page. Only page 1 of 3 was read.'),
+  ).toBeTruthy();
+  await show('sales_text_0', {
+    source: 'pdf',
+    edit: (r) => {
+      r.reads.forEach((b, i) => (b.fromText = i === 0));
+    },
+  });
+  expect(screen.getByText('Read from the PDF: 1 box from its text, 7 read from the page.')).toBeTruthy();
+
+  // the form not found on page 1: only the pages are told
+  await show('blank_page', {
+    source: 'pdf',
+    edit: (r) => {
+      Object.assign(r, { source: 'pdf', pageCount: 2, picture: false });
+    },
+  });
+  expect(screen.getByText('Only page 1 of 2 was read.')).toBeTruthy();
+  expect(screen.queryByText(/^Read from the PDF/)).toBeNull();
+});
+
+test("a picture PDF's footnote", async () => {
+  await show('sales_picture_0', { source: 'pdf' });
+  expect(screen.getByText('The PDF is a picture: read like a photo.')).toBeTruthy();
+  expect(screen.queryByText(/^Read from the PDF/)).toBeNull();
+  await show('sales_picture_0', {
+    source: 'pdf',
+    edit: (r) => {
+      r.pageCount = 2;
+    },
+  });
+  expect(screen.getByText('The PDF is a picture: read like a photo. Only page 1 of 2 was read.')).toBeTruthy();
+});
+
+test('a text box says where it came from', async () => {
+  await show('sales_text_0', {
+    source: 'pdf',
+    edit: (r) => {
+      r.reads.find((b) => b.name === 'date')!.fromText = false; // read from the rendered page
+    },
+  });
+  await press(screen.getByText('SI no.'));
+  expect(screen.getByText("From the PDF's text")).toBeTruthy();
+  expect(screen.queryByText(/^Read as /)).toBeNull();
+  await press(screen.getByTestId('fix-invoice_no'));
+  expect(screen.getByText("From the PDF's text")).toBeTruthy();
+  expect(screen.getByLabelText('What the box says').props.value).toBe('0000888');
+  await press(screen.getByText('Cancel'));
+  await press(screen.getByLabelText('Close'));
+
+  await press(screen.getByText('Date'));
+  expect(screen.getByText('Read as “27 Sep 2026” · 100% sure')).toBeTruthy();
+  expect(screen.queryByText("From the PDF's text")).toBeNull();
+});
+
+test('a scan kept before PDFs shows as a photo', async () => {
+  // recent.json as milestone 3 wrote it: no source, pageCount, picture or fromText in its result
+  const result = JSON.parse(JSON.stringify(parseScanResult(coreJson('inv_0007'))));
+  delete result.source;
+  delete result.pageCount;
+  delete result.picture;
+  for (const b of result.reads) delete b.fromText;
+  const kept = { id: 'old-1', label: 'Photo from gallery', source: 'gallery', at: '2026-11-18T01:00:00.000Z', result,
+    edits: {}, terms: null, kind: 'sale', party: null, saved: null };
+  memoryFs.files.set('file:///docs/recent.json', JSON.stringify([kept]));
+  memoryFs.dirs.add('file:///data/x');
+  await act(async () => loadRecent());
+  mockParams = { id: 'old-1' };
+  await render(<Result />);
+  expect(screen.getByText('45 boxes read on this phone in 0 ms. Nothing left the phone.')).toBeTruthy();
+  expect(screen.queryByText(/PDF/)).toBeNull();
+  await press(screen.getByText('SI no.'));
+  expect(screen.getByText('Read as “0007655” · 100% sure')).toBeTruthy();
 });
 
 test('sample footnote', async () => {
@@ -267,4 +363,14 @@ test('retake', async () => {
   await show('inv_0007', { source: 'camera' });
   await press(screen.getByText('Retake'));
   expect(mockRouter.replace).toHaveBeenCalledWith('/camera');
+
+  // a PDF: the picker again, and the new read takes this screen's place
+  await show('sales_text_0', { source: 'pdf' });
+  const uri = 'content://com.android.externalstorage.documents/document/primary%3ADownload%2Fsales_text_1.pdf';
+  mockPick.mockResolvedValueOnce({ canceled: false, result: { uri, name: 'sales_text_1.pdf', type: 'application/pdf' } });
+  mockReadPdf.mockResolvedValueOnce(parseScanResult(coreJson('sales_text_0')));
+  await press(screen.getByText('Retake'));
+  expect(mockPick).toHaveBeenCalledWith({ mimeTypes: ['application/pdf'] });
+  expect(mockReadPdf).toHaveBeenCalledWith(uri);
+  expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
 });

@@ -5,7 +5,7 @@ import { fieldLabel } from '../lib/forms';
 import { boxValue } from '../lib/sale';
 import { setEdit, type StoredScan } from '../lib/scans';
 import { bold, colors, sectionLabel } from '../lib/theme';
-import { BoxRow } from './BoxRow';
+import { BoxRow, readingText } from './BoxRow';
 import { PrimaryButton, TextButton } from './Buttons';
 import { Sheet } from './Sheet';
 
@@ -49,11 +49,7 @@ export function BoxSheet({
       <Sheet visible={visible} title={title} onClose={close}>
         <Text style={styles.heading}>{fieldLabel(form, editing)}</Text>
         {read?.cropUri && <Image source={{ uri: read.cropUri }} style={styles.bigCrop} resizeMode="contain" />}
-        {read && (
-          <Text style={[styles.reading, read.conf < 0.9 && styles.unsure]}>
-            {read.text === '' ? "Couldn't make out any writing" : `Read as “${read.text}” · ${Math.round(read.conf * 100)}% sure`}
-          </Text>
-        )}
+        {read && <Text style={[styles.reading, read.conf < 0.9 && styles.unsure]}>{readingText(read)}</Text>}
         {others.length > 0 && (
           <>
             <Text style={[sectionLabel, styles.others]}>OTHER READINGS</Text>

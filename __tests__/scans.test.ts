@@ -59,6 +59,38 @@ test('a scan saved by milestone 2 loads with no edits, as a sale', async () => {
   expect(getScan('old-1')).toMatchObject({ edits: {}, terms: null, kind: 'sale', party: null, saved: null });
 });
 
+test('a scan kept before PDFs loads as a photo', async () => {
+  // recent.json as milestone 3 wrote it: its results have no source, pageCount, picture or fromText
+  const kept = JSON.parse(JSON.stringify(result('/s/old')));
+  delete kept.source;
+  delete kept.pageCount;
+  delete kept.picture;
+  for (const b of kept.reads) delete b.fromText;
+  const old = { id: 'old-2', label: 'Camera photo', source: 'camera', at: '2026-11-20T01:00:00.000Z', result: kept };
+  memoryFs.files.set('file:///docs/recent.json', JSON.stringify([old]));
+  memoryFs.dirs.add('file:///s/old');
+  const { loadRecent, getScan } = require('../lib/scans');
+  await loadRecent();
+  const r: ScanResult = getScan('old-2').result;
+  expect(r).toMatchObject({ source: 'photo', pageCount: null, picture: null });
+  expect(r.reads).toHaveLength(45);
+  expect(r.reads.every((b) => b.fromText === false)).toBe(true);
+});
+
+test('a PDF scan comes back after a restart as it was read', async () => {
+  const first = require('../lib/scans');
+  const id = first.addScan({ label: 'PDF: two_pages.pdf', source: 'pdf', result: parseScanResult(coreJson('two_pages', '/s/p')) });
+  await flush();
+  memoryFs.dirs.add('file:///s/p');
+  jest.resetModules();
+  const second = require('../lib/scans');
+  await second.loadRecent();
+  const scan = second.getScan(id);
+  expect(scan).toMatchObject({ label: 'PDF: two_pages.pdf', source: 'pdf' });
+  expect(scan.result).toMatchObject({ source: 'pdf', pageCount: 2, picture: false });
+  expect(scan.result.reads.every((b: { fromText: boolean }) => b.fromText)).toBe(true);
+});
+
 test('the reading itself removes the edit', () => {
   const { addScan, setEdit, getScan } = require('../lib/scans');
   const id = addScan({ label: 'Sample 0007', source: 'sample', sampleId: 'inv_0007', result: result('/s/c') });

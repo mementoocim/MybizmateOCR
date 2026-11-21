@@ -119,6 +119,27 @@ test('openSaved and deleteSaved', async () => {
   expect([...memoryFs.files.keys()].some((k) => k.startsWith(`file:///docs/saved/${id}/`))).toBe(false);
 });
 
+test('a scan saved before PDFs opens as a photo', async () => {
+  const first = load();
+  const id = cameraScan(first);
+  await first.saved.saveScan(id, DETAILS);
+  // its scan.json as milestone 3 wrote it: no source, pageCount, picture or fromText in its result
+  const file = `file:///docs/saved/${id}/scan.json`;
+  const kept = JSON.parse(memoryFs.files.get(file) as string);
+  delete kept.result.source;
+  delete kept.result.pageCount;
+  delete kept.result.picture;
+  for (const b of kept.result.reads) delete b.fromText;
+  memoryFs.files.set(file, JSON.stringify(kept));
+  jest.resetModules();
+  const again = load();
+  await again.saved.loadSaved();
+  const scan = await again.saved.openSaved(id);
+  expect(scan!.result).toMatchObject({ source: 'photo', pageCount: null, picture: null });
+  expect(scan!.result.reads).toHaveLength(45);
+  expect(scan!.result.reads.every((b) => b.fromText === false)).toBe(true);
+});
+
 test('the account used becomes the default', async () => {
   const m = load();
   const id = cameraScan(m);
