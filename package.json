@@ -39,6 +39,7 @@
     "web": "expo start --web",
     "test": "jest",
     "test:core": "node scripts/core-test.mjs",
+    "check:apk": "node scripts/check-apk.mjs",
     "lint": "expo lint"
   },
   "private": true,

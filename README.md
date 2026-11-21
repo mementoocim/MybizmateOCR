@@ -193,11 +193,13 @@ Clients should get an Android App Bundle through Google Play, which sends each p
 ## Release checklist
 
 The app promises that nothing leaves the phone. Before a client release, and again whenever ONNX Runtime or pdfium
-changes version:
+changes version, check the release APK. `npm run check:apk -- <the APK>` (`scripts/check-apk.mjs`, the debug APK when
+no path is given) checks the first two items and lists the network permissions; it exits 1 when a check fails.
 
 - **No telemetry provider:** the merged release manifest has no `ai.onnxruntime.TelemetryInitializer`.
   onnxruntime-android's AAR adds that provider, which starts by itself when the app does (Microsoft's telemetry client,
-  which reads the phone's `android_id`).
+  which reads the phone's `android_id`). The scanner module's `AndroidManifest.xml` removes it
+  (`tools:node="remove"`), and the core switches ONNX Runtime's own telemetry off.
 - **No sockets in the native libraries:** `libonnxruntime.so` and `libpdfium.so` (and ONNX Runtime's
   `libonnxruntime4j_jni.so`) import no socket function. For each ABI's copy in the APK (`llvm-nm` is the NDK's, in
   `toolchains/llvm/prebuilt/windows-x86_64/bin`), this prints nothing (checked 2026-11-22 on ONNX Runtime 1.32.0 and
@@ -369,6 +371,7 @@ run the same `scan_file` again.
   scanner holder, the PDF's size limit and work copy, a refusal's code, a picked file's name, and what of a picked
   file's lasting access is given up).
 - `npx tsc --noEmit`: the typecheck. `npm run lint`: ESLint (Expo's config).
+- `npm run check:apk -- [the APK]`: the release checklist's checks on a built APK (the debug APK by default).
 - From `../prototype/benchmark`: `..\..\.venv\Scripts\python.exe test_export_check_fixtures.py`: the test of the
   exporter that writes `fixtures/checks/` and `fixtures/lists/`.
 - From the same folder: `test_make_2307_template.py` (the 2307's template and ATC list), `test_synth_2307.py` (the
@@ -442,11 +445,12 @@ Base times that rate, and the offset account 1105. The rows stay as drafts, date
   under it ("Closest match: …"); fixing the payor's name or TIN is the only way to settle it.
 - **A phone's time.** A full Part III takes 8 s in the emulator's release-built core; a phone's time, with a team
   release, is still to measure (with milestone 2's phone checks, below).
-- **ONNX Runtime's telemetry.** The core switches ONNX Runtime's own telemetry off (`DisableTelemetryEvents` on its
-  environment), and `libonnxruntime.so` imports no socket function. onnxruntime-android 1.32.0's Java layer still
-  adds a provider that starts its telemetry client when the app does (Microsoft's, which reads the phone's
-  `android_id`); today it fails ("ORTTelemetry: Unable to initialize telemetry", an UnsatisfiedLinkError), and it is
-  to be removed from the merged manifest.
+- **ONNX Runtime's telemetry, on the emulator.** The core switches ONNX Runtime's own telemetry off
+  (`DisableTelemetryEvents` on its environment), and the scanner module's manifest removes the provider that
+  onnxruntime-android 1.32.0 adds to start its telemetry client when the app does (Microsoft's, which reads the phone's
+  `android_id`; before, it failed at each launch with "ORTTelemetry: Unable to initialize telemetry"). The x86_64
+  debug build's merged manifest and APK have no `TelemetryInitializer` (`npm run check:apk`, 2026-11-22). That the
+  app's log no longer has the ORTTelemetry line at launch is still to check on the emulator, with the next reinstall.
 - **Open-source notices.** The app shows none yet. A release needs them: pdfium's (above), and those of the other
   libraries it ships.
 

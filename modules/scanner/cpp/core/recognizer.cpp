@@ -18,7 +18,8 @@ constexpr int kBatch = 8;
 constexpr int kHeight = 48;
 
 // ONNX Runtime's own telemetry is switched off for the process: nothing about the model or the phone is sent (the app
-// promises that nothing leaves the phone).
+// promises that nothing leaves the phone). The telemetry provider its Android library adds is removed from the app's
+// manifest (the scanner module's AndroidManifest.xml).
 Ort::Env& env() {
   static Ort::Env e = [] {
     Ort::Env made(ORT_LOGGING_LEVEL_ERROR, "mbm-scanner");
