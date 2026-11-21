@@ -1,7 +1,7 @@
 import type { Final, Raw } from '../lib/checks/finalize';
 import { pyRound } from '../lib/checks/num';
 import type { Lists, Party } from '../lib/lists';
-import { checkDay, problemWords, rawFromScan, saleOf, suggestTaxType } from '../lib/sale';
+import { checkDay, isInvoice, problemWords, rawFromScan, saleOf, suggestTaxType } from '../lib/sale';
 import { addScan, getScan, setEdit, type StoredScan, updateScan } from '../lib/scans';
 import type { Settings } from '../lib/settings';
 import { parseScanResult } from '../modules/scanner/src/parse';
@@ -96,6 +96,15 @@ test('the date is checked against the day of the scan', () => {
   const scan = scanOf('inv_0007', 'camera');
   expect(checkDay({ ...scan, at: new Date(2026, 10, 20, 7, 30) })).toBe('2026-11-20');
   expect(checkDay({ ...scan, source: 'sample', at: new Date(2027, 5, 1) })).toBe('2026-11-18');
+});
+
+test('only the two invoices have a sale', () => {
+  expect(isInvoice(scanOf('inv_0007'))).toBe(true);
+  expect(isInvoice(scanOf('svc_0000'))).toBe(true);
+  expect(isInvoice(scanOf('sales_text_0', 'pdf'))).toBe(true);
+  expect(isInvoice(scanOf('bir2307_text_0', 'pdf'))).toBe(false); // a 2307 has its own checks (lib/cert.ts)
+  expect(isInvoice(scanOf('bir2307_photo_0', 'gallery'))).toBe(false);
+  expect(isInvoice(scanOf('blank_page'))).toBe(false); // no form found
 });
 
 test('empty lists skip the list checks', () => {

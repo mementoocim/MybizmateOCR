@@ -7,9 +7,18 @@ import { CheckCircle, ErrorCircle } from './icons';
 
 /**
  * The result's first card (the test app's ResultActivity.showSale): no form found, the things the checks want a
- * person to look at, or "Ready to post". problems is null when there's no sale (the form wasn't found).
+ * person to look at, or ready (an invoice's "Ready to post", a 2307's "Ready to save"). problems is null when there's
+ * nothing checked (the form wasn't found).
  */
-export function StatusCard({ result, problems }: { result: ScanResult; problems: string[] | null }) {
+export function StatusCard({
+  result,
+  problems,
+  ready,
+}: {
+  result: ScanResult;
+  problems: string[] | null;
+  ready: string;
+}) {
   const read = `Read on this phone in ${formatMs(result.timing.totalMs)}, offline.`;
   if (!result.aligned || problems === null) {
     return (
@@ -24,7 +33,7 @@ export function StatusCard({ result, problems }: { result: ScanResult; problems:
     const title = problems.length === 1 ? '1 thing to check' : `${problems.length} things to check`;
     return <Card warn title={title} body={`Check: ${problems.join(', ')}.\n${read}`} />;
   }
-  return <Card title="Ready to post" body={`Every check passed. ${read}`} />;
+  return <Card title={ready} body={`Every check passed. ${read}`} />;
 }
 
 function Card({ warn, title, body }: { warn?: boolean; title: string; body: string }) {

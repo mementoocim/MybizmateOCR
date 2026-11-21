@@ -1,36 +1,41 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { certOf, is2307 } from '../lib/cert';
 import { formatClock, formatMs } from '../lib/format';
 import { lists, subscribeLists } from '../lib/lists';
-import { saleOf } from '../lib/sale';
+import { isInvoice, saleOf } from '../lib/sale';
 import type { StoredScan } from '../lib/scans';
 import { settings, subscribeSettings } from '../lib/settings';
 import { bold, colors } from '../lib/theme';
 import { CheckCircle, ChevronRight, ErrorCircle } from './icons';
 
 /**
- * One of Home's recent scans: where it stands (its form not found, saved, its things to check, or ready to post), how
- * long it took, and when (the test app's HomeActivity.java:301-338). It runs the scan's own screen's checks, with the
- * lists as they are now, so the two always agree.
+ * One of Home's recent scans: where it stands (its form not found, saved, its things to check, or ready: an invoice to
+ * post, a 2307 to save), how long it took, and when (the test app's HomeActivity.java:301-338). It runs the scan's own
+ * screen's checks, with the lists as they are now, so the two always agree.
  */
 export function RecentRow({ scan, onPress }: { scan: StoredScan; onPress: () => void }) {
   const r = scan.result;
   const theLists = useSyncExternalStore(subscribeLists, lists);
   const theSettings = useSyncExternalStore(subscribeSettings, settings);
-  const sale = useMemo(
-    () => (r.aligned && r.form ? saleOf(scan, theLists, theSettings) : null),
-    [scan, r, theLists, theSettings],
+  const certificate = is2307(scan);
+  const checked = useMemo(
+    () =>
+      isInvoice(scan) ? saleOf(scan, theLists, theSettings) : is2307(scan) ? certOf(scan, theLists, theSettings) : null,
+    [scan, theLists, theSettings],
   );
   const status =
-    sale === null
+    checked === null
       ? 'Form not found'
       : scan.saved
-        ? `Saved as a ${scan.kind}`
-        : sale.problems.length > 0
-          ? `${sale.problems.length} to check`
-          : 'Ready to post';
-  const ok = sale !== null && (scan.saved !== null || sale.problems.length === 0);
+        ? `Saved as a ${certificate ? '2307' : scan.kind}`
+        : checked.problems.length > 0
+          ? `${checked.problems.length} to check`
+          : certificate
+            ? 'Ready to save'
+            : 'Ready to post';
+  const ok = checked !== null && (scan.saved !== null || checked.problems.length === 0);
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       {ok ? <CheckCircle size={24} color={colors.pine} /> : <ErrorCircle size={24} color={colors.ember} />}

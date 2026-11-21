@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BoxSheet } from '../components/BoxSheet';
 import { OutlinedButton, PrimaryButton, TextButton } from '../components/Buttons';
+import { CertificateSections } from '../components/CertificateSections';
 import { Camera } from '../components/icons';
 import { PartySheet } from '../components/PartySheet';
 import { ReadingOverlay } from '../components/ReadingOverlay';
@@ -15,13 +16,14 @@ import { StatusCard } from '../components/StatusCard';
 import { SupplierSheet } from '../components/SupplierSheet';
 import { TermsSheet } from '../components/TermsSheet';
 import { TEAM_BUILD } from '../lib/build';
+import { certOf, is2307 } from '../lib/cert';
 import { localIsoDate } from '../lib/checks/dates';
 import { candidates } from '../lib/checks/num';
 import { exportRow, saveBlock, sameRow } from '../lib/exportRows';
 import { formatMs, peso, prettyDate, qty } from '../lib/format';
 import { FORMS, formFields } from '../lib/forms';
 import { addItem, lists, subscribeLists } from '../lib/lists';
-import { boxValue, rawFromScan, saleOf, type SaleView } from '../lib/sale';
+import { boxValue, isInvoice, rawFromScan, saleOf, type SaleView } from '../lib/sale';
 import { compareWithSample, sampleInfo } from '../lib/samples';
 import { savedSummary, subscribeSaved } from '../lib/saved';
 import { useScanFlow } from '../lib/scanFlow';
@@ -78,8 +80,9 @@ function pdfFootnote(r: ScanResult): string | null {
   return [how, pages].filter((s) => s !== null).join(' ') || null;
 }
 
-// The result (the test app's ResultActivity): the checks' card, the scan view, the sale with every row opening what
-// the camera saw in its boxes (each box fixable, the checks run again at once), the footnote, and Retake.
+// The result (the test app's ResultActivity): the checks' card, the scan view, an invoice's sale or a 2307's sections
+// with every row opening what the camera saw in its boxes (each box fixable, the checks run again at once), the
+// footnote, and Retake.
 export default function Result() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const flow = useScanFlow();
@@ -87,7 +90,11 @@ export default function Result() {
   const theLists = useSyncExternalStore(subscribeLists, lists);
   const theSettings = useSyncExternalStore(subscribeSettings, settings);
   const sale = useMemo(
-    () => (scan && scan.result.aligned && scan.result.form ? saleOf(scan, theLists, theSettings) : null),
+    () => (scan && isInvoice(scan) ? saleOf(scan, theLists, theSettings) : null),
+    [scan, theLists, theSettings],
+  );
+  const cert = useMemo(
+    () => (scan && is2307(scan) ? certOf(scan, theLists, theSettings) : null),
     [scan, theLists, theSettings],
   );
   const summary = useSyncExternalStore(subscribeSaved, () => (id ? savedSummary(id) : undefined));
@@ -141,9 +148,20 @@ export default function Result() {
     <View style={styles.screen}>
       <Stack.Screen options={{ headerTitle: () => <Title subtitle={form?.title} /> }} />
       <ScrollView contentContainerStyle={styles.content}>
-        <StatusCard result={r} problems={sale?.problems ?? null} />
+        <StatusCard
+          result={r}
+          problems={sale?.problems ?? cert?.problems ?? null}
+          ready={cert ? 'Ready to save' : 'Ready to post'}
+        />
         <ScanImage result={r} />
         {sale && <SaleSections scan={scan} sale={sale} open={setSheet} />}
+        {cert && (
+          <CertificateSections
+            scan={scan}
+            view={cert}
+            openBoxes={(title, boxes) => setSheet({ kind: 'boxes', title, boxes })}
+          />
+        )}
         <Text style={styles.footnote}>{footnote}</Text>
         {pdfLine && <Text style={styles.footnote}>{pdfLine}</Text>}
         {sampleLine && <Text style={styles.footnote}>{sampleLine}</Text>}

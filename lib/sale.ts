@@ -106,10 +106,17 @@ export function problemWords(final: Final, kind: Kind, supplierMissing: boolean)
 
 const listColumn = (p: Party) => p.code || exportName(p);
 
+/** A scan with a sale: one of the two invoices, its form found. A BIR 2307 has its own checks (lib/cert.ts). */
+export function isInvoice(scan: StoredScan): boolean {
+  const { aligned, form } = scan.result;
+  return aligned && (form === 'sales_invoice' || form === 'service_invoice');
+}
+
 // One run of the checks per scan as it stands: Home's row, the scan's screen and Saved invoices share it. The
 // stores replace a scan, the lists or the settings when they change, so the same objects give the same answer.
 const views = new WeakMap<StoredScan, { lists: Lists; settings: Settings; view: SaleView }>();
 
+/** The sale of an invoice's scan (isInvoice): a 2307 never goes through a sale's checks. */
 export function saleOf(scan: StoredScan, lists: Lists, settings: Settings): SaleView {
   const hit = views.get(scan);
   if (hit && hit.lists === lists && hit.settings === settings) return hit.view;
