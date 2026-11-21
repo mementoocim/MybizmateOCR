@@ -28,10 +28,17 @@ struct ServiceTemplate {
   cv::Size page;                             // the straightened page: 1160 x 1860; 1700 x 2600
   std::array<cv::Point2f, 4> frame;          // the border's corners on the page: tl, tr, br, bl
   std::vector<cv::Vec3f> gridH, gridV;       // printed rules: [y, x0, x1] and [x, y0, y1]
-  // The border finder keeps this many of the longest lines in each direction (the JSON's "max_lines"; 40 when it gives
-  // none, as the Python reference keeps for the Service Invoice). A form with many frame-wide rules needs more, or its
-  // border's own lines drop out.
+  // How its border finder works (frame_aligner.h). The JSON leaves these out for the Python reference's way, the
+  // Service Invoice's; the BIR 2307, a dense grid on a big page, sets all three.
+  // - maxLines ("max_lines", 40 when absent): the longest lines kept in each direction. A form with many frame-wide
+  //   rules needs more, or its border's own lines drop out.
+  // - refitFinalists ("refit_finalists"): the finalists' corners are refitted to the ink before their full score and
+  //   the threshold, live too. A dense grid's score loses most to a few pixels of error in the corners.
+  // - besideClear ("beside_clear"): the points beside a rule that lie on another of its rules are left out of the
+  //   score. They never sample paper.
   size_t maxLines = 40;
+  bool refitFinalists = false;
+  bool besideClear = false;
   cv::Vec2i slackHeader, slackTable;         // how far a box's crop may reach past it, x and y
   cv::Rect paper;                            // the sheet itself on the page
   std::vector<ServiceField> fields;          // in file order

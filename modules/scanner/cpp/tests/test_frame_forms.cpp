@@ -15,6 +15,7 @@
 #include "doctest/doctest.h"
 #include "fixtures.h"
 
+#include "core/frame_aligner.h"
 #include "core/pdf_reader.h"
 #include "core/photo_quality.h"
 #include "core/result_json.h"
@@ -93,6 +94,37 @@ std::vector<std::string> all2307() {
   return stems;
 }
 
+// A 2307 image as the scanner gets it: a photo decoded and capped, or a picture PDF's page 1 rendered.
+cv::Mat image2307(const std::string& stem) {
+  if (stem.rfind("bir2307_photo_", 0) == 0) return mbm::decodePhoto(fixturesDir() + "/bir2307/" + stem + ".jpg");
+  return mbm::renderPdf(fixturesDir() + "/pdf/" + stem + ".pdf").bgr;
+}
+
+cv::Mat grayOf(const cv::Mat& bgr) {
+  cv::Mat gray;
+  cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
+  return gray;
+}
+
+// A photo as the camera's frame: fitted, kept in shape, on a 960 x 1280 grey frame (as the camera's test image is).
+struct CameraFrame {
+  cv::Mat gray;
+  double scale;    // frame px per photo px
+  cv::Point at;    // where the photo's top-left corner lands
+};
+
+CameraFrame cameraFrame(const cv::Mat& bgr) {
+  const cv::Mat gray = grayOf(bgr);
+  CameraFrame f{cv::Mat(1280, 960, CV_8U, cv::Scalar(128)), std::min(960.0 / gray.cols, 1280.0 / gray.rows), {}};
+  cv::Mat small;
+  cv::resize(gray, small,
+             cv::Size(static_cast<int>(std::lround(gray.cols * f.scale)), static_cast<int>(std::lround(gray.rows * f.scale))),
+             0, 0, cv::INTER_AREA);
+  f.at = cv::Point((960 - small.cols) / 2, (1280 - small.rows) / 2);
+  small.copyTo(f.gray(cv::Rect(f.at, small.size())));
+  return f;
+}
+
 }  // namespace
 
 TEST_CASE("the 2307 template parses, with its labels, comb boxes and line cap") {
@@ -102,6 +134,8 @@ TEST_CASE("the 2307 template parses, with its labels, comb boxes and line cap") 
   CHECK(t.page == cv::Size(1700, 2600));
   CHECK(t.fields.size() == 160);
   CHECK(t.maxLines == 60);  // its ~36 frame-wide rules would crowd its border out of the Service Invoice's 40
+  CHECK(t.refitFinalists);  // its dense grid's score: see "a 2307's border scores 0.80 or more"
+  CHECK(t.besideClear);
   CHECK(field(t, "payee_tin").label == "Payee's TIN");
   CHECK(field(t, "ewt3_tax").label == "Row 3 \xC2\xB7 Tax withheld");
   CHECK(field(t, "ewt1_atc").type == "code");
@@ -115,7 +149,9 @@ TEST_CASE("the 2307 template parses, with its labels, comb boxes and line cap") 
   CHECK(combs == std::vector<std::string>{"period_from", "period_to", "payee_tin", "payee_zip", "payor_tin", "payor_zip"});
 
   const auto service = mbm::ServiceTemplate::parse(readText(assetsDir() + "/service_invoice.json"));
-  CHECK(service.maxLines == 40);  // as the Python reference keeps
+  CHECK(service.maxLines == 40);  // as the Python reference keeps, and its scoring is the Python's
+  CHECK_FALSE(service.refitFinalists);
+  CHECK_FALSE(service.besideClear);
   CHECK(field(service, "customer_tin").type == "tin");
   CHECK_FALSE(field(service, "customer_tin").comb);  // a plain box: cut exactly as the Python cuts it
   CHECK(field(service, "date").label.empty());
@@ -235,22 +271,53 @@ TEST_CASE("a 2307 scan: the Service Invoice's photo checks, its paper as the pag
   CHECK(j["reads"][0]["type"] == "digits");
 }
 
-TEST_CASE("the camera finds a 2307: its paper's outline and the Service Invoice's live minimum") {
-  // A 2307 photo as a camera frame: fitted, kept in shape, on a 960 x 1280 grey frame (as the camera's test image is).
-  // Its border scores 0.81 there. (photo_0, the most tilted, scores 0.72 at this size, under the finder's 0.75: the
-  // camera misses it, though the scan finds it at 0.77.)
-  const std::string stem = "bir2307_photo_2";
-  const cv::Mat photo = mbm::decodePhoto(fixturesDir() + "/bir2307/" + stem + ".jpg");
-  cv::Mat gray, small;
-  cv::cvtColor(photo, gray, cv::COLOR_BGR2GRAY);
-  const double s = std::min(960.0 / gray.cols, 1280.0 / gray.rows);
-  cv::resize(gray, small, cv::Size(static_cast<int>(std::lround(gray.cols * s)), static_cast<int>(std::lround(gray.rows * s))),
-             0, 0, cv::INTER_AREA);
-  cv::Mat frame(1280, 960, CV_8U, cv::Scalar(128));
-  const cv::Point at((960 - small.cols) / 2, (1280 - small.rows) / 2);
-  small.copyTo(frame(cv::Rect(at, small.size())));
+TEST_CASE("a 2307's border scores 0.80 or more, at the scan's size and the camera's") {
+  const mbm::FrameAligner aligner(bir2307());
+  for (const auto& stem : all2307()) {
+    CAPTURE(stem);
+    const cv::Mat bgr = image2307(stem);
+    const auto scan = aligner.find(grayOf(bgr), true);
+    CHECK(scan.has_value());
+    if (scan) CHECK(scan->score >= 0.80);
+    const auto live = aligner.find(cameraFrame(bgr).gray, false);
+    CHECK(live.has_value());
+    if (live) CHECK(live->score >= 0.80);
+  }
+}
 
-  const auto d = scanner().detectFrame(frame);
+TEST_CASE("no other form's photo or camera frame is found as a 2307") {
+  const mbm::FrameAligner aligner(bir2307());
+  int photos = 0, frames = 0;
+  for (const auto& entry : std::filesystem::directory_iterator(fixturesDir() + "/photos")) {
+    cv::Mat bgr;
+    try {
+      bgr = mbm::decodePhoto(entry.path().string());
+    } catch (const mbm::UnreadableImage&) {
+      continue;  // not_an_image.jpg
+    }
+    CAPTURE(entry.path().filename().string());
+    CHECK_FALSE(aligner.find(grayOf(bgr), true).has_value());
+    CHECK_FALSE(aligner.find(cameraFrame(bgr).gray, false).has_value());
+    photos++;
+  }
+  for (const auto& entry : std::filesystem::directory_iterator(fixturesDir() + "/frames")) {
+    if (entry.path().extension() != ".png") continue;
+    CAPTURE(entry.path().filename().string());
+    CHECK_FALSE(aligner.find(cv::imread(entry.path().string(), cv::IMREAD_GRAYSCALE), false).has_value());
+    frames++;
+  }
+  CHECK(photos == 27);  // the Sales and Service Invoices, their variants, and the blank page
+  CHECK(frames == 5);
+}
+
+TEST_CASE("the camera finds a 2307: its paper's outline and the Service Invoice's live minimum") {
+  // photo_0 is the most tilted 2307 photo, and the camera's frame its hardest size
+  const std::string stem = "bir2307_photo_0";
+  const CameraFrame frame = cameraFrame(image2307(stem));
+  const double s = frame.scale;
+  const cv::Point at = frame.at;
+
+  const auto d = scanner().detectFrame(frame.gray);
   REQUIRE(d.has_value());
   CHECK(d->form == "bir_2307");
   CHECK(d->sharpMin == mbm::quality::SERVICE_LIVE_MIN);

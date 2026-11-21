@@ -26,6 +26,8 @@ ServiceTemplate ServiceTemplate::parse(const std::string& json) {
   for (const auto& r : j.at("grid").at("h")) t.gridH.emplace_back(r[0].get<float>(), r[1].get<float>(), r[2].get<float>());
   for (const auto& r : j.at("grid").at("v")) t.gridV.emplace_back(r[0].get<float>(), r[1].get<float>(), r[2].get<float>());
   t.maxLines = j.value("max_lines", t.maxLines);
+  t.refitFinalists = j.value("refit_finalists", t.refitFinalists);
+  t.besideClear = j.value("beside_clear", t.besideClear);
   const auto& slack = j.at("slack");
   t.slackHeader = {slack.at("header")[0].get<int>(), slack.at("header")[1].get<int>()};
   t.slackTable = {slack.at("table")[0].get<int>(), slack.at("table")[1].get<int>()};

@@ -760,6 +760,8 @@
   ]
  },
  "max_lines": 60,
+ "refit_finalists": true,
+ "beside_clear": true,
  "slack": {
   "header": [
    16,

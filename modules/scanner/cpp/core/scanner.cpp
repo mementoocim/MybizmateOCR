@@ -201,11 +201,13 @@ struct Scanner::Impl {
   }
 
   // The frame form whose border is found with the highest score (a finder finds nothing scoring under 0.75), or none.
-  // refit: refine the corners (scans); the live camera skips it.
+  // The photo's lines are searched once, for every form. refit: refine the corners (scans); the live camera skips it.
   std::optional<FrameMatch> findFrame(const cv::Mat& gray, bool refit) const {
+    const auto lines = findFrameLines(gray);
+    if (!lines) return std::nullopt;
     std::optional<FrameMatch> best;
     for (const auto& f : frames) {
-      auto found = f.aligner.find(gray, refit);
+      auto found = f.aligner.find(*lines, gray, refit);
       if (found && (!best || found->score > best->found.score)) best = FrameMatch{&f, *found};
     }
     return best;
