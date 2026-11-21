@@ -8,6 +8,7 @@ type ScannerNative = {
   preload(): Promise<void>;
   scanPhoto(uri: string, options: ScanOptions): Promise<string>;
   readPdf(uri: string): Promise<string>;
+  displayName(uri: string): Promise<string | null>;
   enhance(pageUri: string, mode: 'enhanced' | 'bw'): Promise<string>;
   saveToPictures(fileUri: string): Promise<string>;
   stats(): Promise<ScannerStats>;

@@ -7,10 +7,11 @@ import { coreJson } from '../test-utils/coreJson';
 import { memoryFs } from '../test-utils/memoryFs';
 
 // Import PDF, on Home: the system's file picker hands over a PDF, the scanner reads its page 1 (readPdf) and its
-// result opens. A PDF the scanner refuses is named in plain words.
+// result opens, labelled with the file's name. A PDF the scanner refuses is named in plain words.
 
 const mockPush = jest.fn();
 const mockReadPdf = jest.fn();
+const mockDisplayName = jest.fn();
 const mockScanPhoto = jest.fn();
 const mockLibrary = jest.fn();
 const mockPick = jest.fn();
@@ -22,6 +23,7 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('../modules/scanner', () => ({
   readPdf: (uri: string) => mockReadPdf(uri),
+  displayName: (uri: string) => mockDisplayName(uri),
   scanPhoto: (uri: string, options: object) => mockScanPhoto(uri, options),
 }));
 jest.mock('../lib/toast', () => ({ toast: (m: string) => mockToast(m) }));
@@ -36,14 +38,23 @@ jest.mock('expo-file-system', () => {
   return { ...memory, File: Object.assign(memory.File, { pickFileAsync: (options: object) => mockPick(options) }) };
 });
 
-// Android's picker hands over the person's own file: a content:// link, with the name and type its app gives.
-const DOWNLOADS = 'content://com.android.externalstorage.documents/document/primary%3ADownload%2F';
+// Android's picker hands over the person's own file: a content:// link. Its Downloads gives a link without the file's
+// name (…/document/msf%3A54); the device's storage gives one with its path.
+const LINK = 'content://com.android.providers.downloads.documents/document/msf%3A';
+const STORAGE = 'content://com.android.externalstorage.documents/document/primary%3ADownload%2F';
 
-/** The picker's answer: the file at that URI, kept in the memory store so that a deletion shows. */
-function picked(uri: string, name: string, type = 'application/pdf') {
+const names = new Map<string, string | null>(); // URI -> the name its app gives (what displayName finds)
+
+/**
+ * The picker's answer for the file at that URI, as expo-file-system gives it: its name is the link's last segment. The
+ * file is kept in the memory store, so that a deletion shows; `name` is what its app calls it.
+ */
+function picked(uri: string, name: string | null, type = 'application/pdf') {
   memoryFs.files.set(uri, '%PDF-1.7');
+  names.set(uri, name);
   const { File } = require('expo-file-system');
-  return { canceled: false, result: { uri, name, type, delete: () => new File(uri).delete() } };
+  const segment = decodeURIComponent(uri).split('/').pop();
+  return { canceled: false, result: { uri, name: segment, type, delete: () => new File(uri).delete() } };
 }
 
 async function importPdf(answer: object) {
@@ -52,46 +63,63 @@ async function importPdf(answer: object) {
 }
 
 const refused = (code: string) => Object.assign(new Error(`refused: ${code}`), { code });
+const labels = () => mockPush.mock.calls.map(([to]) => getScan(to.params.id)?.label);
 
 beforeEach(async () => {
   jest.clearAllMocks();
   memoryFs.reset();
+  names.clear();
   mockReadPdf.mockResolvedValue(parseScanResult(coreJson('sales_text_0')));
+  mockDisplayName.mockImplementation(async (uri: string) => names.get(uri) ?? null);
   await render(<Home />);
 });
 
 test('a PDF is read and opened', async () => {
-  const uri = `${DOWNLOADS}sales_text_0.pdf`;
+  const uri = `${LINK}54`;
   await importPdf(picked(uri, 'sales_text_0.pdf'));
   expect(mockPick).toHaveBeenCalledWith({ mimeTypes: ['application/pdf'] });
+  expect(mockDisplayName).toHaveBeenCalledWith(uri);
   expect(mockReadPdf).toHaveBeenCalledWith(uri); // the link itself: the scanner reads it through its own copy
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
   const scan = getScan(mockPush.mock.calls[0][0].params.id);
   expect(scan).toMatchObject({ label: 'PDF: sales_text_0.pdf', source: 'pdf' });
   expect(screen.getAllByText('PDF: sales_text_0.pdf').length).toBeGreaterThan(0); // in Recent scans
+  expect(screen.queryByText(/msf/)).toBeNull(); // never the link's own id
   expect(memoryFs.files.has(uri)).toBe(true); // the person's file is only read
   expect(mockToast).not.toHaveBeenCalled();
 });
 
+test('a PDF without a name is "PDF"', async () => {
+  // its app gives no name or an empty one, or asking fails: the label never shows the link's own id
+  await importPdf(picked(`${LINK}61`, null));
+  await importPdf(picked(`${LINK}62`, ''));
+  mockDisplayName.mockRejectedValueOnce(new Error('no name'));
+  await importPdf(picked(`${LINK}63`, 'x.pdf'));
+  expect(mockReadPdf).toHaveBeenCalledTimes(3);
+  expect(labels()).toEqual(['PDF', 'PDF', 'PDF']);
+  expect(screen.queryByText(/msf/)).toBeNull();
+});
+
 test('a cancelled pick does nothing', async () => {
   await importPdf({ canceled: true, result: null });
+  expect(mockDisplayName).not.toHaveBeenCalled();
   expect(mockReadPdf).not.toHaveBeenCalled();
   expect(mockToast).not.toHaveBeenCalled();
   expect(mockPush).not.toHaveBeenCalled();
 });
 
 test('not a PDF', async () => {
-  await importPdf(picked(`${DOWNLOADS}notes.txt`, 'notes.txt', 'text/plain'));
+  await importPdf(picked(`${STORAGE}notes.txt`, 'notes.txt', 'text/plain'));
   expect(mockToast).toHaveBeenCalledWith('Choose a PDF file.');
   expect(mockReadPdf).not.toHaveBeenCalled();
   expect(mockPush).not.toHaveBeenCalled();
 
-  // a PDF by its type alone (Android's Downloads can hand over a link without the file's name), or by its name alone
-  const link = 'content://com.android.providers.downloads.documents/document/msf%3A1000000123';
-  await importPdf(picked(link, 'msf:1000000123'));
-  expect(mockReadPdf).toHaveBeenLastCalledWith(link);
-  await importPdf(picked(`${DOWNLOADS}Invoice.PDF`, 'Invoice.PDF', ''));
-  expect(mockReadPdf).toHaveBeenLastCalledWith(`${DOWNLOADS}Invoice.PDF`);
+  // a PDF by its type alone (its app gives no name), or by its name alone (no type)
+  await importPdf(picked(`${LINK}64`, null));
+  expect(mockReadPdf).toHaveBeenLastCalledWith(`${LINK}64`);
+  await importPdf(picked(`${LINK}65`, 'Invoice.PDF', ''));
+  expect(mockReadPdf).toHaveBeenLastCalledWith(`${LINK}65`);
+  expect(labels()).toEqual(['PDF', 'PDF: Invoice.PDF']);
   expect(mockToast).toHaveBeenCalledTimes(1);
 });
 
@@ -103,7 +131,7 @@ test.each([
   ['pdf_page_too_big', "That PDF's page is too big to read."],
 ])('refused (%s): "%s"', async (code, words) => {
   mockReadPdf.mockRejectedValueOnce(refused(code));
-  await importPdf(picked(`${DOWNLOADS}${code}.pdf`, `${code}.pdf`));
+  await importPdf(picked(`${STORAGE}${code}.pdf`, `${code}.pdf`));
   expect(mockToast).toHaveBeenCalledWith(words);
   expect(mockToast).toHaveBeenCalledTimes(1);
   expect(mockPush).not.toHaveBeenCalled();
@@ -112,17 +140,17 @@ test.each([
 });
 
 test("the scanner failing isn't put on the PDF", async () => {
-  // a closed scanner, or a model that didn't load: expo's ERR_UNEXPECTED, worded as when it fails on a photo
+  // a closed scanner, or a model that didn't load (expo's ERR_UNEXPECTED): the scanner's own words, naming what it read
   const failure = Object.assign(new Error('The scanner was closed'), { code: 'ERR_UNEXPECTED' });
   mockLibrary.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'content://media/1' }] });
   mockScanPhoto.mockRejectedValueOnce(failure);
   await act(async () => fireEvent.press(screen.getByText('Choose from gallery')));
   mockReadPdf.mockRejectedValueOnce(failure);
-  await importPdf(picked(`${DOWNLOADS}y.pdf`, 'y.pdf'));
-  expect(mockToast).toHaveBeenCalledTimes(2);
-  const [[photo], [pdf]] = mockToast.mock.calls;
-  expect(pdf).toBe(photo);
-  expect(pdf).toContain('The scanner was closed');
+  await importPdf(picked(`${STORAGE}y.pdf`, 'y.pdf'));
+  expect(mockToast.mock.calls).toEqual([
+    ["Couldn't read that photo: The scanner was closed"],
+    ["Couldn't read that PDF: The scanner was closed"],
+  ]);
   expect(mockPush).not.toHaveBeenCalled();
 });
 

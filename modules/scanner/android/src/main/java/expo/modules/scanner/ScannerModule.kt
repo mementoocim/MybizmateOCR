@@ -99,6 +99,8 @@ class ScannerModule : Module() {
       withContext(scanThread) { readPdf(uri) }
     }
 
+    AsyncFunction("displayName") { uri: String -> displayName(uri) }
+
     AsyncFunction("enhance") Coroutine { pageUri: String, mode: String ->
       withContext(scanThread) { enhance(pageUri, mode) }
     }
@@ -258,6 +260,21 @@ class ScannerModule : Module() {
       }
       else -> throw IOException(PdfInput.UNREADABLE)
     }
+  }
+
+  /** A picked file's name for its label (DisplayName.choose). The file itself is never opened, and nothing is logged. */
+  private fun displayName(uri: String): String? {
+    val parsed = Uri.parse(uri)
+    return DisplayName.choose(parsed.scheme, parsed.lastPathSegment) { askedName(parsed) }
+  }
+
+  /** A content:// file's name as its app gives it (OpenableColumns.DISPLAY_NAME), or null when it gives none. */
+  private fun askedName(uri: Uri): String? = try {
+    context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+      if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null
+    }
+  } catch (e: Exception) {
+    null  // no name: the label says "PDF"
   }
 
   /** A content:// file's size as its app gives it (OpenableColumns.SIZE), or null when it gives none. */

@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 
 import Result from '../app/result';
 import { peso, qty } from '../lib/format';
-import { addScan, loadRecent, setEdit } from '../lib/scans';
+import { addScan, getScan, loadRecent, setEdit } from '../lib/scans';
 import type { ScanSource } from '../lib/scans';
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
@@ -19,6 +19,7 @@ const mockToast = jest.fn();
 const mockLibrary = jest.fn(async () => ({ canceled: true }));
 const mockPick = jest.fn();
 const mockReadPdf = jest.fn();
+const mockDisplayName = jest.fn();
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
@@ -34,6 +35,7 @@ jest.mock('../modules/scanner', () => ({
   saveToPictures: (uri: string) => mockSave(uri),
   scanPhoto: jest.fn(),
   readPdf: (uri: string) => mockReadPdf(uri),
+  displayName: (uri: string) => mockDisplayName(uri),
 }));
 jest.mock('../lib/toast', () => ({ toast: (m: string) => mockToast(m) }));
 jest.mock('../lib/build', () => ({
@@ -366,11 +368,13 @@ test('retake', async () => {
 
   // a PDF: the picker again, and the new read takes this screen's place
   await show('sales_text_0', { source: 'pdf' });
-  const uri = 'content://com.android.externalstorage.documents/document/primary%3ADownload%2Fsales_text_1.pdf';
-  mockPick.mockResolvedValueOnce({ canceled: false, result: { uri, name: 'sales_text_1.pdf', type: 'application/pdf' } });
+  const uri = 'content://com.android.providers.downloads.documents/document/msf%3A71';
+  mockPick.mockResolvedValueOnce({ canceled: false, result: { uri, name: 'msf:71', type: 'application/pdf' } });
+  mockDisplayName.mockResolvedValueOnce('sales_text_1.pdf');
   mockReadPdf.mockResolvedValueOnce(parseScanResult(coreJson('sales_text_0')));
   await press(screen.getByText('Retake'));
   expect(mockPick).toHaveBeenCalledWith({ mimeTypes: ['application/pdf'] });
   expect(mockReadPdf).toHaveBeenCalledWith(uri);
   expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
+  expect(getScan(mockRouter.replace.mock.calls.at(-1)![0].params.id)?.label).toBe('PDF: sales_text_1.pdf');
 });

@@ -3,7 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
-import { readPdf, scanPhoto, type ScanResult } from '../modules/scanner';
+import { displayName, readPdf, scanPhoto, type ScanResult } from '../modules/scanner';
 import { SAMPLES, sampleUri } from './samples';
 import { addScan, type ScanSource, type StoredScan } from './scans';
 import { toast } from './toast';
@@ -12,15 +12,15 @@ type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean
 
 const codeOf = (e: unknown) => (e as { code?: string } | null)?.code ?? '';
 
-/** The scanner itself failed (closed, or its model didn't load): the same words whatever it was reading. */
-function scannerFailed(e: unknown): string {
-  return `Couldn't read that photo: ${(e as { message?: string } | null)?.message ?? String(e)}`;
+/** The scanner's own failure (closed, or its model didn't load), naming what it was reading, with its message. */
+function scannerFailed(what: 'photo' | 'PDF', e: unknown): string {
+  return `Couldn't read that ${what}: ${(e as { message?: string } | null)?.message ?? String(e)}`;
 }
 
 function photoFailed(e: unknown): string {
   return codeOf(e) === 'ERR_UNREADABLE_IMAGE'
     ? "Couldn't read that photo: This file isn't a photo the scanner can open."
-    : scannerFailed(e);
+    : scannerFailed('photo', e);
 }
 
 // readPdf's refusals (its pdf_* codes), in plain words.
@@ -35,16 +35,15 @@ const PDF_REFUSED: Record<string, string> = {
 /** A refused PDF in plain words. Any other failure is the scanner's own, so it isn't put on the PDF. */
 function pdfFailed(e: unknown): string {
   const code = codeOf(e);
-  return code.startsWith('pdf_') ? (PDF_REFUSED[code] ?? PDF_REFUSED.pdf_unreadable) : scannerFailed(e);
+  return code.startsWith('pdf_') ? (PDF_REFUSED[code] ?? PDF_REFUSED.pdf_unreadable) : scannerFailed('PDF', e);
 }
 
 const PDF_TYPE = 'application/pdf';
 
-// Android's Downloads can hand over a link that doesn't carry the file's name (content://…/document/msf%3A123), so a
-// file is a PDF by its name or by the type the phone gives it.
-function isPdf(file: { name: string; type: string | null }): boolean {
-  const type = (file.type ?? '').split(';')[0].trim().toLowerCase();
-  return file.name.toLowerCase().endsWith('.pdf') || type === PDF_TYPE;
+/** A PDF by its name (as its app gives it; there may be none) or by the type the phone gives it. */
+function isPdf(name: string | null, type: string | null): boolean {
+  const mime = (type ?? '').split(';')[0].trim().toLowerCase();
+  return (name ?? '').toLowerCase().endsWith('.pdf') || mime === PDF_TYPE;
 }
 
 /** The picker's own copy of a file, once it has been read. */
@@ -177,9 +176,9 @@ export function useScanFlow() {
   }
 
   /**
-   * A PDF from the system's file picker, its page 1 read. Android's picker hands over the person's own file: a
-   * content:// link, which the scanner reads through a copy of its own and never changes. iOS's picker opens a copy
-   * in the app's temporary folder (a file://), deleted once it has been read.
+   * A PDF from the system's file picker, its page 1 read, labelled with the file's name. Android's picker hands over
+   * the person's own file: a content:// link, which the scanner reads through a copy of its own and never changes.
+   * iOS's picker opens a copy in the app's temporary folder (a file://), deleted once it has been read.
    */
   async function fromPdf(opts: { replace?: boolean } = {}): Promise<void> {
     await oneAtATime(async () => {
@@ -187,11 +186,13 @@ export function useScanFlow() {
       if (picked.canceled) return;
       const file = picked.result;
       try {
-        if (!isPdf(file)) {
+        // the name its app gives: a link's own last segment can be an id (Android's Downloads: …/document/msf%3A54)
+        const name = await displayName(file.uri).catch(() => null);
+        if (!isPdf(name, file.type)) {
           toast('Choose a PDF file.');
           return;
         }
-        const scan = { label: `PDF: ${file.name}`, source: 'pdf' } as const;
+        const scan = { label: name ? `PDF: ${name}` : 'PDF', source: 'pdf' } as const;
         await readAndOpen(() => readPdf(file.uri), scan, opts.replace, pdfFailed);
       } finally {
         if (file.uri.startsWith('file://')) deleteCopy(file);

@@ -35,6 +35,14 @@ export async function readPdf(uri: string): Promise<ScanResult> {
   return parseScanResult(await ScannerModule.readPdf(uri));
 }
 
+/**
+ * The name a picked file shows the person: a content:// link's name as its app gives it, or a file://'s last path
+ * segment; null when there's none (never a link's own id, like Downloads' msf:54). The file itself is never opened.
+ */
+export function displayName(uri: string): Promise<string | null> {
+  return ScannerModule.displayName(uri);
+}
+
 /** The scan view's Enhanced or B&W image of a scan's page (made once, then reused): its file:// URI. */
 export function enhance(pageUri: string, mode: 'enhanced' | 'bw'): Promise<string> {
   return ScannerModule.enhance(pageUri, mode);
