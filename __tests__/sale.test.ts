@@ -13,7 +13,7 @@ jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.m
 const FZ = require('../fixtures/checks/finalize.json');
 const PACK = require('../fixtures/checks/scan_pack.json');
 
-const SETTINGS: Settings = { vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '' };
+const SETTINGS: Settings = { vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '', offsetAccount: '' };
 const EMPTY: Lists = { parties: [], items: [], version: 0 };
 
 function party(fields: Partial<Party> & Pick<Party, 'id' | 'registeredName'>): Party {
@@ -105,6 +105,24 @@ test('only the two invoices have a sale', () => {
   expect(isInvoice(scanOf('bir2307_text_0', 'pdf'))).toBe(false); // a 2307 has its own checks (lib/cert.ts)
   expect(isInvoice(scanOf('bir2307_photo_0', 'gallery'))).toBe(false);
   expect(isInvoice(scanOf('blank_page'))).toBe(false); // no form found
+});
+
+test("a PDF's typed page is no photo: it never says retake it", () => {
+  // the core measures sharpness and light on every page it straightens, a PDF's rendered page too
+  const blurry = (stem: string) => {
+    const result = parseScanResult(coreJson(stem));
+    result.sharpness = 0.1; // under the Sales Invoice's minimum of 1
+    result.light = 10; // under its darkest of 50
+    return getScan(addScan({ label: `PDF: ${stem}.pdf`, source: 'pdf', result }))!;
+  };
+  const text = blurry('sales_text_0');
+  expect(rawFromScan(text).photo).toBeNull();
+  expect(saleOf(text, EMPTY, SETTINGS).problems).not.toContain('Blurry photo (retake it)');
+  expect(saleOf(text, EMPTY, SETTINGS).problems).not.toContain('Dark photo (retake it)');
+  // a PDF that is a picture is read like a photo, photo checks included
+  const picture = blurry('sales_picture_0');
+  expect(rawFromScan(picture).photo).toMatchObject({ sharpness: 0.1, light: 10 });
+  expect(saleOf(picture, EMPTY, SETTINGS).problems.slice(0, 2)).toEqual(['Blurry photo (retake it)', 'Dark photo (retake it)']);
 });
 
 test('empty lists skip the list checks', () => {

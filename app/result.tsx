@@ -9,7 +9,7 @@ import { Camera } from '../components/icons';
 import { PartySheet } from '../components/PartySheet';
 import { ReadingOverlay } from '../components/ReadingOverlay';
 import { SaleRow } from '../components/SaleRow';
-import { SaveSheet } from '../components/SaveSheet';
+import { CertSaveSheet, SaveSheet } from '../components/SaveSheet';
 import { ScanImage } from '../components/ScanImage';
 import { Segmented } from '../components/Segmented';
 import { StatusCard } from '../components/StatusCard';
@@ -19,15 +19,15 @@ import { TEAM_BUILD } from '../lib/build';
 import { certOf, is2307 } from '../lib/cert';
 import { localIsoDate } from '../lib/checks/dates';
 import { candidates } from '../lib/checks/num';
-import { exportRow, saveBlock, sameRow } from '../lib/exportRows';
+import { blockWords, saveBlock, sameRows } from '../lib/exportRows';
 import { formatMs, peso, prettyDate, qty } from '../lib/format';
 import { FORMS, formFields } from '../lib/forms';
 import { addItem, lists, subscribeLists } from '../lib/lists';
 import { boxValue, isInvoice, rawFromScan, saleOf, type SaleView } from '../lib/sale';
 import { compareWithSample, sampleInfo } from '../lib/samples';
-import { savedSummary, subscribeSaved } from '../lib/saved';
+import { rowsNow, savedSummary, subscribeSaved, summaryRows } from '../lib/saved';
 import { useScanFlow } from '../lib/scanFlow';
-import { getScan, type Kind, type StoredScan, subscribeRecent, updateScan } from '../lib/scans';
+import { getScan, type InvoiceKind, type StoredScan, subscribeRecent, updateScan } from '../lib/scans';
 import { settings, subscribeSettings } from '../lib/settings';
 import { bold, colors, sectionLabel } from '../lib/theme';
 import { toast } from '../lib/toast';
@@ -49,7 +49,7 @@ const KINDS = [
   { value: 'sale', label: 'A sale' },
   { value: 'purchase', label: 'A purchase' },
 ] as const;
-const KIND_CAPTION: Record<Kind, string> = {
+const KIND_CAPTION: Record<InvoiceKind, string> = {
   sale: "You issued it. It becomes a row in MyBizMate's Sales import.",
   purchase: "Another business issued it to you. It becomes a row in MyBizMate's Purchases import.",
 };
@@ -61,11 +61,6 @@ type OpenSheet =
   | { kind: 'supplier' }
   | { kind: 'save' };
 
-const BLOCKED: Record<string, string> = {
-  no_date: 'Add the date first: tap Date.',
-  no_total: 'Add the total first: tap Total due.',
-  no_supplier: 'Choose the supplier first: tap Supplier.',
-};
 const dayOf = (iso: string) => prettyDate(localIsoDate(new Date(iso)));
 
 /**
@@ -124,13 +119,13 @@ export default function Result() {
     sampleLine = `Sample invoice: ${exact} of ${written} boxes read exactly as written.`;
   }
   const isSample = scan.source === 'sample';
-  const canSave = r.aligned && !isSample && sale !== null;
-  // A saved invoice changed here (a box, sale or purchase, its party) goes out as saved until Save changes.
-  const changed =
-    summary !== undefined &&
-    sale !== null &&
-    scan.saved !== null &&
-    !sameRow(exportRow(scan, sale, scan.saved.details), summary.row);
+  const canSave = r.aligned && !isSample && (sale !== null || cert !== null);
+  const saveLabel = summary ? 'Save changes' : cert ? 'Save 2307' : scan.kind === 'sale' ? 'Save sale' : 'Save purchase';
+  // what it still needs before it can be saved: Save says it, and so does the card (never "ready")
+  const block = saveBlock(scan, sale ?? cert);
+  const blocked = blockWords(block);
+  // A saved one changed here (a box, sale or purchase, its party) goes out as saved until Save changes.
+  const changed = summary !== undefined && scan.saved !== null && !sameRows(rowsNow(scan), summaryRows(summary));
   const savedLine = !summary
     ? null
     : changed
@@ -139,9 +134,8 @@ export default function Result() {
   const back = from === 'recent' || from === 'saved';
 
   function openSave() {
-    const block = saveBlock(scan!, sale);
     if (block === null) setSheet({ kind: 'save' });
-    else if (BLOCKED[block]) toast(BLOCKED[block]);
+    else if (blocked) toast(blocked);
   }
 
   return (
@@ -152,6 +146,7 @@ export default function Result() {
           result={r}
           problems={sale?.problems ?? cert?.problems ?? null}
           ready={cert ? 'Ready to save' : 'Ready to post'}
+          blocked={blocked}
         />
         <ScanImage result={r} />
         {sale && <SaleSections scan={scan} sale={sale} open={setSheet} />}
@@ -178,11 +173,7 @@ export default function Result() {
             </View>
             {canSave && (
               <View style={styles.button}>
-                <PrimaryButton
-                  testID="save-open"
-                  label={summary ? 'Save changes' : scan.kind === 'sale' ? 'Save sale' : 'Save purchase'}
-                  onPress={openSave}
-                />
+                <PrimaryButton testID="save-open" label={saveLabel} onPress={openSave} />
               </View>
             )}
           </View>
@@ -203,6 +194,9 @@ export default function Result() {
         <SupplierSheet visible scan={scan} sale={sale} onClose={() => setSheet(null)} />
       )}
       {sheet?.kind === 'save' && sale && <SaveSheet visible scan={scan} sale={sale} onClose={() => setSheet(null)} />}
+      {sheet?.kind === 'save' && cert && (
+        <CertSaveSheet visible scan={scan} view={cert} onClose={() => setSheet(null)} />
+      )}
       <ReadingOverlay visible={flow.reading} />
     </View>
   );
@@ -285,7 +279,7 @@ function SaleSections({ scan, sale, open }: { scan: StoredScan; sale: SaleView; 
           onChange={(kind) => kind !== scan.kind && updateScan(scan.id, { kind, party: null })}
         />
       </View>
-      <Text style={styles.caption}>{KIND_CAPTION[scan.kind]}</Text>
+      <Text style={styles.caption}>{KIND_CAPTION[scan.kind === 'purchase' ? 'purchase' : 'sale']}</Text>
 
       <Text style={[sectionLabel, styles.section]}>INVOICE</Text>
       <View style={styles.card}>

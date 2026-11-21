@@ -1,20 +1,27 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
 import { localIsoDate } from './checks/dates';
-import { PARTIES_COLUMNS, partyRow, PURCHASE_COLUMNS, SALES_COLUMNS } from './exportRows';
+import { CWT_COLUMNS, PARTIES_COLUMNS, partyRow, PURCHASE_COLUMNS, SALES_COLUMNS } from './exportRows';
 import { type Lists, newParties, type Party } from './lists';
-import { type SavedSummary, savedList } from './saved';
+import { type SavedSummary, savedList, summaryRows } from './saved';
 import type { Kind } from './scans';
 import { workbook } from './xlsx';
 
-// The export: which saved invoices go in a file, the names to check in MyBizMate first, and the .xlsx itself, written
-// to the app's cache (cache/exports, emptied first) for the share sheet.
+// The export: which saved invoices (or 2307s) go in a file, the names to check in MyBizMate first, and the .xlsx
+// itself, written to the app's cache (cache/exports, emptied first) for the share sheet.
+
+/** Each kind's import: the words in its file's name, and its template's header row. */
+const IMPORTS: Record<Kind, { name: string; columns: readonly string[] }> = {
+  sale: { name: 'Sales', columns: SALES_COLUMNS },
+  purchase: { name: 'Purchases', columns: PURCHASE_COLUMNS },
+  '2307': { name: '2307-CWT', columns: CWT_COLUMNS },
+};
 
 export type ExportRange = 'new' | 'this_month' | 'last_month' | 'all';
 
 const monthOf = (d: Date) => localIsoDate(d).slice(0, 7);
 
-/** That kind's saved invoices for the choice, by invoice date (then the time saved), oldest first. */
+/** That kind's saved invoices (or 2307s) for the choice, by their date (then the time saved), oldest first. */
 export function exportChoice(kind: Kind, range: ExportRange, today: Date): SavedSummary[] {
   const month =
     range === 'this_month'
@@ -40,7 +47,7 @@ export function partiesToCheck(rows: readonly SavedSummary[], l: Lists): string[
 }
 
 export function exportFileName(kind: Kind | 'parties', today: Date): string {
-  const what = kind === 'sale' ? 'Sales' : kind === 'purchase' ? 'Purchases' : 'Parties';
+  const what = kind === 'parties' ? 'Parties' : IMPORTS[kind].name;
   return `MyBizMate ${what} import ${localIsoDate(today)}.xlsx`;
 }
 
@@ -64,7 +71,8 @@ export function writePartiesExport(parties: readonly Party[], now: Date): Promis
   return writeExportBytes(exportFileName('parties', now), workbook('Import', PARTIES_COLUMNS, parties.map(partyRow), now));
 }
 
-export function writeExport(kind: Kind, rows: readonly SavedSummary[], now: Date): Promise<string> {
-  const columns = kind === 'sale' ? SALES_COLUMNS : PURCHASE_COLUMNS;
-  return writeExportBytes(exportFileName(kind, now), workbook('Import', columns, rows.map((r) => r.row), now));
+/** The kind's import file with the saved ones' rows: an invoice's one row, a 2307's one per payment. */
+export function writeExport(kind: Kind, saved: readonly SavedSummary[], now: Date): Promise<string> {
+  const rows = saved.flatMap((s) => summaryRows(s));
+  return writeExportBytes(exportFileName(kind, now), workbook('Import', IMPORTS[kind].columns, rows, now));
 }

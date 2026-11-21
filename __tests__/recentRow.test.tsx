@@ -67,6 +67,17 @@ test("a 2307's status", async () => {
   expect(screen.getByText(/^Saved as a 2307 · 0 ms · /)).toBeTruthy();
 });
 
+test("a 2307 that can't be saved yet says why, as its card does", async () => {
+  // nothing to check, but no income payments were read: never "Ready to save"
+  const read = parseScanResult(coreJson('bir2307_text_0'));
+  const noPayments = { ...read, reads: read.reads.filter((b) => !b.name.startsWith('ewt')) };
+  await showRow(pdfOf('bir2307_text_0', { result: noPayments }));
+  expect(screen.getByText(/^No income payments were read · 0 ms · \d{1,2}:\d{2} (AM|PM)$/)).toBeTruthy();
+  // no payor's name, and its TIN matches no customer (there are none yet)
+  await showRow(pdfOf('bir2307_text_0', { edits: { payor_name: '' } }));
+  expect(screen.getByText(/^Add the payor first: tap Payor · 0 ms · /)).toBeTruthy();
+});
+
 test('the status follows the lists', async () => {
   await showRow(scanOf('inv_0007'));
   expect(screen.getByText(/^Ready to post · /)).toBeTruthy();

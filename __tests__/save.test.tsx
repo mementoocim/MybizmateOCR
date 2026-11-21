@@ -57,7 +57,7 @@ afterAll(() => jest.useRealTimers());
 beforeEach(async () => {
   jest.clearAllMocks();
   memoryFs.reset();
-  await updateSettings({ vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '' });
+  await updateSettings({ vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '', offsetAccount: '' });
 });
 
 test('the first sale asks whether the business is VAT-registered', async () => {
@@ -150,4 +150,79 @@ test('a change after saving says the export still has the saved version', async 
   expect(
     screen.getByText("Changed since it was saved. The export still has the saved version: tap Save changes."),
   ).toBeTruthy();
+});
+
+// A made-up 2307 (fixtures/core/expected2307) imported as a text PDF. bir2307_text_1, Q4 2026: four income payments
+// and one business-tax row, tax withheld ₱47,937.78 + ₱9,462.76; its payor, Castillo Eatery, with no customers yet.
+
+test('saving a 2307: the first save asks for the offset account', async () => {
+  const id = await show('bir2307_text_1', { source: 'pdf' });
+  expect(screen.getByTestId('save-open')).toHaveTextContent('Save 2307');
+  await press(screen.getByTestId('save-open'));
+  expect(
+    screen.getByText("Each payment becomes a row in MyBizMate's 2307-CWT import. Export it from Saved invoices."),
+  ).toBeTruthy();
+  expect(screen.getByText('Castillo Eatery (not in your list)')).toBeTruthy();
+  expect(screen.getByText('Q4 2026')).toBeTruthy();
+  expect(screen.getByText('₱57,400.54')).toBeTruthy(); // the rows' tax withheld, both tables
+  expect(screen.getByLabelText('Offset account').props.value).toBe('');
+  expect(screen.getByTestId('save-confirm')).toHaveTextContent('Save 2307');
+  expect(screen.getByTestId('save-confirm')).toBeDisabled();
+  await type('Offset account', ' 1205 CWT Receivable ');
+  expect(screen.getByTestId('save-confirm')).toBeEnabled();
+  await press(screen.getByTestId('save-confirm'));
+  expect(mockToast).toHaveBeenCalledWith('Saved. Export it from Saved invoices.');
+  expect(screen.getByText('Saved as a 2307 on Nov 18, 2026. Not exported yet.')).toBeTruthy();
+  expect(screen.getByTestId('save-open')).toHaveTextContent('Save changes');
+  expect(settings().offsetAccount).toBe('1205 CWT Receivable');
+
+  // a change after saving: the export still has the saved rows until Save changes
+  await act(async () => setEdit(id, 'ewt1_tax', '21,942.00'));
+  expect(
+    screen.getByText("Changed since it was saved. The export still has the saved version: tap Save changes."),
+  ).toBeTruthy();
+  await press(screen.getByTestId('save-open'));
+  expect(screen.getByLabelText('Offset account').props.value).toBe('1205 CWT Receivable'); // as it was saved
+  expect(screen.getByText('₱57,400.06')).toBeTruthy(); // the rows' tax, not the total rows'
+  await press(screen.getByTestId('save-confirm'));
+  expect(screen.getByText('Saved as a 2307 on Nov 18, 2026. Not exported yet.')).toBeTruthy();
+
+  // the next 2307 has the account already
+  await show('bir2307_text_0', { source: 'pdf' });
+  await press(screen.getByTestId('save-open'));
+  expect(screen.getByLabelText('Offset account').props.value).toBe('1205 CWT Receivable');
+  expect(screen.getByTestId('save-confirm')).toBeEnabled();
+});
+
+test('a 2307 needs its period first', async () => {
+  const id = await show('bir2307_text_1', { source: 'pdf' });
+  await act(async () => setEdit(id, 'period_to', ''));
+  await press(screen.getByTestId('save-open'));
+  expect(mockToast).toHaveBeenCalledWith('Add the period first: tap Period.');
+  expect(screen.queryByLabelText('Offset account')).toBeNull();
+});
+
+test('a 2307 needs its payor first, and its card says so', async () => {
+  // no name, and a TIN that matches no customer (there are none yet): nothing to check, but no payor to export
+  const id = await show('bir2307_text_1', { source: 'pdf' });
+  await act(async () => setEdit(id, 'payor_name', ''));
+  expect(screen.getByText('Add the payor first: tap Payor')).toBeTruthy();
+  expect(screen.queryByText('Ready to save')).toBeNull();
+  await press(screen.getByTestId('save-open'));
+  expect(mockToast).toHaveBeenCalledWith('Add the payor first: tap Payor.');
+  expect(screen.queryByLabelText('Offset account')).toBeNull();
+});
+
+test('a 2307 needs its payments first, and its card says so', async () => {
+  await show('bir2307_text_0', {
+    source: 'pdf',
+    edit: (r) => {
+      r.reads = r.reads.filter((b) => !b.name.startsWith('ewt')); // it has no business-tax rows either
+    },
+  });
+  expect(screen.getByText('No income payments were read')).toBeTruthy();
+  expect(screen.queryByText('Ready to save')).toBeNull();
+  await press(screen.getByTestId('save-open'));
+  expect(mockToast).toHaveBeenCalledWith('No income payments were read.');
+  expect(screen.queryByLabelText('Offset account')).toBeNull();
 });

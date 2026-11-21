@@ -37,7 +37,11 @@ export function boxValue(scan: StoredScan, box: string): string | null {
   return scan.result.reads.find((r) => r.name === box)?.text ?? null;
 }
 
-/** What the checks read: each box's reading and backups, an edited box as the person typed it (with no backups). */
+/**
+ * What the checks read: each box's reading and backups, an edited box as the person typed it (with no backups), and
+ * the photo's measures. A PDF's typed page is no photo (the core measures every page it straightens, a PDF's rendered
+ * page too): only a photo, or a PDF that is a picture, can be too blurry or too dark to trust.
+ */
 export function rawFromScan(scan: StoredScan): Raw {
   const r = scan.result;
   const boxes: Record<string, Box> = {};
@@ -46,8 +50,9 @@ export function rawFromScan(scan: StoredScan): Raw {
     if (text === '') delete boxes[name];
     else boxes[name] = { text, alts: [] };
   }
+  const typed = r.source === 'pdf' && r.picture === false;
   const photo =
-    r.aligned && r.sharpness != null && r.sharpMin != null && r.light != null && r.darkMax != null
+    !typed && r.aligned && r.sharpness != null && r.sharpMin != null && r.light != null && r.darkMax != null
       ? { sharpness: pyRound(r.sharpness, 4), sharp_min: r.sharpMin, light: pyRound(r.light, 1), dark_max: r.darkMax }
       : null;
   return { boxes, terms: scan.terms ?? r.terms, photo };
@@ -104,7 +109,8 @@ export function problemWords(final: Final, kind: Kind, supplierMissing: boolean)
   return out;
 }
 
-const listColumn = (p: Party) => p.code || exportName(p);
+/** A list party as MyBizMate's imports name it: its code, else its name as MyBizMate has it. */
+export const listColumn = (p: Party) => p.code || exportName(p);
 
 /** A scan with a sale: one of the two invoices, its form found. A BIR 2307 has its own checks (lib/cert.ts). */
 export function isInvoice(scan: StoredScan): boolean {

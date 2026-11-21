@@ -1,14 +1,17 @@
 import { Directory, Paths } from 'expo-file-system';
 
 import type { ScanResult } from '../modules/scanner';
-import { type ExportRow, exportRow, saveBlock } from './exportRows';
+import { certOf, type CertView, is2307, periodName, taxWithheld } from './cert';
+import { certRows, type ExportRow, exportRow, saveBlock } from './exportRows';
 import { readJson, writeJson } from './jsonFile';
 import { lists } from './lists';
-import { saleOf } from './sale';
+import { isInvoice, saleOf, type SaleView } from './sale';
 import {
   cacheScan,
   forgetScan,
   getScan,
+  type InvoiceDetails,
+  type InvoiceKind,
   type KeptResult,
   type Kind,
   type SaveDetails,
@@ -16,25 +19,28 @@ import {
   updateScan,
   withPdfFields,
 } from './scans';
-import { settings, updateSettings } from './settings';
+import { type Settings, settings, updateSettings } from './settings';
 
-// Saved invoices: the scans the person saved as a sale or a purchase, each one an import row. A saved scan's folder
-// moves from the scanner's scans/ (which keeps only its newest 6) to saved/<id>/, with the whole scan in scan.json;
-// saved.json holds one summary per saved scan, with its row and when it was exported.
+// Saved invoices: the scans the person saved as a sale, a purchase or a 2307, each as import rows (an invoice's one
+// row, a 2307's one per payment). A saved scan's folder moves from the scanner's scans/ (which keeps only its newest 6)
+// to saved/<id>/, with the whole scan in scan.json; saved.json holds one summary per saved scan, with its rows and when
+// it was exported.
 
-export type SavedSummary = {
+type SummaryBase = {
   id: string;
-  kind: Kind;
   label: string;
-  partyName: string;
+  partyName: string; // an invoice's customer or supplier, a 2307's payor
   partyId: string | null; // the list party, when the party is chosen or matched
-  date: string;
-  gross: number;
-  row: ExportRow;
+  date: string; // the invoice's date; a 2307's period's last day
   listed: boolean; // the party column is a list party's code, or a VARIOUS-* party
   savedAt: string;
   exportedAt: string | null;
 };
+/** A saved sale or purchase: its row of the Sales or Purchases import. */
+export type InvoiceSummary = SummaryBase & { kind: InvoiceKind; gross: number; row: ExportRow };
+/** A saved 2307: its rows of the 2307-CWT import, its period ("Q4 2026") and the tax withheld on its rows. */
+export type CertSummary = SummaryBase & { kind: '2307'; period: string; tax: number; rows: readonly ExportRow[] };
+export type SavedSummary = InvoiceSummary | CertSummary;
 
 const INDEX = 'saved.json';
 let summaries: readonly SavedSummary[] = []; // replaced, never changed in place: screens subscribe to it
@@ -63,23 +69,54 @@ export function savedSummary(id: string): SavedSummary | undefined {
   return summaries.find((s) => s.id === id);
 }
 
+/** A summary's import rows: an invoice's one row, a 2307's one per payment. */
+export function summaryRows(s: SavedSummary): readonly ExportRow[] {
+  return s.kind === '2307' ? s.rows : [s.row];
+}
+
+/** A scan's checks: a 2307's as a certificate (never an invoice's), an invoice's as a sale; null when no form was found. */
+function checksOf(scan: StoredScan): SaleView | CertView | null {
+  if (is2307(scan)) return certOf(scan, lists(), settings());
+  return isInvoice(scan) ? saleOf(scan, lists(), settings()) : null;
+}
+
 function summaryOf(scan: StoredScan, exportedAt: string | null): SavedSummary {
+  const { savedAt, details } = scan.saved!;
+  const base = { id: scan.id, label: scan.label, savedAt, exportedAt };
+  if (is2307(scan)) {
+    const view = certOf(scan, lists(), settings());
+    const { cert, payor } = view;
+    const matched = payor.status === 'auto' ? payor.listParty : null; // an unsure match is only the closest one
+    return {
+      ...base,
+      kind: '2307',
+      partyName: payor.shown,
+      partyId: matched?.id ?? null,
+      date: cert.to ?? '',
+      period: periodName(cert),
+      tax: taxWithheld(cert),
+      rows: certRows(view, details),
+      listed: matched !== null && matched.code !== '',
+    };
+  }
   const sale = saleOf(scan, lists(), settings());
   const party = sale.party;
   const inList = (party.status === 'chosen' || party.status === 'auto') && party.listParty !== null;
   return {
-    id: scan.id,
-    kind: scan.kind,
-    label: scan.label,
+    ...base,
+    kind: scan.kind === 'purchase' ? 'purchase' : 'sale',
     partyName: party.shown,
     partyId: inList ? party.listParty!.id : null,
     date: sale.final.date ?? '',
     gross: sale.gross ?? 0,
-    row: exportRow(scan, sale, scan.saved!.details),
+    row: exportRow(scan, sale, details as InvoiceDetails), // an invoice is saved with all four (SaveSheet)
     listed: (inList && party.listParty!.code !== '') || party.status === 'blank' || party.status === 'various',
-    savedAt: scan.saved!.savedAt,
-    exportedAt,
   };
+}
+
+/** A saved scan's import rows as it stands now: its boxes, its party or its kind may have changed since it was saved. */
+export function rowsNow(scan: StoredScan): readonly ExportRow[] {
+  return summaryRows(summaryOf(scan, null));
 }
 
 /** Moves a scan's folder out of the scanner's scans/ to saved/<id>/, and points every file of its result there. */
@@ -129,11 +166,21 @@ export async function loadSaved(): Promise<void> {
   changed();
 }
 
-/** Saves a scan as its kind's import row (again, after changes). Throws a SaveBlock's name when it can't be. */
+/** The account a scan was saved with becomes the default for its kind; an invoice's ATC becomes the default ATC. */
+function defaultsFrom(kind: Kind, details: SaveDetails): Partial<Settings> {
+  if (kind === '2307') return { offsetAccount: details.account };
+  const atc = 'atc' in details && details.atc ? { atc: details.atc } : {};
+  return kind === 'sale' ? { revenueAccount: details.account, ...atc } : { expenseAccount: details.account, ...atc };
+}
+
+/**
+ * Saves a scan as its kind's import rows (again, after changes): an invoice with its tax type, account, terms and ATC,
+ * a 2307 with its offset account. Throws a SaveBlock's name when it can't be.
+ */
 export async function saveScan(id: string, details: SaveDetails): Promise<void> {
   const before = getScan(id);
   if (!before) throw new Error('no_scan');
-  const block = saveBlock(before, before.result.aligned ? saleOf(before, lists(), settings()) : null);
+  const block = saveBlock(before, checksOf(before));
   if (block) throw new Error(block);
   const result = await moveToSaved(before);
   const scan = updateScan(id, { result, saved: { savedAt: new Date().toISOString(), details } })!;
@@ -142,8 +189,7 @@ export async function saveScan(id: string, details: SaveDetails): Promise<void> 
   summaries = newestFirst([summary, ...summaries.filter((s) => s.id !== id)]);
   changed();
   await writeJson(INDEX, summaries);
-  const atc = details.atc ? { atc: details.atc } : {};
-  await updateSettings(scan.kind === 'sale' ? { revenueAccount: details.account, ...atc } : { expenseAccount: details.account, ...atc });
+  await updateSettings(defaultsFrom(summary.kind, details));
 }
 
 /** A saved scan, read back so its screen can show it; null when it's gone. */

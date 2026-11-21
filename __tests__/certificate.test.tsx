@@ -43,7 +43,7 @@ jest.mock('expo-image-picker', () => ({
 jest.mock('expo-asset', () => ({ Asset: { fromModule: () => ({ downloadAsync: async () => ({ localUri: 'file:///s' }) }) } }));
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 
-const SETTINGS: Settings = { vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '' };
+const SETTINGS: Settings = { vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '', offsetAccount: '' };
 
 /** A made-up 2307's scan screen, with some of its boxes saying something else (an edit of '' clears a box). */
 async function show(
@@ -130,11 +130,11 @@ test("a 2307's sections", async () => {
   expect(screen.getAllByText('₱189,255.11')).toHaveLength(2); // its row, and its total
   expect(screen.getAllByText('Tax withheld ₱9,462.76')).toHaveLength(2);
 
-  // none of an invoice's, and no saving yet
-  for (const invoice of ['THIS INVOICE IS', 'INVOICE', 'Terms', 'Total due', 'Ready to post']) {
+  // none of an invoice's; saved as a 2307
+  for (const invoice of ['THIS INVOICE IS', 'INVOICE', 'Terms', 'Total due', 'Ready to post', 'Save sale']) {
     expect([invoice, screen.queryByText(invoice)]).toEqual([invoice, null]);
   }
-  expect(screen.queryByTestId('save-open')).toBeNull();
+  expect(screen.getByTestId('save-open')).toHaveTextContent('Save 2307');
 
   // every row opens what was read in its boxes
   expect(await boxesIn('Oct 1 – Dec 31, 2026 (Q4)')).toEqual(['period_from', 'period_to']);

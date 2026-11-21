@@ -3,7 +3,8 @@ import { Alert, type AlertButton } from 'react-native';
 
 import SavedScreen from '../app/saved';
 import { addParty, clearParties, markPartiesExported, type Party } from '../lib/lists';
-import { loadSaved, type SavedSummary } from '../lib/saved';
+import { type InvoiceSummary, loadSaved, saveScan } from '../lib/saved';
+import { addScan } from '../lib/scans';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 import { memoryFs } from '../test-utils/memoryFs';
@@ -21,7 +22,7 @@ jest.mock('expo-sharing', () => ({
 }));
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 
-function summary(id: string, date: string, extra: Partial<SavedSummary> = {}): SavedSummary {
+function summary(id: string, date: string, extra: Partial<InvoiceSummary> = {}): InvoiceSummary {
   return {
     id,
     kind: 'sale',
@@ -38,7 +39,7 @@ function summary(id: string, date: string, extra: Partial<SavedSummary> = {}): S
   };
 }
 
-async function showSaved(list: SavedSummary[]) {
+async function showSaved(list: InvoiceSummary[]) {
   memoryFs.files.set('file:///docs/saved.json', JSON.stringify(list));
   await loadSaved();
   await render(<SavedScreen />);
@@ -229,6 +230,63 @@ test('open a saved invoice', async () => {
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/result', params: { id: 'a', from: 'saved' } });
   await press(screen.getByText('Store B'));
   expect(mockToast).toHaveBeenCalledWith("Couldn't open that invoice.");
+});
+
+/**
+ * A 2307 saved as the app saves it, then Saved invoices: bir2307_text_1 as a text PDF (Q4 2026, tax withheld
+ * ₱47,937.78 on its income payments and ₱9,462.76 on its business-tax row), its payor not in the customers (there are
+ * none).
+ */
+async function show2307() {
+  await loadSaved(); // nothing saved yet
+  const id = addScan({ label: 'PDF: bir2307_text_1.pdf', source: 'pdf', result: parseScanResult(coreJson('bir2307_text_1')) });
+  await saveScan(id, { account: '1205' });
+  await render(<SavedScreen />);
+}
+
+test('a 2307 in Saved invoices', async () => {
+  await show2307();
+  expect(screen.getByText('Castillo Eatery')).toBeTruthy();
+  expect(screen.getByText('2307 · Q4 2026 · Tax ₱57,400.54')).toBeTruthy();
+  expect(screen.getByText('To export')).toBeTruthy();
+  // beside the sales' and the purchases' exports
+  for (const label of ['Export sales', 'Export purchases', 'Export 2307s']) {
+    expect(screen.getByRole('button', { name: label })).toBeTruthy();
+  }
+});
+
+test('Export 2307s', async () => {
+  await show2307();
+  await press(screen.getByText('Export 2307s'));
+  expect(screen.getByText("A file in MyBizMate's 2307-CWT import format, to import at mybizmate.io.")).toBeTruthy();
+  for (const range of ['Not exported yet', 'This month', 'Last month', 'All']) {
+    expect(screen.getByRole('button', { name: range })).toBeTruthy();
+  }
+  expect(screen.getByText('1 2307 · tax ₱57,400.54')).toBeTruthy();
+  expect(screen.getByText('Check that these are in MyBizMate before you import: Castillo Eatery.')).toBeTruthy();
+  await press(screen.getByText('Share the file'));
+  expect(mockShare).toHaveBeenCalledWith(expect.stringMatching(/\/MyBizMate 2307-CWT import \d{4}-\d{2}-\d{2}\.xlsx$/), {
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    dialogTitle: 'Send the file',
+  });
+  expect(alertSpy).toHaveBeenCalledWith(
+    'Did the file go where you wanted?',
+    'Mark this 2307 as exported, so the next export leaves it out.',
+    expect.anything(),
+  );
+  await answer('Mark as exported');
+  expect(mockToast).toHaveBeenCalledWith('Marked 1 2307 as exported.');
+  expect(screen.getByText('Exported')).toBeTruthy();
+  expect(screen.getByText('Nothing to export for this choice.')).toBeTruthy();
+  await press(screen.getByText('All'));
+  expect(screen.getByText('1 2307 · tax ₱57,400.54')).toBeTruthy();
+  expect(screen.getByText('1 of them was exported before. Importing it again adds it to MyBizMate twice.')).toBeTruthy();
+});
+
+test("a 2307 isn't in the sales' export", async () => {
+  await show2307();
+  await press(screen.getByText('Export sales'));
+  expect(screen.getByText('Nothing to export for this choice.')).toBeTruthy();
 });
 
 test('delete', async () => {

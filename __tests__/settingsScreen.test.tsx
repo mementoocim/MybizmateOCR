@@ -8,7 +8,7 @@ jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.m
 
 beforeEach(async () => {
   memoryFs.reset();
-  await updateSettings({ vatRegistered: true, revenueAccount: '4010', expenseAccount: '', atc: '' });
+  await updateSettings({ vatRegistered: true, revenueAccount: '4010', expenseAccount: '', atc: '', offsetAccount: '' });
 });
 
 test('the settings show what the phone keeps', async () => {
@@ -32,6 +32,18 @@ test('a field is saved as it is typed, and the VAT answer at once', async () => 
   expect(settings().atc).toBe('WC158');
   await act(async () => fireEvent.press(screen.getByText('Not VAT-registered')));
   expect(settings().vatRegistered).toBe(false);
+});
+
+test('the offset account is kept as typed', async () => {
+  await render(<SettingsScreen />);
+  expect(screen.getByLabelText('Offset account for 2307s').props.value).toBe('');
+  await act(async () => fireEvent.changeText(screen.getByLabelText('Offset account for 2307s'), ' 1205 CWT Receivable '));
+  expect(settings().offsetAccount).toBe('1205 CWT Receivable');
+  await screen.unmount(); // left while the field still has the cursor
+  expect(settings().offsetAccount).toBe('1205 CWT Receivable');
+  // and shown when the screen opens again
+  await render(<SettingsScreen />);
+  expect(screen.getByLabelText('Offset account for 2307s').props.value).toBe('1205 CWT Receivable');
 });
 
 test('what was typed is kept when the screen is left from the field', async () => {

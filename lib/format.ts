@@ -33,3 +33,12 @@ export function prettyDate(iso: string | null): string | null {
   const [y, m, d] = iso.split('-').map(Number);
   return `${MONTHS[m - 1]} ${d}, ${y}`;
 }
+
+/** The months from one ISO date to another: "Oct–Dec 2026", "Oct 2026", "Dec 2025–Feb 2026". */
+export function monthSpan(from: string, to: string): string {
+  const [fromYear, fromMonth] = from.split('-').map(Number);
+  const [toYear, toMonth] = to.split('-').map(Number);
+  const [first, last] = [MONTHS[fromMonth - 1], MONTHS[toMonth - 1]];
+  if (fromYear !== toYear) return `${first} ${fromYear}–${last} ${toYear}`;
+  return fromMonth === toMonth ? `${last} ${toYear}` : `${first}–${last} ${toYear}`;
+}

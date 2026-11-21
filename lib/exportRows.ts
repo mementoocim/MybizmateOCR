@@ -1,11 +1,13 @@
+import type { CertView } from './cert';
 import type { Final } from './checks/finalize';
-import { qty } from './format';
+import { monthSpan, qty } from './format';
 import type { Party } from './lists';
 import type { SaleView } from './sale';
-import type { SaveDetails, StoredScan } from './scans';
+import type { CertDetails, InvoiceDetails, StoredScan } from './scans';
 
-// A saved scan as a row of MyBizMate's Sales import or Purchases import (docs/mybizmate-templates): the templates'
-// header rows word for word, and each value where its column goes. Columns a row leaves out are blank.
+// A saved scan as a row of MyBizMate's Sales import or Purchases import (docs/mybizmate-templates), and a saved 2307 as
+// rows of its 2307-CWT (received) import: the templates' header rows word for word, and each value where its column
+// goes. Columns a row leaves out are blank.
 
 export const SALES_COLUMNS: readonly string[] = [
   'Date *',
@@ -54,6 +56,24 @@ export const PURCHASE_COLUMNS: readonly string[] = [
   'Term Type',
   'Credit Days',
   'Due Date',
+  'Particulars',
+];
+
+/**
+ * MyBizMate's 2307-CWT (received) import header row, word for word, as copied from its template on 2026-11-20 (the
+ * template stays outside the repo: it carries the test company's lists).
+ */
+export const CWT_COLUMNS: readonly string[] = [
+  'Date *',
+  'Customer *',
+  'Tax Base (Net)',
+  'CWT IT',
+  'IT Amt',
+  'CWT VT',
+  'VT Amt',
+  'Offset Account *',
+  'Cert No.',
+  'Branch',
   'Particulars',
 ];
 
@@ -123,15 +143,53 @@ export function sameRow(a: ExportRow, b: ExportRow): boolean {
   const keys = Object.keys(a);
   return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
 }
-export type SaveBlock = 'sample' | 'no_form' | 'no_date' | 'no_total' | 'no_supplier';
 
-/** Why a scan can't be saved yet, or null. Samples are made up, so they never are. */
-export function saveBlock(scan: StoredScan, sale: SaleView | null): SaveBlock | null {
+/** The same rows, in the same order. */
+export function sameRows(a: readonly ExportRow[], b: readonly ExportRow[]): boolean {
+  return a.length === b.length && a.every((row, i) => sameRow(row, b[i]));
+}
+
+export type SaveBlock =
+  | 'sample'
+  | 'no_form'
+  | 'no_date'
+  | 'no_total'
+  | 'no_supplier'
+  | 'no_period'
+  | 'no_payor'
+  | 'no_rows';
+
+/** What a block asks of the person. A sample's screen and a form not found say why on their own. */
+const BLOCK_WORDS: Partial<Record<SaveBlock, string>> = {
+  no_date: 'Add the date first: tap Date.',
+  no_total: 'Add the total first: tap Total due.',
+  no_supplier: 'Choose the supplier first: tap Supplier.',
+  no_period: 'Add the period first: tap Period.',
+  no_payor: 'Add the payor first: tap Payor.',
+  no_rows: 'No income payments were read.',
+};
+
+/** A block's words for the person, or null when there are none (no block, a sample, a form not found). */
+export function blockWords(block: SaveBlock | null): string | null {
+  return block === null ? null : (BLOCK_WORDS[block] ?? null);
+}
+
+/**
+ * Why a scan can't be saved yet, or null: an invoice checked as a sale (SaleView), a 2307 as a certificate
+ * (CertView). Samples are made up, so they never are.
+ */
+export function saveBlock(scan: StoredScan, checked: SaleView | CertView | null): SaveBlock | null {
   if (scan.source === 'sample') return 'sample';
-  if (!scan.result.aligned || !sale) return 'no_form';
-  if (sale.final.date === null) return 'no_date';
-  if (sale.gross === null) return 'no_total';
-  if (scan.kind === 'purchase' && sale.party.status === 'missing') return 'no_supplier';
+  if (!scan.result.aligned || !checked) return 'no_form';
+  if ('cert' in checked) {
+    const { cert, payor } = checked;
+    if (cert.from === null || cert.to === null) return 'no_period';
+    if (payor.column === '') return 'no_payor'; // no name, and no customer matched
+    return cert.rows.length === 0 ? 'no_rows' : null;
+  }
+  if (checked.final.date === null) return 'no_date';
+  if (checked.gross === null) return 'no_total';
+  if (scan.kind === 'purchase' && checked.party.status === 'missing') return 'no_supplier';
   return null;
 }
 
@@ -143,7 +201,7 @@ export function itemsDescription(final: Final): string {
     .join('; ');
 }
 
-export function exportRow(scan: StoredScan, sale: SaleView, details: SaveDetails): ExportRow {
+export function exportRow(scan: StoredScan, sale: SaleView, details: InvoiceDetails): ExportRow {
   const isSale = scan.kind === 'sale';
   const row: Record<string, string | number> = {
     'Date *': sale.final.date ?? '',
@@ -159,4 +217,29 @@ export function exportRow(scan: StoredScan, sale: SaleView, details: SaveDetails
   if (description) row.Description = description;
   if (sale.discount !== null) row.Discount = sale.discount;
   return row;
+}
+
+/**
+ * A saved 2307 as rows of the 2307-CWT import: one per payment in Part III, never its total rows. Each is dated the
+ * period's last day, names the payor, and has the row's total as its tax base; an income payment's ATC and tax go
+ * under CWT IT and IT Amt, a business tax's under CWT VT and VT Amt. Cert No. and Branch stay blank: the paper has no
+ * certificate number, and the branch is the business's own, in MyBizMate.
+ */
+export function certRows({ cert, payor }: CertView, details: CertDetails): ExportRow[] {
+  // a 2307 is saved only with its period (saveBlock), but one changed since can have lost it
+  const particulars =
+    cert.from !== null && cert.to !== null ? `BIR 2307 for ${monthSpan(cert.from, cert.to)}` : 'BIR 2307';
+  return cert.rows.map((r) => {
+    const row: Record<string, string | number> = {
+      'Date *': cert.to ?? '',
+      'Customer *': payor.column,
+      'Offset Account *': details.account,
+      Particulars: particulars,
+    };
+    if (r.total !== null) row['Tax Base (Net)'] = r.total;
+    const [atc, tax] = r.table === 'ewt' ? ['CWT IT', 'IT Amt'] : ['CWT VT', 'VT Amt'];
+    if (r.atc !== null) row[atc] = r.atc;
+    if (r.tax !== null) row[tax] = r.tax;
+    return row;
+  });
 }

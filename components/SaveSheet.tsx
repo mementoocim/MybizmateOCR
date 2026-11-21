@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { type CertView, periodName, taxWithheld } from '../lib/cert';
 import type { Terms } from '../lib/checks/finalize';
 import { peso, prettyDate } from '../lib/format';
 import type { SaleView } from '../lib/sale';
@@ -53,7 +54,8 @@ export function SaveSheet({
 }) {
   const s = useSyncExternalStore(subscribeSettings, settings);
   const isSale = scan.kind === 'sale';
-  const before = scan.saved?.details;
+  const saved = scan.saved?.details;
+  const before = saved && 'taxType' in saved ? saved : undefined; // as it was saved
   const [chosenType, setChosenType] = useState<TaxType | null>(before?.taxType ?? null);
   const [account, setAccount] = useState(before?.account ?? (isSale ? s.revenueAccount : s.expenseAccount));
   const [terms, setTerms] = useState<Terms | null>(before?.terms ?? sale.terms ?? (sale.party.listParty?.terms || null));
@@ -124,13 +126,7 @@ export function SaveSheet({
           </Text>
         </>
       )}
-      {problems > 0 && (
-        <Text style={styles.warning}>
-          {problems === 1
-            ? '1 thing is still marked to check. You can save anyway.'
-            : `${problems} things are still marked to check. You can save anyway.`}
-        </Text>
-      )}
+      <StillToCheck problems={problems} />
       <View style={styles.buttons}>
         <PrimaryButton
           testID="save-confirm"
@@ -141,6 +137,78 @@ export function SaveSheet({
         <TextButton label="Cancel" onPress={onClose} />
       </View>
     </Sheet>
+  );
+}
+
+/**
+ * Saving a 2307: what its rows in MyBizMate's 2307-CWT import will hold, and the offset account the import needs that
+ * isn't on the paper (asked at the first save, then kept in Settings).
+ */
+export function CertSaveSheet({
+  visible,
+  scan,
+  view,
+  onClose,
+}: {
+  visible: boolean;
+  scan: StoredScan;
+  view: CertView;
+  onClose: () => void;
+}) {
+  const s = useSyncExternalStore(subscribeSettings, settings);
+  const [account, setAccount] = useState(scan.saved?.details.account ?? s.offsetAccount);
+  const [saving, setSaving] = useState(false);
+  const ready = account.trim() !== '' && !saving;
+  const { cert, payor, problems } = view;
+
+  async function save() {
+    if (!ready) return;
+    setSaving(true);
+    try {
+      await saveScan(scan.id, { account: account.trim() });
+      onClose();
+      toast('Saved. Export it from Saved invoices.');
+    } catch {
+      setSaving(false);
+      toast("Couldn't save the 2307.");
+    }
+  }
+
+  return (
+    <Sheet
+      visible={visible}
+      title="Save 2307"
+      subtitle="Each payment becomes a row in MyBizMate's 2307-CWT import. Export it from Saved invoices."
+      onClose={onClose}>
+      <View style={styles.summary}>
+        <Line label="Payor" value={payor.shown + (NOT_LISTED[payor.status] ?? '')} />
+        <Line label="Period" value={periodName(cert)} />
+        <Line label="Tax withheld" value={peso(taxWithheld(cert))} />
+      </View>
+      <TextField
+        label="Offset account"
+        placeholder="Code or name, as in MyBizMate"
+        value={account}
+        onChangeText={setAccount}
+      />
+      <StillToCheck problems={problems.length} />
+      <View style={styles.buttons}>
+        <PrimaryButton testID="save-confirm" label="Save 2307" disabled={!ready} onPress={() => void save()} />
+        <TextButton label="Cancel" onPress={onClose} />
+      </View>
+    </Sheet>
+  );
+}
+
+/** The things still marked to check: saving doesn't wait for them. */
+function StillToCheck({ problems }: { problems: number }) {
+  if (problems === 0) return null;
+  return (
+    <Text style={styles.warning}>
+      {problems === 1
+        ? '1 thing is still marked to check. You can save anyway.'
+        : `${problems} things are still marked to check. You can save anyway.`}
+    </Text>
   );
 }
 

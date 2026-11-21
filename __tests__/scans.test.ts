@@ -91,6 +91,25 @@ test('a PDF scan comes back after a restart as it was read', async () => {
   expect(scan.result.reads.every((b: { fromText: boolean }) => b.fromText)).toBe(true);
 });
 
+test('a 2307 comes in as a 2307; one kept as a sale before 2307s could be saved loads as one', async () => {
+  const first = require('../lib/scans');
+  const id = first.addScan({ label: 'PDF: bir2307_text_0.pdf', source: 'pdf', result: parseScanResult(coreJson('bir2307_text_0', '/s/q')) });
+  expect(first.getScan(id).kind).toBe('2307');
+  const invoice = first.addScan({ label: 'PDF: sales_text_0.pdf', source: 'pdf', result: parseScanResult(coreJson('sales_text_0', '/s/i')) });
+  expect(first.getScan(invoice).kind).toBe('sale');
+  // recent.json as milestone 5 wrote it before a 2307 could be saved: its 2307 kept as a sale
+  await flush();
+  const kept = JSON.parse(memoryFs.files.get('file:///docs/recent.json') as string);
+  memoryFs.files.set('file:///docs/recent.json', JSON.stringify(kept.map((s: object) => ({ ...s, kind: 'sale' }))));
+  memoryFs.dirs.add('file:///s/q');
+  memoryFs.dirs.add('file:///s/i');
+  jest.resetModules();
+  const second = require('../lib/scans');
+  await second.loadRecent();
+  expect(second.getScan(id).kind).toBe('2307');
+  expect(second.getScan(invoice).kind).toBe('sale');
+});
+
 test('the reading itself removes the edit', () => {
   const { addScan, setEdit, getScan } = require('../lib/scans');
   const id = addScan({ label: 'Sample 0007', source: 'sample', sampleId: 'inv_0007', result: result('/s/c') });

@@ -10,7 +10,14 @@ beforeEach(() => {
 });
 
 test('the defaults', () => {
-  expect(S().settings()).toEqual({ vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '' });
+  expect(S().settings()).toEqual({ vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '', offsetAccount: '' });
+});
+
+test('settings kept before 2307s get an empty offset account', async () => {
+  memoryFs.files.set('file:///docs/settings.json', JSON.stringify({ vatRegistered: true, revenueAccount: '4010', expenseAccount: '', atc: '' }));
+  const s = S();
+  await s.loadSettings();
+  expect(s.settings()).toEqual({ vatRegistered: true, revenueAccount: '4010', expenseAccount: '', atc: '', offsetAccount: '' });
 });
 
 test('a change is saved, and comes back after a restart', async () => {
@@ -24,5 +31,5 @@ test('a change is saved, and comes back after a restart', async () => {
   jest.resetModules();
   const again = S();
   await again.loadSettings();
-  expect(again.settings()).toEqual({ vatRegistered: false, revenueAccount: '4010', expenseAccount: '', atc: '' });
+  expect(again.settings()).toEqual({ vatRegistered: false, revenueAccount: '4010', expenseAccount: '', atc: '', offsetAccount: '' });
 });

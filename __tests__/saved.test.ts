@@ -71,6 +71,7 @@ test('the summary', async () => {
     exportedAt: null,
   });
   expect(summary.partyId).toBe(m.lists.lists().parties.find((p) => p.code === 'C012')!.id);
+  if (summary.kind === '2307') throw new Error('an invoice, not a 2307');
   expect(summary.row['Customer *']).toBe('C012');
   expect(summary.date).toBe(summary.row['Date *']);
   expect(summary.gross).toBe(summary.row['Gross *']);
@@ -145,6 +146,56 @@ test('the account used becomes the default', async () => {
   const id = cameraScan(m);
   await m.saved.saveScan(id, DETAILS);
   expect(m.settings.settings()).toMatchObject({ revenueAccount: '4010', atc: 'WC158' });
+});
+
+test("a 2307's summary: checked as a 2307, one import row per payment", async () => {
+  const m = load();
+  await m.lists.importPartiesCsv(PARTIES, 'customer'); // Castillo Eatery is C013 there
+  const id = m.scans.addScan({ label: 'PDF: bir2307_text_1.pdf', source: 'pdf', result: parseScanResult(coreJson('bir2307_text_1')) });
+  // a 2307 has no date, terms or total due: an invoice's checks would refuse it
+  await m.saved.saveScan(id, { account: '1205' });
+  expect(m.scans.getScan(id)).toMatchObject({ kind: '2307', saved: { details: { account: '1205' } } });
+  const summary = m.saved.savedList()[0];
+  expect(summary).toMatchObject({
+    id,
+    kind: '2307',
+    label: 'PDF: bir2307_text_1.pdf',
+    partyName: 'Castillo Eatery',
+    listed: true,
+    date: '2026-12-31',
+    period: 'Q4 2026',
+    tax: 57400.54, // the rows' tax withheld: ₱47,937.78 on income payments, ₱9,462.76 on business tax
+    exportedAt: null,
+  });
+  expect(summary.partyId).toBe(m.lists.lists().parties.find((p) => p.code === 'C013')!.id);
+  if (summary.kind !== '2307') throw new Error('not a 2307');
+  expect(summary.rows.map((r) => [r['Customer *'], r['CWT IT'] ?? r['CWT VT'], r['Offset Account *']])).toEqual([
+    ['C013', 'WI050', '1205'],
+    ['C013', 'WI160', '1205'],
+    ['C013', 'WI120', '1205'],
+    ['C013', 'WI515', '1205'],
+    ['C013', 'WV010', '1205'],
+  ]);
+  // the offset account becomes the next 2307's; an invoice's accounts and ATC stay as they were
+  expect(m.settings.settings()).toMatchObject({ offsetAccount: '1205', revenueAccount: '', expenseAccount: '', atc: '' });
+  // an unsure match is only the closest customer: no list party, and the name as written goes out
+  const unsure = m.scans.addScan({ label: 'PDF: 2307.pdf', source: 'pdf', result: parseScanResult(coreJson('bir2307_text_0')) });
+  m.scans.setEdit(unsure, 'payor_name', 'Santos Merchandise');
+  m.scans.setEdit(unsure, 'payor_tin', '99988877700000');
+  const { certOf } = require('../lib/cert') as typeof import('../lib/cert');
+  expect(certOf(m.scans.getScan(unsure)!, m.lists.lists(), m.settings.settings()).payor.status).toBe('unsure');
+  await m.saved.saveScan(unsure, { account: '1205' });
+  const closest = m.saved.savedSummary(unsure)!;
+  expect(closest).toMatchObject({ partyId: null, listed: false });
+  expect(m.saved.summaryRows(closest).map((r) => r['Customer *'])).toEqual(['Santos Merchandise', 'Santos Merchandise']);
+  await m.saved.deleteSaved(unsure);
+  // a save cut short is summarised again as a 2307
+  memoryFs.files.delete('file:///docs/saved.json');
+  jest.resetModules();
+  const again = load();
+  await again.lists.loadLists();
+  await again.saved.loadSaved();
+  expect(again.saved.savedList()).toEqual([summary]);
 });
 
 test('a sample is never saved', async () => {

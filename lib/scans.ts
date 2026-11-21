@@ -6,17 +6,24 @@ import { readJson, writeJson } from './jsonFile';
 import type { TaxType } from './settings';
 
 // Recent scans: the newest 6, kept on the phone so they survive closing the app, with what the person did to each:
-// the boxes they fixed (kept apart from the readings), the terms they picked, sale or purchase, the customer or
-// supplier they chose, and whether they saved it. Each scan's files live in its own folder (the scanner keeps the
-// newest 6 folders too); the list is a JSON file in the app's documents. A saved scan opened from Saved invoices is
-// kept here too while the app runs.
+// the boxes they fixed (kept apart from the readings), the terms they picked, sale or purchase (a BIR 2307 is always
+// a 2307), the customer or supplier they chose, and whether they saved it. Each scan's files live in its own folder
+// (the scanner keeps the newest 6 folders too); the list is a JSON file in the app's documents. A saved scan opened
+// from Saved invoices is kept here too while the app runs.
 
 /** How the scan came in. Not the result's own source, which is what the scanner read: a photo or a PDF. */
 export type ScanSource = 'camera' | 'camera_app' | 'gallery' | 'sample' | 'pdf';
-export type Kind = 'sale' | 'purchase';
+/** What an invoice is saved as: a row of MyBizMate's Sales import or of its Purchases import. */
+export type InvoiceKind = 'sale' | 'purchase';
+/** What a scan is saved as: an invoice's kind, or a BIR 2307 (rows of MyBizMate's 2307-CWT import). */
+export type Kind = InvoiceKind | '2307';
 /** The person's pick: a party from the lists, a supplier's name typed in, or the various (walk-in) suppliers. */
 export type PartyChoice = { listId: string } | { name: string } | { various: true };
-export type SaveDetails = { taxType: TaxType; account: string; terms: Terms; atc: string };
+/** What an invoice's import row needs that isn't on the paper, as the person gave it when saving. */
+export type InvoiceDetails = { taxType: TaxType; account: string; terms: Terms; atc: string };
+/** What a 2307's import rows need that isn't on the paper: the offset account its withheld tax goes to. */
+export type CertDetails = { account: string };
+export type SaveDetails = InvoiceDetails | CertDetails;
 
 export type StoredScan = {
   id: string;
@@ -81,8 +88,11 @@ async function save(): Promise<void> {
 
 const FRESH = { edits: {}, terms: null, kind: 'sale', party: null, saved: null } as const;
 
+/** A BIR Form 2307 (its form found) is a 2307; any other scan keeps its kind, a sale until the person says otherwise. */
+const kindOf = (r: ScanResult, kept: Kind = 'sale'): Kind => (r.aligned && r.form === 'bir_2307' ? '2307' : kept);
+
 export function addScan(s: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'result'>): string {
-  const scan: StoredScan = { ...FRESH, ...s, id: `${Date.now()}-${++counter}`, at: new Date() };
+  const scan: StoredScan = { ...FRESH, ...s, kind: kindOf(s.result), id: `${Date.now()}-${++counter}`, at: new Date() };
   recent = [scan, ...recent].slice(0, KEEP);
   changed();
   void save();
@@ -142,14 +152,20 @@ export function recentScans(): readonly StoredScan[] {
   return recent;
 }
 
-/** At start: the saved list, without scans whose folder is gone. Older entries get the new fields' starting values. */
+/**
+ * At start: the saved list, without scans whose folder is gone. Older entries get the new fields' starting values,
+ * and a 2307 kept as a sale (before a 2307 could be saved) is a 2307.
+ */
 export async function loadRecent(): Promise<void> {
   try {
     const saved = await readJson<(Omit<StoredScan, 'at' | 'result'> & { at: string; result: KeptResult })[]>(FILE);
     if (!saved) return;
     recent = saved
       .filter((s) => s.result.scanDir && new Directory(s.result.scanDir).exists)
-      .map((s) => ({ ...FRESH, ...s, at: new Date(s.at), result: withPdfFields(s.result) }))
+      .map((s) => {
+        const result = withPdfFields(s.result);
+        return { ...FRESH, ...s, kind: kindOf(result, s.kind), at: new Date(s.at), result };
+      })
       .slice(0, KEEP);
   } catch {
     recent = [];
