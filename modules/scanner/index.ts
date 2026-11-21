@@ -25,6 +25,16 @@ export async function scanPhoto(uri: string, options?: ScanOptions): Promise<Sca
   return parseScanResult(await ScannerModule.scanPhoto(uri, options ?? {}));
 }
 
+/**
+ * Reads page 1 of a PDF (a content:// URI from the file picker, or a file://) like a photo, each box taking the PDF's
+ * own text where it has some. Its files are kept like a photo's; the PDF itself is only read. Rejects with code
+ * pdf_too_big (over 20 MB, refused before it is copied), pdf_broken (damaged, or not a PDF), pdf_password,
+ * pdf_page_too_big, or pdf_unreadable for any other failure.
+ */
+export async function readPdf(uri: string): Promise<ScanResult> {
+  return parseScanResult(await ScannerModule.readPdf(uri));
+}
+
 /** The scan view's Enhanced or B&W image of a scan's page (made once, then reused): its file:// URI. */
 export function enhance(pageUri: string, mode: 'enhanced' | 'bw'): Promise<string> {
   return ScannerModule.enhance(pageUri, mode);

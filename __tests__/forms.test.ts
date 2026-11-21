@@ -17,6 +17,15 @@ test("each form's words", () => {
   expect(FORMS.service_invoice).toEqual({ title: 'Service Invoice', cash: 'Cash sales', account: 'Charge sales', number: 'Invoice no.' });
 });
 
+test("the BIR 2307's title and boxes, in the template's order", () => {
+  expect(FORMS.bir_2307.title).toBe('BIR Form 2307');
+  const bir = formFields('bir_2307');
+  expect(bir).toHaveLength(160);
+  expect(bir.slice(0, 3)).toEqual(['period_from', 'period_to', 'payee_tin']);
+  expect(bir).toContain('ewt10_atc');
+  expect(bir[bir.length - 1]).toBe('bt_total_tax');
+});
+
 test('field labels', () => {
   expect(fieldLabel('sales_invoice', 'invoice_no')).toBe('SI no.');
   expect(fieldLabel('service_invoice', 'invoice_no')).toBe('Invoice no.');

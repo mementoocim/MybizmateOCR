@@ -1,9 +1,10 @@
 import type { FormName } from '../modules/scanner';
 
-// Each form's words on screen (the test app's OcrEngine.java:222 and service_invoice.json).
+// Each form's words on screen (the test app's OcrEngine.java:222, service_invoice.json and bir_2307.json).
 export const FORMS: Record<FormName, { title: string; cash: string; account: string; number: string }> = {
   sales_invoice: { title: 'MyBizMate Sales Invoice', cash: 'Cash', account: 'On account', number: 'SI no.' },
   service_invoice: { title: 'Service Invoice', cash: 'Cash sales', account: 'Charge sales', number: 'Invoice no.' },
+  bir_2307: { title: 'BIR Form 2307', cash: '', account: '', number: '' }, // no terms ticks, no number box
 };
 
 const LABELS: Record<string, string> = {
@@ -35,6 +36,9 @@ const FIELDS: Record<FormName, string[]> = {
   // amount_words2 is read into amount_words (the scanner merges the two lines)
   service_invoice: (require('../modules/scanner/assets/scanner/service_invoice.json') as Template).fields
     .filter((f) => f.type !== 'checkbox' && f.name !== 'amount_words2')
+    .map((f) => f.name),
+  bir_2307: (require('../modules/scanner/assets/scanner/bir_2307.json') as Template).fields
+    .filter((f) => f.type !== 'checkbox')
     .map((f) => f.name),
 };
 

@@ -13,6 +13,7 @@
 #include "core/enhance.h"
 #include "core/frame_input.h"
 #include "core/info.h"
+#include "core/pdf_reader.h"
 #include "core/result_json.h"
 #include "core/scanner.h"
 
@@ -77,6 +78,22 @@ extern "C" JNIEXPORT jstring JNICALL Java_expo_modules_scanner_NativeScanner_sca
     throwJava(env, "java/io/IOException", "unreadable_image");
   } catch (const std::exception& e) {
     throwJava(env, "java/lang/RuntimeException", e.what());
+  }
+  return nullptr;
+}
+
+// Page 1 of a PDF, scanned as a photo is: the scan result's JSON. A PDF the core refuses (mbm::PdfError) throws
+// java.io.IOException("pdf_<code>"): pdf_too_big, pdf_broken, pdf_password or pdf_page_too_big. Any other failure,
+// std::bad_alloc included, throws IOException("pdf_unreadable"). Only the code crosses: never the file's name or text.
+extern "C" JNIEXPORT jstring JNICALL Java_expo_modules_scanner_NativeScanner_scanPdf(JNIEnv* env, jobject, jlong handle,
+                                                                                     jstring path, jstring outDir) {
+  try {
+    auto* scanner = reinterpret_cast<mbm::Scanner*>(handle);
+    return env->NewStringUTF(mbm::toJson(scanner->scanPdf(toString(env, path), toString(env, outDir))).c_str());
+  } catch (const mbm::PdfError& e) {
+    throwJava(env, "java/io/IOException", ("pdf_" + e.code).c_str());
+  } catch (...) {
+    throwJava(env, "java/io/IOException", "pdf_unreadable");
   }
   return nullptr;
 }

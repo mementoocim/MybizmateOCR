@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
@@ -32,6 +33,17 @@ internal class SaveNeedsAndroid10Exception :
 
 internal class SaveFailedException(cause: Throwable?) :
   CodedException("ERR_SAVE_FAILED", "Couldn't save the scan.", cause)
+
+/** readPdf's rejection. code: one of PdfInput.CODES (the app words each one itself; the message is for developers). */
+internal class PdfRefusedException(code: String, cause: Throwable?) : CodedException(code, pdfMessage(code), cause)
+
+private fun pdfMessage(code: String) = when (code) {
+  "pdf_too_big" -> "The PDF is over 20 MB."
+  "pdf_broken" -> "The PDF is damaged, or isn't a PDF."
+  "pdf_password" -> "The PDF is locked with a password."
+  "pdf_page_too_big" -> "The PDF's page is too big to read."
+  else -> "The PDF couldn't be read."
+}
 
 /** scanPhoto's options: keepFiles writes the scan's images (the page, the original, the crops). */
 class ScanOptions : Record {
@@ -81,6 +93,10 @@ class ScannerModule : Module() {
 
     AsyncFunction("scanPhoto") Coroutine { uri: String, options: ScanOptions? ->
       withContext(scanThread) { scan(uri, options ?: ScanOptions()) }
+    }
+
+    AsyncFunction("readPdf") Coroutine { uri: String ->
+      withContext(scanThread) { readPdf(uri) }
     }
 
     AsyncFunction("enhance") Coroutine { pageUri: String, mode: String ->
@@ -200,6 +216,57 @@ class ScannerModule : Module() {
     FileOutputStream(png).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     bitmap.recycle()
     return png
+  }
+
+  /**
+   * Reads page 1 of a PDF as scan() reads a photo, keeping its files: a content:// file (the person's own, from the
+   * system's file picker) through a work copy, deleted afterwards; a file:// in place. The person's file is never
+   * changed or deleted. Every failure rejects with a code (PdfInput.CODES); a file its app says is over 20 MB is
+   * refused before any of it is copied.
+   */
+  private fun readPdf(uri: String): String = scanner.use { handle ->
+    val work = File(context.cacheDir, "scan-work").apply {
+      deleteRecursively()
+      mkdirs()
+    }
+    val scans = File(context.filesDir, "scans")
+    val outDir = File(scans, System.currentTimeMillis().toString())  // the core makes it once the PDF is accepted
+    try {
+      val json = withPdfFile(uri, work) { path -> NativeScanner.scanPdf(handle, path, outDir.absolutePath) }
+      keepNewest(scans, KEEP_SCANS)
+      json
+    } catch (e: Throwable) {
+      outDir.deleteRecursively()
+      throw PdfRefusedException(PdfInput.codeOf(e), e)
+    } finally {
+      work.deleteRecursively()  // the copy: only needed while reading
+    }
+  }
+
+  /** The PDF as a file the core can open, for one read: a file:// as is; a content:// through a work copy. */
+  private fun <T> withPdfFile(uri: String, work: File, read: (String) -> T): T {
+    val parsed = Uri.parse(uri)
+    return when (parsed.scheme) {
+      "file", null -> read(parsed.path ?: throw IOException(PdfInput.UNREADABLE))
+      "content" -> {
+        val size = reportedSize(parsed)
+        if (size != null && !PdfInput.sizeOk(size)) throw IOException(PdfInput.TOO_BIG)
+        val resolver = context.contentResolver
+        PdfInput.readCopy(work, open = { resolver.openInputStream(parsed) ?: throw IOException(PdfInput.UNREADABLE) }) {
+          read(it.absolutePath)
+        }
+      }
+      else -> throw IOException(PdfInput.UNREADABLE)
+    }
+  }
+
+  /** A content:// file's size as its app gives it (OpenableColumns.SIZE), or null when it gives none. */
+  private fun reportedSize(uri: Uri): Long? = try {
+    context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+      if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+    }
+  } catch (e: Exception) {
+    null  // the copy still stops at the limit
   }
 
   private fun deletePhoto(uri: String) {

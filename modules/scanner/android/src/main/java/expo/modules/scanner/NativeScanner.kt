@@ -11,7 +11,7 @@ internal object NativeScanner {
   /** {"opencv": "...", "onnxruntime": "..."}: the libraries the core was built with. */
   external fun coreInfo(): String
 
-  /** Loads the model and the three forms once; returns a handle for scanPhoto, detectFrame and destroy. */
+  /** Loads the model and the three forms once; returns a handle for scanPhoto, scanPdf, detectFrame and destroy. */
   external fun create(
     model: ByteArray,
     dict: String,
@@ -27,6 +27,13 @@ internal object NativeScanner {
    * Returns the scan result's JSON. Throws java.io.IOException("unreadable_image") when OpenCV can't open the file.
    */
   external fun scanPhoto(handle: Long, path: String, outDir: String): String
+
+  /**
+   * Reads page 1 of a PDF as scanPhoto reads a photo (Scanner::scanPdf), writing the same files into outDir. Returns the
+   * scan result's JSON. Throws java.io.IOException("pdf_<code>"): pdf_too_big, pdf_broken, pdf_password or
+   * pdf_page_too_big when the core refuses the PDF (before anything is written), pdf_unreadable on any other failure.
+   */
+  external fun scanPdf(handle: Long, path: String, outDir: String): String
 
   /**
    * One camera frame's grey plane (a direct buffer, rows rowStride bytes apart, turned rotation degrees clockwise from
