@@ -185,22 +185,9 @@ Expo Go can't run this app (it has native code); it uses a development build.
 The debug APK is about 245 MB (the full OpenCV, ONNX Runtime and pdfium, CameraX). Replacing an installed build
 (`adb install -r`) needs about 780 MB free on the emulator: the new APK beside the old one, and Android's own reserve.
 If an install fails with `INSUFFICIENT_STORAGE`, remove the core tests' files
-(`adb shell rm -rf /data/local/tmp/scanner_tests`); if that isn't enough, uninstall the old build first
-(`adb uninstall com.mybizmate.scan`). Uninstalling deletes the app's data (the lists, Settings, saved invoices and
-recent scans), so back it up first and put it back before the first launch (Git Bash, with `MSYS_NO_PATHCONV=1`;
-PowerShell's `>` would change the bytes):
-
-```bash
-adb exec-out run-as com.mybizmate.scan tar -cf - -C /data/data/com.mybizmate.scan . > scan-appdata.tar
-```
-
-Then, after the new build is installed:
-
-```bash
-adb push scan-appdata.tar /data/local/tmp/
-adb shell "run-as com.mybizmate.scan tar -xf /data/local/tmp/scan-appdata.tar -C /data/data/com.mybizmate.scan ./files ./shared_prefs ./no_backup"
-adb shell rm /data/local/tmp/scan-appdata.tar
-```
+(`adb shell rm -rf /data/local/tmp/scanner_tests`). If that isn't enough, the old build has to be uninstalled first,
+and uninstalling deletes the app's data (the lists, Settings, saved invoices and recent scans): to keep it, see
+"Reinstalling without losing the app's data", below.
 
 In a debug build, the dev client's Tools button starts over Home's ⋮ menu: drag it aside. On the emulator, a tap sent
 with `adb shell input` can open Gboard's "Try out your stylus" once; Cancel it.
@@ -208,6 +195,55 @@ with `adb shell input` can open Gboard's "Try out your stylus" once; Cancel it.
 On Windows, `plugins/with-windows-native-paths.js` keeps the native builds under Windows' 260-character path
 limit: it moves each library's CMake build folder to `%LOCALAPPDATA%\mbs-cxx` (a build cache that can be deleted
 any time).
+
+### Reinstalling without losing the app's data
+
+Run these in Git Bash, from the repo's folder, in this order (PowerShell's `>` would change the backup's bytes).
+Each block starts with `export MSYS_NO_PATHCONV=1`: without it, Git Bash turns the device's paths (`/data/...`) into
+Windows paths, the backup fails, and the file holds an error message instead. The backup goes to Git Bash's `/tmp`
+(Windows' temp folder), outside the repo, since it holds the app's data.
+
+1. Build the new APK first, so a failed build never leaves the app uninstalled. Don't use `npx expo run:android`
+   here: it opens the app before its data is back.
+
+   ```bash
+   export MSYS_NO_PATHCONV=1
+   (cd android && JAVA_HOME='C:\Program Files\Android\Android Studio\jbr' ANDROID_HOME="$LOCALAPPDATA/Android/Sdk" ./gradlew assembleDebug -PreactNativeArchitectures=x86_64)
+   ```
+
+2. Back up the app's data, and check the backup:
+
+   ```bash
+   export MSYS_NO_PATHCONV=1
+   adb shell am force-stop com.mybizmate.scan
+   adb exec-out run-as com.mybizmate.scan tar -cf - -C /data/data/com.mybizmate.scan . > /tmp/scan-appdata.tar
+   tar -tf /tmp/scan-appdata.tar | grep -cxE '\./(files|shared_prefs)/'
+   ```
+
+   The last line must print 2: the backup lists `./files/` and `./shared_prefs/`. If it doesn't, stop here and don't
+   uninstall.
+
+3. Uninstall, install the new build, and put the data back, without opening the app in between:
+
+   ```bash
+   export MSYS_NO_PATHCONV=1
+   adb uninstall com.mybizmate.scan
+   adb install android/app/build/outputs/apk/debug/app-debug.apk
+   adb push "$(cygpath -w /tmp/scan-appdata.tar)" /data/local/tmp/scan-appdata.tar
+   adb shell "run-as com.mybizmate.scan tar -xf /data/local/tmp/scan-appdata.tar -C /data/data/com.mybizmate.scan ./files ./shared_prefs ./no_backup"
+   adb shell rm /data/local/tmp/scan-appdata.tar
+   ```
+
+4. Check the restore. The two counts must be the same: every file in the backup is back.
+
+   ```bash
+   export MSYS_NO_PATHCONV=1
+   tar -tf /tmp/scan-appdata.tar | grep -cE '^\./(files|shared_prefs|no_backup)/.*[^/]$'
+   adb shell "run-as com.mybizmate.scan find files shared_prefs no_backup -type f" | wc -l
+   ```
+
+   When they are, delete the backup (`rm /tmp/scan-appdata.tar`). Then start Metro (`npx expo start --dev-client`)
+   and open the app from its icon.
 
 ### The camera's test photo (debug builds only)
 
@@ -306,12 +342,12 @@ doctest (68 test cases, 8938 assertions), the module's Kotlin tests (29), and th
    2 was read." 55 of 55 boxes as written.
 4. **The refusals:** `password.pdf`, `broken.pdf`, a 22.4 MB PDF and a PDF whose page is 2142 × 3276 pt each gave
    their message, and no scan was added.
-5. **The MyBizMate-printed test 2307** (certificate 2307I-000001 of the test company, pushed under a neutral name and
-   deleted afterwards): 17 boxes, every one from the PDF's text, and every one the same as what MyBizMate printed
-   (read on the laptop with pypdfium2): the period; the payee's name, address, TIN and ZIP; the payor's name and TIN;
-   the payment (its description, ATC, month, total and tax); and both total rows. "Only page 1 of 2 was read." It
-   showed 4 things to check: the payee's TIN (only a branch code is printed), the payor's TIN (a 4-digit branch
-   code), the payor (not in the made-up customers), and Totals (see below).
+5. **The MyBizMate-printed test 2307** (pushed under a neutral name; the PDF was deleted afterwards): 17 boxes, every
+   one from the PDF's text, and every one the same as what MyBizMate printed (read on the laptop with pypdfium2): the
+   period; the payee's name, address, TIN and ZIP; the payor's name and TIN; the payment (its description, ATC, month,
+   total and tax); and both total rows. "Only page 1 of 2 was read." It showed 4 things to check: the payee's TIN
+   (only a branch code is printed), the payor's TIN (a 4-digit branch code), the payor (not in the made-up
+   customers), and Totals (see below).
 6. **The camera:** `bir2307_photo_0.jpg` as the test photo: the outline, "BIR Form 2307 · hold still", the photo taken
    by itself, 22 of 22 boxes exact, "Ready to save". `svc_0000.jpg` still shows "Service Invoice · hold still", reads
    as a Service Invoice (35 of 35 boxes the same as the laptop) and says "Ready to post".
@@ -342,9 +378,12 @@ doctest (68 test cases, 8938 assertions), the module's Kotlin tests (29), and th
     debug build compiles the core without optimization; the test program is a release build. Only a phone's numbers
     count.
 
-**MyBizMate's 2307-CWT importer:** pending. The exported file hasn't been imported into MyBizMate yet; that check
-waits for the user's go-ahead, and its result goes here. The file's customers are the made-up list's codes (`C005`,
-`C009`, `C015`), so they need a match in the company it's imported into.
+**MyBizMate's 2307-CWT importer** (2026-11-22, at the user's go-ahead): passed. The file above went into the test
+company's 2307-CWT import (Sales Bizmate → Sheets → CWT → Import), with only its Customer codes replaced by the
+company's own, since the emulator's lists are made up. MyBizMate mapped all 11 columns by itself, and its review said
+6 new rows, all ready. The import created 6 rows, with 0 updated, 0 skipped and 0 failed. The sheet showed each row's
+Tax Base, its ATC with the rate (CWT IT for the income rows, CWT VT for the business-tax row), the tax equal to the Tax
+Base times that rate, and the offset account 1105. The rows stay as drafts, dated outside the working period.
 
 **Still open:**
 - **The totals check on MyBizMate's own 2307.** The printed certificate has only the total row's Total and Tax; its 3
@@ -411,10 +450,19 @@ exporter's test (9 of 9).
     3,000 parties imported, with Home's recent scans still showing their status. (The lists were then reset to the
     made-up ones.)
 
+**MyBizMate's own importer** (2026-11-20, at the user's go-ahead): passed. A made-up sale (the synthetic `inv_0011`,
+its customer's name and TIN cleared, so it went out as `VARIOUS-CUST`) was written by the app's own export code in a
+jest run, as `MyBizMate Sales import 2026-11-20.xlsx`: the emulator's adb had stopped answering. It went into the test
+company's Sales import (Sales Bizmate → Sheets → Sales → Import). MyBizMate matched every column the app writes by its
+header; the 8 it doesn't match by itself (Term Type, Credit Days, Due Date, ID Type, Beneficiary TIN, Discount Prices,
+Cap Left, Child's Birth Date) stayed unmapped, and the app leaves them blank. Its review said 1 new row, ready, with no
+errors or warnings, ₱4,520.00. The import created 1 row, with 0 updated, 0 skipped and 0 failed: a draft with VARIOUS
+CUSTOMERS, Gross 4,520.00, NONVAT, the account 4010 (Sales - Goods), Cash, its SI/OR No., and the items' Description
+with its "×" intact.
+
 **Still open:**
-- **MyBizMate's own importer.** No exported file has been imported into MyBizMate yet. That check waits for the
-  user's go-ahead: a sale exported as `VARIOUS-CUST` imported into the test company, every column read and its Gross;
-  then, if wanted, the Parties file (with City, Province and ZIP filled in) and a sale that names "Bagong Tindahan".
+- **The Parties file in MyBizMate's importer** (with City, Province and ZIP filled in), and a sale that names a party
+  from it: not run, since it wasn't asked for.
 - **Milestone 2's real-phone checks** (below), and on the same phone, how long a check takes with a few thousand
   parties and items in the lists.
 
