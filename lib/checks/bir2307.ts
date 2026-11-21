@@ -6,7 +6,8 @@ import { type Box, candidates, close, pyRound, pySum } from './num';
 // BIR Form 2307 (page 1), checked on what its boxes say: the period is one calendar quarter, each TIN has the right
 // number of digits, the payor is matched like a customer, and Part III's two tables add up (each row's three months
 // to its total, its tax to the total times its ATC's rate, the rows to the total row). Values typed in a PDF are
-// checked too: a typed value can be wrong. The 2307 is new, so there is no Python version.
+// checked too: a typed value can be wrong. A photo, or a PDF that is a picture, gets the photo checks, as an invoice
+// does. The 2307 is new, so there is no Python version.
 
 /** Part III's tables: income payments (expanded withholding tax) and money payments (business tax). */
 type Table = 'ewt' | 'bt';
@@ -179,6 +180,11 @@ export function check2307(raw: Raw, pack: Pack): Cert2307 {
     rows.push(...tableRows);
     totals[table] = row;
   }
+  // The photo itself: too blurry or too dark to trust what was read, so a person retakes it (finalize's photo checks).
+  if (raw.photo) {
+    if (raw.photo.sharpness < raw.photo.sharp_min) flags.push('blurry');
+    if (raw.photo.light < raw.photo.dark_max) flags.push('dark');
+  }
   return { from, to, quarter, payee, payor, payorMatch: { id, status }, rows, totals, flags };
 }
 
@@ -187,10 +193,12 @@ const ROW_WORDS: Record<Table, { row: string; totals: string }> = {
   bt: { row: 'Business tax row', totals: 'Business tax totals' },
 };
 
-/** Things a person should look at, in plain words: the period, the TINs, the payor, then each table's rows, totals. */
+/** Things a person should look at, in plain words: the photo, the period, the TINs, the payor, then each table. */
 export function problems2307(c: Cert2307): string[] {
   const has = (f: string) => c.flags.includes(f);
   const out: string[] = [];
+  if (has('blurry')) out.push('Blurry photo (retake it)'); // first: retaking fixes the rest too
+  if (has('dark')) out.push('Dark photo (retake it)');
   if (has('period')) out.push('Period');
   if (has('payee_tin')) out.push("Payee's TIN");
   if (has('payor_tin')) out.push("Payor's TIN");

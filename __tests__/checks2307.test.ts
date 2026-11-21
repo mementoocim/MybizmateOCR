@@ -1,5 +1,5 @@
 import { type Cert2307, type CertRow, check2307, problems2307 } from '../lib/checks/bir2307';
-import type { Pack, Raw } from '../lib/checks/finalize';
+import type { Pack, PhotoMeasures, Raw } from '../lib/checks/finalize';
 import type { Box } from '../lib/checks/num';
 import { packFor } from '../lib/lists';
 import { EMPTY_LISTS, PACK_LISTS } from '../test-utils/packLists';
@@ -34,6 +34,11 @@ const headerOf = (stem: string) =>
 /** A made-up 2307 with some of its boxes saying something else. */
 function check(stem: string, changes: Record<string, string | Box> = {}, pack: Pack = PACK): Cert2307 {
   return check2307(rawOf({ ...valuesOf(stem), ...changes }), pack);
+}
+
+/** A made-up 2307 as a photo (or a picture PDF) with these measures, rounded as rawFromScan rounds them. */
+function photographed(stem: string, photo: PhotoMeasures | null, changes: Record<string, string> = {}): Cert2307 {
+  return check2307({ ...rawOf({ ...valuesOf(stem), ...changes }), photo }, PACK);
 }
 
 test('a made-up 2307 has no flags', () => {
@@ -240,6 +245,28 @@ test("the TINs' digits", () => {
   expect(tins('', '')).toEqual(['payee_tin', 'payor_tin']); // not read (the payor is still found by its name)
 });
 
+test('a blurry or dark photo raises its flags, and their words come first', () => {
+  // the 2307's minimum sharpness is 0.5 (photo_quality.h), and a photo under 50 of light is dark
+  const blurry = { sharpness: 0.4, sharp_min: 0.5, light: 200, dark_max: 50 };
+  const dark = { sharpness: 2, sharp_min: 0.5, light: 30, dark_max: 50 };
+  const both = { sharpness: 0.4, sharp_min: 0.5, light: 30, dark_max: 50 };
+  expect(photographed('bir2307_photo_0', blurry).flags).toEqual(['blurry']);
+  expect(photographed('bir2307_photo_0', dark).flags).toEqual(['dark']);
+  // after the form's own flags, as on an invoice; in words, first: retaking fixes the rest too
+  const atTwoPercent = { ewt1_tax: '8,392.52', ewt_total_tax: '8,392.52' };
+  const cert = photographed('bir2307_photo_0', both, atTwoPercent);
+  expect(cert.flags).toEqual(['ewt1_tax', 'blurry', 'dark']);
+  expect(problems2307(cert)).toEqual(['Blurry photo (retake it)', 'Dark photo (retake it)', 'Row 1 tax']);
+});
+
+test('without photo measures there is no photo flag', () => {
+  expect(photographed('bir2307_photo_0', null).flags).toEqual([]);
+  // sharp and well lit, as the made-up pages are (test-utils/coreJson.ts)
+  expect(photographed('bir2307_photo_0', { sharpness: 2, sharp_min: 0.5, light: 255, dark_max: 50 }).flags).toEqual([]);
+  // at the minimums is still fine: both checks are strict
+  expect(photographed('bir2307_photo_0', { sharpness: 0.5, sharp_min: 0.5, light: 50, dark_max: 50 }).flags).toEqual([]);
+});
+
 test('the problem words', () => {
   const row = (table: 'ewt' | 'bt', n: number): CertRow => ({
     table,
@@ -278,9 +305,13 @@ test('the problem words', () => {
       'payor_tin',
       'payee_tin',
       'period',
+      'dark',
+      'blurry',
     ],
   };
   expect(problems2307(cert)).toEqual([
+    'Blurry photo (retake it)',
+    'Dark photo (retake it)',
     'Period',
     "Payee's TIN",
     "Payor's TIN",
