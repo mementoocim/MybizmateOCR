@@ -26,6 +26,19 @@ test("the BIR 2307's title and boxes, in the template's order", () => {
   expect(bir[bir.length - 1]).toBe('bt_total_tax');
 });
 
+test("the BIR 2307's labels are its template's, the official form's words", () => {
+  expect(fieldLabel('bir_2307', 'period_from')).toBe('Period from');
+  expect(fieldLabel('bir_2307', 'payee_tin')).toBe("Payee's TIN");
+  expect(fieldLabel('bir_2307', 'payor_zip')).toBe("Payor's ZIP code");
+  expect(fieldLabel('bir_2307', 'ewt10_atc')).toBe('Row 10 · ATC');
+  expect(fieldLabel('bir_2307', 'ewt_total_tax')).toBe('Total row · Tax withheld');
+  expect(fieldLabel('bir_2307', 'bt3_payment')).toBe('Business tax row 3 · Money payment');
+  const template: { name: string; label: string }[] = require('../modules/scanner/assets/scanner/bir_2307.json').fields;
+  for (const box of formFields('bir_2307')) {
+    expect([box, fieldLabel('bir_2307', box)]).toEqual([box, template.find((f) => f.name === box)!.label]);
+  }
+});
+
 test('field labels', () => {
   expect(fieldLabel('sales_invoice', 'invoice_no')).toBe('SI no.');
   expect(fieldLabel('service_invoice', 'invoice_no')).toBe('Invoice no.');
