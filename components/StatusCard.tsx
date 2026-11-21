@@ -5,6 +5,11 @@ import { bold, colors } from '../lib/theme';
 import type { ScanResult } from '../modules/scanner';
 import { CheckCircle, ErrorCircle } from './icons';
 
+const NOT_FOUND_PHOTO =
+  'Get the whole form in the photo: all 4 black corner squares of a MyBizMate Sales Invoice, the whole table of a Service Invoice, or the whole page of a BIR Form 2307. Then retake it.';
+const NOT_FOUND_PDF =
+  "Page 1 of this PDF isn't a MyBizMate Sales Invoice, a Service Invoice or a BIR Form 2307. Import another PDF.";
+
 /**
  * The result's first card (the test app's ResultActivity.showSale): no form found, the things the checks want a
  * person to look at, what it still needs before it can be saved (blocked: a 2307 with no payments read, say), or ready
@@ -24,11 +29,12 @@ export function StatusCard({
 }) {
   const read = `Read on this phone in ${formatMs(result.timing.totalMs)}, offline.`;
   if (!result.aligned || problems === null) {
+    // what the scanner read (a photo or a PDF), not how the scan came in: a PDF has no photo to retake
     return (
       <Card
         warn
         title="Couldn't find the form"
-        body="Get the whole form in the photo: all 4 black corner squares of a MyBizMate Sales Invoice, the whole table of a Service Invoice, or the whole page of a BIR Form 2307. Then retake it."
+        body={result.source === 'pdf' ? NOT_FOUND_PDF : NOT_FOUND_PHOTO}
       />
     );
   }

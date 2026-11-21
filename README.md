@@ -104,7 +104,9 @@ so Android and iPhone will read a photo or a PDF the same way.
   found and straightened as in a photo, so any faithful copy of the form works, whatever program made the PDF. Each
   box then takes the PDF's own text inside it (typed text, or a value typed into a fillable PDF's field), exact, with
   no OCR; the box's sheet says "From the PDF's text". A box with no text is read from the page. The footnote says
-  "Read from the PDF: N boxes from its text, M read from the page." Typed values are checked like written ones.
+  "Read from the PDF: N boxes from its text, M read from the page." Typed values are checked like written ones. When
+  no form is found on page 1, the card says "Page 1 of this PDF isn't a MyBizMate Sales Invoice, a Service Invoice or
+  a BIR Form 2307. Import another PDF."
 - **A picture PDF** (a scan, or a photo saved as a PDF) has no visible text. It is read like a photo, photo checks
   included, and says "The PDF is a picture: read like a photo." The hidden text a scanner app lays over its scans is
   that app's own OCR, so it is ignored.
@@ -126,10 +128,15 @@ so Android and iPhone will read a photo or a PDF the same way.
   an invoice's customer), INCOME PAYMENTS (one row per payment: "<ATC> · <payment>", its total and the tax withheld),
   BUSINESS TAX (when that table has rows) and TOTALS. Every row opens its boxes, as on an invoice.
 - **The checks** (`lib/checks/bir2307.ts`): the period is one calendar quarter; each TIN is 9 digits, or 9 and a
-  3- or 5-digit branch code; the payor is in your customers (when you have a list); each row's 3 months add up to its
-  total, its tax is the total times its ATC's rate (within ₱0.05: a tax withheld month by month is rounded each
-  month), and its ATC is in its own table's list; each table's rows add up to its total row; and a photo or a picture
-  PDF gets the photo checks. The card lists what to check, or says "Ready to save". The ATC list
+  3-, 4- or 5-digit branch code (MyBizMate prints 4), one rule shared with the TIN as the app shows it and as the
+  Parties export writes it (`lib/checks/tin.ts`); the payor is in your customers (when you have a list); each row's 3
+  months add up to its total, its tax is the total times its ATC's rate (within ₱0.05: a tax withheld month by month is
+  rounded each month), and its ATC is in its own table's list; each table's rows add up to its total row in every
+  column the total row prints (MyBizMate's own 2307 prints only the Total and the Tax; a cell written with no amount,
+  "-", counts as 0, and a total row with nothing printed is flagged when its rows add up to something); and a photo, or
+  a PDF with a box read from its page, gets the photo checks (a PDF whose boxes all came from its text gets none). An
+  unsure payor is shown as written, the name that goes out, with "Closest match: <the customer>" under it, until a
+  2307's payor can be chosen. The card lists what to check, or says "Ready to save". The ATC list
   (`lib/checks/atc2307.json`, 161 codes) is MyBizMate's own (its income tax codes for the income payments, its VAT and
   business tax codes for the second table, with their rates), plus the 12 codes only the form's page 2 prints; a code
   with no rate skips the tax check.
@@ -172,6 +179,29 @@ adb install -r app\build\outputs\apk\release\app-release.apk
 
 Clients should get an Android App Bundle through Google Play, which sends each phone its own ABI only.
 
+## Release checklist
+
+The app promises that nothing leaves the phone. Before a client release, and again whenever ONNX Runtime or pdfium
+changes version:
+
+- **No telemetry provider:** the merged release manifest has no `ai.onnxruntime.TelemetryInitializer`.
+  onnxruntime-android's AAR adds that provider, which starts by itself when the app does (Microsoft's telemetry client,
+  which reads the phone's `android_id`).
+- **No sockets in the native libraries:** `libonnxruntime.so` and `libpdfium.so` (and ONNX Runtime's
+  `libonnxruntime4j_jni.so`) import no socket function. For each ABI's copy in the APK (`llvm-nm` is the NDK's, in
+  `toolchains/llvm/prebuilt/windows-x86_64/bin`), this prints nothing (checked 2026-11-22 on ONNX Runtime 1.32.0 and
+  pdfium chromium/8125, all four ABIs):
+
+  ```bash
+  llvm-nm -D --undefined-only libonnxruntime.so | grep -wE 'socket|connect|bind|listen|accept|accept4|getaddrinfo|gethostbyname|send|sendto|sendmsg|recv|recvfrom|recvmsg'
+  ```
+
+- **The INTERNET permission:** onnxruntime-android's AAR and expo-file-system ask for it (the AAR also for
+  `ACCESS_NETWORK_STATE`), and so does the app's own manifest. Whether client release builds remove it (a config
+  plugin's `tools:node="remove"`) is decided here. Debug builds keep it: Metro needs it. Debug builds also carry the
+  dev launcher's ML Kit barcode scanner and Google's `datatransport`, as debug-only dependencies.
+- **Open-source notices:** a release carries pdfium's (see below) and those of the other libraries it ships.
+
 ## Run it on the Android emulator
 
 Expo Go can't run this app (it has native code); it uses a development build.
@@ -184,10 +214,11 @@ Expo Go can't run this app (it has native code); it uses a development build.
 
 The debug APK is about 245 MB (the full OpenCV, ONNX Runtime and pdfium, CameraX). Replacing an installed build
 (`adb install -r`) needs about 780 MB free on the emulator: the new APK beside the old one, and Android's own reserve.
-If an install fails with `INSUFFICIENT_STORAGE`, remove the core tests' files
-(`adb shell rm -rf /data/local/tmp/scanner_tests`). If that isn't enough, the old build has to be uninstalled first,
-and uninstalling deletes the app's data (the lists, Settings, saved invoices and recent scans): to keep it, see
-"Reinstalling without losing the app's data", below.
+If an install fails with `INSUFFICIENT_STORAGE`, remove the core tests' files with
+`adb shell rm -rf /data/local/tmp/scanner_tests` (in PowerShell as it is; in Git Bash, run `export MSYS_NO_PATHCONV=1`
+first, or Git Bash turns the path into a Windows one and nothing is removed). If that isn't enough, the old build has
+to be uninstalled first, and uninstalling deletes the app's data (the lists, Settings, saved invoices and recent
+scans): to keep it, see "Reinstalling without losing the app's data", below.
 
 In a debug build, the dev client's Tools button starts over Home's ⋮ menu: drag it aside. On the emulator, a tap sent
 with `adb shell input` can open Gboard's "Try out your stylus" once; Cancel it.
@@ -217,11 +248,16 @@ Windows paths, the backup fails, and the file holds an error message instead. Th
    export MSYS_NO_PATHCONV=1
    adb shell am force-stop com.mybizmate.scan
    adb exec-out run-as com.mybizmate.scan tar -cf - -C /data/data/com.mybizmate.scan . > /tmp/scan-appdata.tar
+   tar -tf /tmp/scan-appdata.tar > /dev/null && echo "the backup is whole"
    tar -tf /tmp/scan-appdata.tar | grep -cxE '\./(files|shared_prefs)/'
+   tar -tf /tmp/scan-appdata.tar | grep -cE '^\./(files|shared_prefs|no_backup)/.*[^/]$'
+   adb shell "run-as com.mybizmate.scan find files shared_prefs no_backup -type f" | wc -l
    ```
 
-   The last line must print 2: the backup lists `./files/` and `./shared_prefs/`. If it doesn't, stop here and don't
-   uninstall.
+   Check all three before going on. The first `tar` line must print only "the backup is whole": a backup cut short
+   prints `tar: Unexpected EOF in archive` instead, though it still lists the files it holds. The next line must print
+   2: the backup lists `./files/` and `./shared_prefs/`. The last two counts must be the same: the backup holds every
+   file the app has. If any of them fails, stop here and don't uninstall.
 
 3. Uninstall, install the new build, and put the data back, without opening the app in between:
 
@@ -347,7 +383,9 @@ doctest (68 test cases, 8938 assertions), the module's Kotlin tests (29), and th
    period; the payee's name, address, TIN and ZIP; the payor's name and TIN; the payment (its description, ATC, month,
    total and tax); and both total rows. "Only page 1 of 2 was read." It showed 4 things to check: the payee's TIN
    (only a branch code is printed), the payor's TIN (a 4-digit branch code), the payor (not in the made-up
-   customers), and Totals (see below).
+   customers), and Totals (its total row prints only the Total and the Tax). The final review's fixes since then
+   accept a 4-digit branch code and check a total row only in the columns it prints, so a certificate printed that
+   way is no longer flagged for those two.
 6. **The camera:** `bir2307_photo_0.jpg` as the test photo: the outline, "BIR Form 2307 · hold still", the photo taken
    by itself, 22 of 22 boxes exact, "Ready to save". `svc_0000.jpg` still shows "Service Invoice · hold still", reads
    as a Service Invoice (35 of 35 boxes the same as the laptop) and says "Ready to post".
@@ -386,13 +424,9 @@ Tax Base, its ATC with the rate (CWT IT for the income rows, CWT VT for the busi
 Base times that rate, and the offset account 1105. The rows stay as drafts, dated outside the working period.
 
 **Still open:**
-- **The totals check on MyBizMate's own 2307.** The printed certificate has only the total row's Total and Tax; its 3
-  months are blank. The check counts a blank total cell as 0, so the certificate shows "Totals" to check, and so would
-  any 2307 printed that way. It needs a ruling (for example, a blank total cell isn't checked).
-- **A 4-digit branch code.** The printed certificate's payor TIN has a 4-digit branch code (13 digits), which the TIN
-  check flags. Worth checking how MyBizMate prints branch codes before deciding.
 - **The payor chooser.** A 2307's payor can't be chosen from your customers yet. Only a payor matched in your
-  customers goes out with its code; an unsure match goes out as written, and its "Tap to compare" has no compare yet.
+  customers goes out with its code; an unsure match is shown and goes out as written, with its closest customer named
+  under it ("Closest match: …"); fixing the payor's name or TIN is the only way to settle it.
 - **A phone's time.** A full Part III takes 8 s in the emulator's release-built core; a phone's time, with a team
   release, is still to measure (with milestone 2's phone checks, below).
 - **The picker's lasting access.** expo-file-system's picker takes a lasting (persistable) grant on every PDF (and

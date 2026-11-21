@@ -218,10 +218,12 @@ test("the payor's match", async () => {
   expect(screen.getByText('Not in your customers TIN 999-888-777-00000 · ZIP 3306')).toHaveStyle({ color: colors.ember });
   expect(screen.getByText(/^Check: Payor \(not in your customers\)\./)).toBeTruthy();
 
-  // Santos Merchandise and Santos General Merchandise are both customers
-  await show('bir2307_text_0', { edits: { payor_name: 'Santos Merchandise', payor_tin: '99988877700000' } });
-  expect(screen.getByText('Santos Merchandise')).toBeTruthy();
-  expect(screen.getByText('Closest match. Tap to compare. TIN 999-888-777-00000 · ZIP 3306')).toBeTruthy();
+  // Santos Merchandise and Santos General Merchandise are both customers: an unsure match is shown as written, the
+  // name that goes out, with the closest customer under it (a 2307's payor can't be chosen yet)
+  await show('bir2307_text_0', { edits: { payor_name: 'Santos Merchandising', payor_tin: '99988877700000' } });
+  expect(screen.getByText('Santos Merchandising')).toBeTruthy();
+  expect(screen.getByText('Closest match: Santos Merchandise TIN 999-888-777-00000 · ZIP 3306')).toBeTruthy();
+  expect(screen.queryByText(/Tap to compare/)).toBeNull();
   expect(screen.getByText(/^Check: Payor \(confirm the match\)\./)).toBeTruthy();
 
   // no payor written: never an invoice's walk-in
@@ -235,7 +237,7 @@ test("the payor's match", async () => {
   expect(screen.getByText('TIN 211-305-418-00000 · ZIP 3305')).toBeTruthy();
 });
 
-test('the photo checks: a photo or a picture PDF, never a typed page', async () => {
+test('the photo checks: a photo or a PDF read from its page, never a page read from its text', async () => {
   const blurry = (r: ScanResult) => {
     r.sharpness = 0.1; // the 2307's minimum is 0.5
   };
@@ -250,6 +252,14 @@ test('the photo checks: a photo or a picture PDF, never a typed page', async () 
     },
   });
   expect(screen.getByText('Ready to save')).toBeTruthy();
+  // a page with visible text that isn't a picture, one box of it read by the model from the page
+  await show('bir2307_text_0', {
+    edit: (r) => {
+      blurry(r);
+      r.reads[0] = { ...r.reads[0], fromText: false };
+    },
+  });
+  expect(screen.getByText(/^Check: Blurry photo \(retake it\)\./)).toBeTruthy();
 });
 
 test("the business-tax table, and a total row that isn't a total", async () => {

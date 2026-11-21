@@ -163,8 +163,17 @@ test("a 2307's customer: a matched customer's code, else the payor as written", 
     version: 1,
   };
   expect(customer({ payor_name: 'MARIA REYES SANTOS' }, noCode)).toBe('Santos, Maria Reyes');
-  // an unsure match is only the closest one (here C004, Santos Merchandise): the name as written
+  // an unsure match is only the closest one (here C004, Santos Merchandise): the name as written, which is also the
+  // name shown
   expect(customer({ payor_name: 'Santos Merchandise', payor_tin: '99988877700000' }, PACK_LISTS)).toBe('Santos Merchandise');
+  const unsure = certOf(
+    certScan('bir2307_photo_1', { payor_name: 'Santos Merchandising', payor_tin: '99988877700000' }),
+    PACK_LISTS,
+    SETTINGS,
+  );
+  expect(certRows(unsure, OFFSET)[0]['Customer *']).toBe('Santos Merchandising');
+  expect(unsure.payor).toMatchObject({ status: 'unsure', shown: 'Santos Merchandising', column: 'Santos Merchandising' });
+  expect(unsure.payor.listParty).toMatchObject({ code: 'C004', registeredName: 'Santos Merchandise' });
   // not in the customers, or no customers yet: as written
   expect(customer({ payor_name: 'Magsaysay Hardware', payor_tin: '99988877700000' }, PACK_LISTS)).toBe('Magsaysay Hardware');
   expect(customer({}, EMPTY_LISTS)).toBe('Santos General Merchandise');

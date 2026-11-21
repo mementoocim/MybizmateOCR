@@ -2,12 +2,13 @@ import ATC_CODES from './atc2307.json';
 import { localIsoDate } from './dates';
 import { type CustomerStatus, matchCustomer, type Pack, type Raw } from './finalize';
 import { type Box, candidates, close, pyRound, pySum } from './num';
+import { tinLengthOk } from './tin';
 
 // BIR Form 2307 (page 1), checked on what its boxes say: the period is one calendar quarter, each TIN has the right
 // number of digits, the payor is matched like a customer, and Part III's two tables add up (each row's three months
-// to its total, its tax to the total times its ATC's rate, the rows to the total row). Values typed in a PDF are
-// checked too: a typed value can be wrong. A photo, or a PDF that is a picture, gets the photo checks, as an invoice
-// does. The 2307 is new, so there is no Python version.
+// to its total, its tax to the total times its ATC's rate, the rows to the total row's printed columns). Values typed
+// in a PDF are checked too: a typed value can be wrong. A photo, or a PDF with a box read from its page, gets the
+// photo checks, as an invoice does (rawFromScan). The 2307 is new, so there is no Python version.
 
 /** Part III's tables: income payments (expanded withholding tax) and money payments (business tax). */
 type Table = 'ewt' | 'bt';
@@ -48,9 +49,6 @@ const amountOptions = (box: Box | undefined): (number | null)[] => {
   const all = candidates(box);
   return all.length > 0 ? all : [null];
 };
-/** A TIN is 9 digits, or 9 and its branch code (3 or 5 digits). */
-const tinOk = (tin: string) => tin.length === 9 || tin.length === 12 || tin.length === 14;
-
 /**
  * A period box's day, MM/DD/YYYY: its 8 digits run together as the form's boxes hold them ("10012026"), or typed with
  * / - . or spaces between ("10/1/2026").
@@ -128,7 +126,12 @@ function checkRow(raw: Raw, table: Table, row: number): { row: CertRow; flags: s
 
 const amountsOf = (r: CertRow) => [r.months[0], r.months[1], r.months[2], r.total, r.tax];
 
-/** The total row as its boxes say (null when blank), and whether the rows add up to it, column by column. */
+/**
+ * The total row as its boxes say (null when blank), and whether the rows add up to it: each column the total row prints
+ * is its rows' sum. A blank cell isn't checked, since a 2307 may print only some of them (MyBizMate's prints only the
+ * Total and the Tax); a cell written with no amount in it ("-") counts as 0. A total row with nothing printed adds up
+ * only when its rows add up to nothing.
+ */
 function checkTotals(raw: Raw, table: Table, rows: readonly CertRow[]): { row: CertRow | null; ok: boolean } {
   const box = (column: string) => raw.boxes[`${table}_total_${column}`];
   const sums = AMOUNTS.map((_, i) => pyRound(pySum(rows.map((r) => amountsOf(r)[i] ?? 0)), 2));
@@ -137,8 +140,11 @@ function checkTotals(raw: Raw, table: Table, rows: readonly CertRow[]): { row: C
     const all = candidates(box(column));
     return all.find((v) => close(v, sums[i])) ?? all[0] ?? null;
   });
-  const ok = [m1, m2, m3, total, tax].every((v, i) => close(v ?? 0, sums[i])); // blank adds nothing
-  const written = AMOUNTS.some((column) => textOf(box(column)) !== '');
+  const printed = AMOUNTS.map((column) => textOf(box(column)) !== '');
+  const written = printed.some((p) => p);
+  const ok = written
+    ? [m1, m2, m3, total, tax].every((v, i) => !printed[i] || close(v ?? 0, sums[i]))
+    : sums.every((s) => close(s, 0));
   const row: CertRow | null = written
     ? { table, row: 0, payment: '', atc: null, rate: null, months: [m1, m2, m3], total, tax }
     : null;
@@ -160,8 +166,8 @@ export function check2307(raw: Raw, pack: Pack): Cert2307 {
   if (quarter === null) flags.push('period');
   const payee = party('payee');
   const payor = party('payor');
-  if (!tinOk(payee.tin)) flags.push('payee_tin');
-  if (!tinOk(payor.tin)) flags.push('payor_tin');
+  if (!tinLengthOk(payee.tin)) flags.push('payee_tin');
+  if (!tinLengthOk(payor.tin)) flags.push('payor_tin');
   // The payor is the customer who withheld the tax. No customers yet: nothing to match against, so no flag.
   const [id, status] = matchCustomer(payor.name, payor.tin, pack);
   if (pack.customers.length > 0 && (status === 'new' || status === 'unsure')) flags.push(`payor_${status}`);

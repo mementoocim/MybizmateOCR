@@ -7,7 +7,7 @@ import type { StoredScan } from './scans';
 import type { Settings } from './settings';
 
 // A scan's BIR Form 2307 (page 1): its checks (lib/checks/bir2307) run on what the boxes say (the person's edits over
-// the readings), with the app's rules on top: the photo checks only for a photo or a PDF that is a picture
+// the readings), with the app's rules on top: the photo checks unless every box read came from a PDF's own text
 // (rawFromScan); and the payor is matched against the customers as a sale's customer is, but a payor left blank is no
 // payor, never an invoice's walk-in.
 
@@ -18,7 +18,7 @@ export type CertView = {
   problems: string[]; // the status card's words, in order
   payor: {
     status: PayorStatus;
-    shown: string; // the list's name when it matched
+    shown: string; // the list's name when it matched; else the payor as written, the name that goes out
     listParty: Party | null; // an unsure match's is only the closest one
     column: string; // the payor in MyBizMate's 2307-CWT import; '' when there is none
   };
@@ -52,8 +52,8 @@ function checkCert(scan: StoredScan, lists: Lists): CertView {
   } else if (status === 'auto' && matched) {
     payor = { status, shown: partyName(matched), listParty: matched, column: listColumn(matched) };
   } else if (status === 'unsure' && matched) {
-    // only the closest match: what goes out is the payor as written
-    payor = { status, shown: partyName(matched), listParty: matched, column: written };
+    // only the closest match: the payor goes out as written, so it is shown as written (there's no chooser yet)
+    payor = { status, shown: written, listParty: matched, column: written };
   } else {
     const noCustomers = customersOf(lists).length === 0;
     payor = { status: noCustomers ? 'unlisted' : 'new', shown: written, listParty: null, column: written };

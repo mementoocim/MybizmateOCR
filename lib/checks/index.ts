@@ -6,3 +6,4 @@ export * from './dates';
 export * from './finalize';
 export * from './fuzzy';
 export * from './num';
+export * from './tin';

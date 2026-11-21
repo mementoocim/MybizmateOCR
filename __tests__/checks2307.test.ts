@@ -129,6 +129,40 @@ test("a 2307's period, payee, payor, rows and totals", () => {
   expect([alone.rows.length, alone.flags]).toEqual([2, ['bt_total']]); // a total row without its rows
 });
 
+test('the total row: only the columns it prints are checked', () => {
+  // MyBizMate's own printed 2307 fills only its total row's Total and Tax, its 3 months left blank. bir2307_photo_1:
+  // EWT rows 1 and 3 (Q4 2026), one business-tax row.
+  const TOTAL = ['m1', 'm2', 'm3', 'total', 'tax'];
+  const blankIn = (table: 'ewt' | 'bt', columns: string[]) =>
+    Object.fromEntries(columns.map((c) => [`${table}_total_${c}`, '']));
+  for (const table of ['ewt', 'bt'] as const) {
+    const months = blankIn(table, ['m1', 'm2', 'm3']);
+    // only Total and Tax printed, and right
+    const printed = check('bir2307_photo_1', months);
+    expect([table, printed.flags]).toEqual([table, []]);
+    expect(printed.totals[table]?.months).toEqual([null, null, null]);
+    // one printed column wrong
+    expect([table, check('bir2307_photo_1', { ...months, [`${table}_total_total`]: '1.00' }).flags]).toEqual([
+      table,
+      [`${table}_total`],
+    ]);
+    expect([table, check('bir2307_photo_1', { ...months, [`${table}_total_tax`]: '1.00' }).flags]).toEqual([
+      table,
+      [`${table}_total`],
+    ]);
+    // nothing printed while the table has rows
+    expect([table, check('bir2307_photo_1', blankIn(table, TOTAL)).flags]).toEqual([table, [`${table}_total`]]);
+    // a cell written with no amount in it, a dash, still counts as 0
+    expect([table, check('bir2307_photo_1', { [`${table}_total_m1`]: '-' }).flags]).toEqual([table, [`${table}_total`]]);
+  }
+  // no rows and no total row: nothing to check (bir2307_photo_0 has no business-tax rows)
+  const noTable = check('bir2307_photo_0');
+  expect([noTable.totals.bt, noTable.flags]).toEqual([null, []]);
+  // a total row with nothing printed, under rows that add up to nothing (an ATC, nothing withheld): nothing to check
+  const nothing = check('bir2307_photo_0', { bt1_atc: 'WV010', bt1_total: '0.00', bt1_tax: '0.00' });
+  expect([nothing.totals.bt, nothing.flags]).toEqual([null, []]);
+});
+
 test('the period must be one quarter', () => {
   const q4 = check('bir2307_text_1', { period_from: '10/01/2026', period_to: '12/31/2026' });
   expect([q4.from, q4.to, q4.quarter, q4.flags]).toEqual(['2026-10-01', '2026-12-31', '2026-Q4', []]);
@@ -263,7 +297,9 @@ test("the TINs' digits", () => {
   const tins = (payee: string, payor: string) => check('bir2307_text_0', { payee_tin: payee, payor_tin: payor }).flags;
   expect(tins('211305418', '456789012000')).toEqual([]); // 9 digits; 12 with a 3-digit branch
   expect(tins('211-305-418-00000', '45678901200000')).toEqual([]); // dashes typed
-  expect(tins('2113054180', '4567890120000')).toEqual(['payee_tin', 'payor_tin']);
+  expect(tins('211-305-418-0000', '4567890120000')).toEqual([]); // 13 with a 4-digit branch, as MyBizMate prints it
+  expect(tins('2113054180', '45678901200')).toEqual(['payee_tin', 'payor_tin']); // 10 and 11
+  expect(tins('21130541', '456789012000000')).toEqual(['payee_tin', 'payor_tin']); // 8 and 15
   expect(tins('', '')).toEqual(['payee_tin', 'payor_tin']); // not read (the payor is still found by its name)
 });
 

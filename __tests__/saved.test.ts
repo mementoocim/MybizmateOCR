@@ -178,16 +178,19 @@ test("a 2307's summary: checked as a 2307, one import row per payment", async ()
   ]);
   // the offset account becomes the next 2307's; an invoice's accounts and ATC stay as they were
   expect(m.settings.settings()).toMatchObject({ offsetAccount: '1205', revenueAccount: '', expenseAccount: '', atc: '' });
-  // an unsure match is only the closest customer: no list party, and the name as written goes out
+  // an unsure match is only the closest customer: no list party, and the name as written goes out; Saved invoices
+  // shows that name, and the export's sheet asks to check it in MyBizMate first
   const unsure = m.scans.addScan({ label: 'PDF: 2307.pdf', source: 'pdf', result: parseScanResult(coreJson('bir2307_text_0')) });
-  m.scans.setEdit(unsure, 'payor_name', 'Santos Merchandise');
+  m.scans.setEdit(unsure, 'payor_name', 'Santos Merchandising');
   m.scans.setEdit(unsure, 'payor_tin', '99988877700000');
   const { certOf } = require('../lib/cert') as typeof import('../lib/cert');
   expect(certOf(m.scans.getScan(unsure)!, m.lists.lists(), m.settings.settings()).payor.status).toBe('unsure');
   await m.saved.saveScan(unsure, { account: '1205' });
   const closest = m.saved.savedSummary(unsure)!;
-  expect(closest).toMatchObject({ partyId: null, listed: false });
-  expect(m.saved.summaryRows(closest).map((r) => r['Customer *'])).toEqual(['Santos Merchandise', 'Santos Merchandise']);
+  expect(closest).toMatchObject({ partyName: 'Santos Merchandising', partyId: null, listed: false });
+  expect(m.saved.summaryRows(closest).map((r) => r['Customer *'])).toEqual(['Santos Merchandising', 'Santos Merchandising']);
+  const { partiesToCheck } = require('../lib/exportFile') as typeof import('../lib/exportFile');
+  expect(partiesToCheck([closest], m.lists.lists())).toEqual(['Santos Merchandising']);
   await m.saved.deleteSaved(unsure);
   // a save cut short is summarised again as a 2307
   memoryFs.files.delete('file:///docs/saved.json');

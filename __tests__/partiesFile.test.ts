@@ -41,7 +41,11 @@ test('partiesTin', () => {
   expect(partiesTin('123456789')).toBe('123-456-789-00000');
   expect(partiesTin('123-456-789-000')).toBe('123-456-789-00000');
   expect(partiesTin('12345678900001')).toBe('123-456-789-00001');
+  expect(partiesTin('1234567890001')).toBe('123-456-789-00001'); // a 4-digit branch, as MyBizMate prints it
+  expect(partiesTin('123-456-789-0000')).toBe('123-456-789-00000');
   expect(partiesTin('1234')).toBe('');
+  expect(partiesTin('12345678900')).toBe(''); // 11 digits: no TIN's length
+  expect(partiesTin('123456789000000')).toBe(''); // 15
   expect(partiesTin('')).toBe('');
 });
 

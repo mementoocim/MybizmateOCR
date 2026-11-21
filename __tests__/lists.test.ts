@@ -118,7 +118,10 @@ test('formatTin', () => {
   expect(formatTin('123456789')).toBe('123-456-789');
   expect(formatTin('123456789000')).toBe('123-456-789-000');
   expect(formatTin('12345678900000')).toBe('123-456-789-00000');
+  expect(formatTin('1234567890000')).toBe('123-456-789-0000'); // a 4-digit branch, as MyBizMate prints it
   expect(formatTin('12345')).toBe('12345');
+  expect(formatTin('12345678900')).toBe('12345678900'); // 11 digits: no TIN's length
+  expect(formatTin('123456789000000')).toBe('123456789000000'); // 15
 });
 
 test('adding a party or an item from a scan', async () => {

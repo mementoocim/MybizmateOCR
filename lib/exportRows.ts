@@ -1,5 +1,6 @@
 import type { CertView } from './cert';
 import type { Final } from './checks/finalize';
+import { tinLengthOk } from './checks/tin';
 import { monthSpan, qty } from './format';
 import type { Party } from './lists';
 import type { SaleView } from './sale';
@@ -106,10 +107,13 @@ export const PARTIES_COLUMNS: readonly string[] = [
   'Default branch',
 ];
 
-/** A TIN as MyBizMate's Parties import writes it, 123-456-789-00000 (00000: the head office); '' when it can't be. */
+/**
+ * A TIN as MyBizMate's Parties import writes it, 123-456-789-00000 (00000: the head office; a shorter branch code is
+ * padded); '' when it can't be.
+ */
 export function partiesTin(tin: string): string {
   const d = tin.replace(/\D/g, '');
-  if (d.length !== 9 && d.length !== 12 && d.length !== 14) return '';
+  if (!tinLengthOk(d)) return '';
   return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6, 9)}-${d.slice(9).padStart(5, '0')}`;
 }
 

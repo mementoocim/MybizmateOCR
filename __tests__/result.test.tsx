@@ -191,6 +191,24 @@ test('no form', async () => {
   expect(screen.queryByText('INVOICE')).toBeNull();
 });
 
+test('no form in a PDF: its own words, never a photo to retake', async () => {
+  // what the scanner read decides (the result's source), not how the scan came in
+  await show('blank_page', {
+    source: 'gallery',
+    edit: (r) => Object.assign(r, { source: 'pdf', pageCount: 1, picture: false }),
+  });
+  expect(screen.getByText("Couldn't find the form")).toBeTruthy();
+  expect(
+    screen.getByText(
+      "Page 1 of this PDF isn't a MyBizMate Sales Invoice, a Service Invoice or a BIR Form 2307. Import another PDF.",
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText(/in the photo|retake it/i)).toBeNull();
+  // a photo keeps its words, whatever brought it in
+  await show('blank_page', { source: 'pdf' });
+  expect(screen.getByText(/^Get the whole form in the photo: /)).toBeTruthy();
+});
+
 test('a Service Invoice', async () => {
   await show('svc_0000');
   expect(screen.getByText('Service Invoice')).toBeTruthy();

@@ -2,12 +2,14 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
 
 import Result from '../app/result';
+import { addParty, clearParties } from '../lib/lists';
 import { addScan, setEdit, type StoredScan } from '../lib/scans';
 import { settings, updateSettings } from '../lib/settings';
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 import { memoryFs } from '../test-utils/memoryFs';
+import { PACK_LISTS } from '../test-utils/packLists';
 import { pinToday } from '../test-utils/today';
 
 let mockParams: { id?: string; from?: string } = {};
@@ -192,6 +194,22 @@ test('saving a 2307: the first save asks for the offset account', async () => {
   await press(screen.getByTestId('save-open'));
   expect(screen.getByLabelText('Offset account').props.value).toBe('1205 CWT Receivable');
   expect(screen.getByTestId('save-confirm')).toBeEnabled();
+});
+
+test("an unsure payor: the save sheet names the payor as written, the name that goes out", async () => {
+  // the pack's customers: Santos Merchandise (C004) is only the closest match for "Santos Merchandising"
+  for (const { id, exportedAt, ...customer } of PACK_LISTS.parties) await addParty(customer);
+  try {
+    const id = await show('bir2307_text_0', { source: 'pdf' });
+    await act(async () => {
+      setEdit(id, 'payor_name', 'Santos Merchandising');
+      setEdit(id, 'payor_tin', '99988877700000');
+    });
+    await press(screen.getByTestId('save-open'));
+    expect(screen.getByText('Santos Merchandising (match not confirmed)')).toBeTruthy();
+  } finally {
+    await clearParties('customer');
+  }
 });
 
 test('a 2307 needs its period first', async () => {

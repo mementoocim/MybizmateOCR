@@ -4,7 +4,7 @@ import type { CertView, PayorStatus } from '../lib/cert';
 import type { CertRow } from '../lib/checks/bir2307';
 import { peso, prettyDate, qty } from '../lib/format';
 import { formFields } from '../lib/forms';
-import { formatTin } from '../lib/lists';
+import { formatTin, partyName } from '../lib/lists';
 import { boxValue } from '../lib/sale';
 import type { StoredScan } from '../lib/scans';
 import { colors, sectionLabel } from '../lib/theme';
@@ -25,11 +25,15 @@ const TABLES: Record<Table, { section: string; total: string; row: string; atcFo
 
 const PAYOR_SUB: Record<PayorStatus, string> = {
   auto: 'Matched in your customers',
-  unsure: 'Closest match. Tap to compare.',
+  unsure: 'Closest match in your customers', // with that customer's name (payorSub)
   new: 'Not in your customers',
   unlisted: 'Add your customers in Your lists to check names',
   none: 'Not in your customers', // no payor written: never an invoice's walk-in
 };
+
+/** How the payor stands against the customers; an unsure match names the closest one, since the payor is as written. */
+const payorSub = ({ status, listParty }: CertView['payor']) =>
+  status === 'unsure' && listParty ? `Closest match: ${partyName(listParty)}` : PAYOR_SUB[status];
 
 /** "Oct 1 – Dec 31, 2026 (Q4)": a quarter's first and last days, its year said once. */
 function quarterText(from: string, to: string, quarter: string): string {
@@ -131,7 +135,7 @@ export function CertificateSections({
       <View style={styles.card}>
         <SaleRow
           value={payor.shown || null}
-          sub={`${PAYOR_SUB[payor.status]}\n${tinAndZip(cert.payor)}`}
+          sub={`${payorSub(payor)}\n${tinAndZip(cert.payor)}`}
           flagged={has('payor_tin') || has('payor_new') || has('payor_unsure')}
           onPress={boxesOf('Payor', partyBoxes('payor'))}
         />

@@ -39,8 +39,10 @@ export function boxValue(scan: StoredScan, box: string): string | null {
 
 /**
  * What the checks read: each box's reading and backups, an edited box as the person typed it (with no backups), and
- * the photo's measures. A PDF's typed page is no photo (the core measures every page it straightens, a PDF's rendered
- * page too): only a photo, or a PDF that is a picture, can be too blurry or too dark to trust.
+ * the photo's measures. The core measures every page it straightens, a PDF's rendered page too, but a box read from
+ * the PDF's own text is exact whatever the page looks like: a PDF gets no photo checks when every box read came from
+ * its text. A box the model read from the page is only as good as the page, so a photo, a picture PDF, and a PDF whose
+ * visible text (a page number, a stamp on a scan) left some box to the model get them.
  */
 export function rawFromScan(scan: StoredScan): Raw {
   const r = scan.result;
@@ -50,7 +52,7 @@ export function rawFromScan(scan: StoredScan): Raw {
     if (text === '') delete boxes[name];
     else boxes[name] = { text, alts: [] };
   }
-  const typed = r.source === 'pdf' && r.picture === false;
+  const typed = r.source === 'pdf' && r.reads.length > 0 && r.reads.every((read) => read.fromText);
   const photo =
     !typed && r.aligned && r.sharpness != null && r.sharpMin != null && r.light != null && r.darkMax != null
       ? { sharpness: pyRound(r.sharpness, 4), sharp_min: r.sharpMin, light: pyRound(r.light, 1), dark_max: r.darkMax }

@@ -4,6 +4,7 @@ import type { Lists, Party } from '../lib/lists';
 import { checkDay, isInvoice, problemWords, rawFromScan, saleOf, suggestTaxType } from '../lib/sale';
 import { addScan, getScan, setEdit, type StoredScan, updateScan } from '../lib/scans';
 import type { Settings } from '../lib/settings';
+import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 
@@ -107,18 +108,27 @@ test('only the two invoices have a sale', () => {
   expect(isInvoice(scanOf('blank_page'))).toBe(false); // no form found
 });
 
-test("a PDF's typed page is no photo: it never says retake it", () => {
+test("a PDF's photo checks: none when every box read came from its text", () => {
   // the core measures sharpness and light on every page it straightens, a PDF's rendered page too
-  const blurry = (stem: string) => {
+  const blurry = (stem: string, edit?: (r: ScanResult) => void) => {
     const result = parseScanResult(coreJson(stem));
     result.sharpness = 0.1; // under the Sales Invoice's minimum of 1
     result.light = 10; // under its darkest of 50
+    edit?.(result);
     return getScan(addScan({ label: `PDF: ${stem}.pdf`, source: 'pdf', result }))!;
   };
   const text = blurry('sales_text_0');
   expect(rawFromScan(text).photo).toBeNull();
   expect(saleOf(text, EMPTY, SETTINGS).problems).not.toContain('Blurry photo (retake it)');
   expect(saleOf(text, EMPTY, SETTINGS).problems).not.toContain('Dark photo (retake it)');
+  // A page with some visible text (a page number, a stamp on a scan) isn't a picture, but a box the model read from
+  // the page, even one, is only as good as the page: the photo checks come back.
+  const mixed = blurry('sales_text_0', (r) => {
+    r.reads[0] = { ...r.reads[0], fromText: false };
+  });
+  expect(mixed.result).toMatchObject({ source: 'pdf', picture: false });
+  expect(rawFromScan(mixed).photo).toMatchObject({ sharpness: 0.1, light: 10 });
+  expect(saleOf(mixed, EMPTY, SETTINGS).problems.slice(0, 2)).toEqual(['Blurry photo (retake it)', 'Dark photo (retake it)']);
   // a PDF that is a picture is read like a photo, photo checks included
   const picture = blurry('sales_picture_0');
   expect(rawFromScan(picture).photo).toMatchObject({ sharpness: 0.1, light: 10 });
