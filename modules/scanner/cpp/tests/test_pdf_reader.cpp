@@ -117,42 +117,79 @@ struct MadePdf {
   int cropW = 0, cropH = 0;  // when set, the page's own CropBox [0 0 cropW cropH]
   std::string text;         // drawn in 40 pt Helvetica from (100, textY) pt
   int textY = 600;
+  int textMode = 0;         // the text's render mode (3: invisible; 7: clip only, also never painted)
   std::string field;        // a filled-in text field within (100, 300)-(400, 360) pt
   bool fieldLook = true;    // its widget draws the value (its own /AP, 30 pt from (110, 318) pt); otherwise the form
                             // leaves that to the reader (/NeedAppearances, the field's /DA in 20 pt)
+  bool resourcesOnPages = false;  // the /Resources sit on /Pages, and the page only inherits them
+  cv::Rect image;           // when set, an 8 x 8 image of one grey (imageGrey) stretched over this rect, in points
+  int imageGrey = 64;
+  bool imageOverText = false;  // the image is drawn after the text, over it (else first, under it)
+  std::string coded;        // drawn in 40 pt from (100, 200) pt through a font whose /Differences makes the codes of A,
+                            // B and C the glyphs 7, 8 and 9 (so "ABC" shows and reads "789")
+  bool link = false;        // a Link annotation over (100, 100)-(300, 130) pt, with no appearance
 };
 
 std::string makePdf(const MadePdf& p) {
-  const std::string box = "/MediaBox [0 0 " + std::to_string(p.w) + " " + std::to_string(p.h) + "]";
-  const std::string crop =
-      p.cropW > 0 ? " /CropBox [0 0 " + std::to_string(p.cropW) + " " + std::to_string(p.cropH) + "]" : "";
-  const std::string content =
-      p.text.empty() ? "" : "BT /F1 40 Tf 100 " + std::to_string(p.textY) + " Td (" + p.text + ") Tj ET";
-  const std::string look = "BT /F1 30 Tf 10 18 Td (" + p.field + ") Tj ET";
-  const bool field = !p.field.empty();
-  const std::string form =
-      !field ? ""
-      : p.fieldLook
-          ? " /AcroForm << /Fields [6 0 R] >>"
-          : " /AcroForm << /Fields [6 0 R] /NeedAppearances true /DR << /Font << /Helv 4 0 R >> >> /DA (/Helv 0 Tf 0 g) >>";
-  std::vector<std::string> objects = {
-      "<< /Type /Catalog /Pages 2 0 R" + form + " >>",
-      "<< /Type /Pages /Kids [3 0 R] /Count 1" + (p.boxOnPages ? " " + box : std::string()) + " >>",
-      "<< /Type /Page /Parent 2 0 R" + (p.boxOnPages ? std::string() : " " + box) + crop + " /Rotate " +
-          std::to_string(p.rotate) + " /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R" +
-          (field ? " /Annots [6 0 R]" : "") + " >>",
-      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-      "<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream",
+  // 1 the catalog, 2 /Pages, 3 the page, 4 Helvetica, 5 the content; the rest numbered as they are added
+  std::vector<std::string> objects(5);
+  const auto add = [&objects](const std::string& object) {
+    objects.push_back(object);
+    return std::to_string(objects.size()) + " 0 R";
   };
-  if (field) {
-    objects.push_back("<< /Type /Annot /Subtype /Widget /FT /Tx /T (value) /V (" + p.field +
-                      ") /Rect [100 300 400 360] /F 4 /P 3 0 R " +
-                      (p.fieldLook ? "/AP << /N 7 0 R >>" : "/DA (/Helv 20 Tf 0 g)") + " >>");
-    if (p.fieldLook) {
-      objects.push_back("<< /Type /XObject /Subtype /Form /BBox [0 0 300 60] /Resources << /Font << /F1 4 0 R >> >> "
-                        "/Length " + std::to_string(look.size()) + " >>\nstream\n" + look + "\nendstream");
-    }
+  const auto num = [](int n) { return std::to_string(n); };
+  const std::string box = "/MediaBox [0 0 " + num(p.w) + " " + num(p.h) + "]";
+  const std::string crop = p.cropW > 0 ? " /CropBox [0 0 " + num(p.cropW) + " " + num(p.cropH) + "]" : "";
+
+  std::string fonts = "/F1 4 0 R", images;
+  if (!p.coded.empty()) {
+    fonts += " /F2 " + add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Type /Encoding "
+                           "/BaseEncoding /WinAnsiEncoding /Differences [65 /seven /eight /nine] >> >>");
   }
+  if (!p.image.empty()) {
+    images = " /XObject << /Im1 " +
+             add("<< /Type /XObject /Subtype /Image /Width 8 /Height 8 /ColorSpace /DeviceGray /BitsPerComponent 8 "
+                 "/Length 64 >>\nstream\n" + std::string(64, static_cast<char>(p.imageGrey)) + "\nendstream") +
+             " >>";
+  }
+  const std::string resources = "/Resources << /Font << " + fonts + " >>" + images + " >>";
+
+  const std::string text = p.text.empty() ? ""
+                           : "BT /F1 40 Tf " + (p.textMode != 0 ? num(p.textMode) + " Tr " : std::string()) + "100 " +
+                                 num(p.textY) + " Td (" + p.text + ") Tj ET";
+  const std::string image = p.image.empty() ? ""
+                            : "q " + num(p.image.width) + " 0 0 " + num(p.image.height) + " " + num(p.image.x) + " " +
+                                  num(p.image.y) + " cm /Im1 Do Q";
+  std::string content = p.imageOverText ? text + "\n" + image : image + "\n" + text;
+  if (!p.coded.empty()) content += "\nBT /F2 40 Tf 100 200 Td (" + p.coded + ") Tj ET";
+
+  std::string annots, widget;
+  if (!p.field.empty()) {
+    const std::string look = "BT /F1 30 Tf 10 18 Td (" + p.field + ") Tj ET";
+    const std::string ap = p.fieldLook ? add("<< /Type /XObject /Subtype /Form /BBox [0 0 300 60] /Resources << /Font "
+                                             "<< /F1 4 0 R >> >> /Length " + num(static_cast<int>(look.size())) +
+                                             " >>\nstream\n" + look + "\nendstream")
+                                       : "";
+    widget = add("<< /Type /Annot /Subtype /Widget /FT /Tx /T (value) /V (" + p.field +
+                 ") /Rect [100 300 400 360] /F 4 /P 3 0 R " +
+                 (p.fieldLook ? "/AP << /N " + ap + " >>" : "/DA (/Helv 20 Tf 0 g)") + " >>");
+    annots += " " + widget;
+  }
+  if (p.link) annots += " " + add("<< /Type /Annot /Subtype /Link /Rect [100 100 300 130] /Border [0 0 0] >>");
+  const std::string form =
+      widget.empty() ? ""
+      : p.fieldLook  ? " /AcroForm << /Fields [" + widget + "] >>"
+                     : " /AcroForm << /Fields [" + widget +
+                          "] /NeedAppearances true /DR << /Font << /Helv 4 0 R >> >> /DA (/Helv 0 Tf 0 g) >>";
+
+  objects[0] = "<< /Type /Catalog /Pages 2 0 R" + form + " >>";
+  objects[1] = "<< /Type /Pages /Kids [3 0 R] /Count 1" + (p.boxOnPages ? " " + box : std::string()) +
+               (p.resourcesOnPages ? " " + resources : std::string()) + " >>";
+  objects[2] = "<< /Type /Page /Parent 2 0 R" + (p.boxOnPages ? std::string() : " " + box) + crop + " /Rotate " +
+               num(p.rotate) + (p.resourcesOnPages ? std::string() : " " + resources) + " /Contents 5 0 R" +
+               (annots.empty() ? std::string() : " /Annots [" + annots.substr(1) + "]") + " >>";
+  objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+  objects[4] = "<< /Length " + num(static_cast<int>(content.size())) + " >>\nstream\n" + content + "\nendstream";
   std::string pdf = "%PDF-1.4\n";
   std::vector<size_t> at;
   for (size_t i = 0; i < objects.size(); i++) {
@@ -254,15 +291,89 @@ TEST_CASE("two pages") {
   CHECK(textIn(page, templateBox("payee_name", page.bgr.rows)) == valueOf("two_pages", "payee_name"));
 }
 
-TEST_CASE("a PDF page over 2000 pt is too big") {
+TEST_CASE("a PDF page over 14,400 pt, the PDF format's own limit, is too big") {
+  // The page is always rendered 2400 px on its long side, so its size in points costs nothing: any page the format
+  // allows (200 inches) reads. A photo saved as a PDF at 1 px = 1 pt (Pillow's default) is a page as big as the photo.
   const std::string dir = tmpDir();
-  writeFile(dir + "/2000.pdf", makePdf({2000, 1000}));
-  writeFile(dir + "/2001.pdf", makePdf({1000, 2001}));
-  const auto page = mbm::renderPdf(dir + "/2000.pdf");
+  writeFile(dir + "/14400.pdf", makePdf({14400, 7200}));
+  writeFile(dir + "/14401.pdf", makePdf({7200, 14401}));
+  writeFile(dir + "/photo.pdf", makePdf({3000, 4000}));  // a 3000 x 4000 px photo, 1 px = 1 pt
+  const auto page = mbm::renderPdf(dir + "/14400.pdf");
   CHECK(page.bgr.cols == 2400);
   CHECK(page.bgr.rows == 1200);
   CHECK(page.picture);  // no text at all
-  CHECK(codeOf(dir + "/2001.pdf") == "page_too_big");
+  CHECK(codeOf(dir + "/14401.pdf") == "page_too_big");
+  const auto photo = mbm::renderPdf(dir + "/photo.pdf");
+  CHECK(photo.bgr.cols == 1800);
+  CHECK(photo.bgr.rows == 2400);
+}
+
+TEST_CASE("a page that inherits its /Resources keeps its image and its fonts, with a link or a field on it") {
+  // The final review's I-5: the /Resources on /Pages, a dark image, text through a font whose /Differences makes the
+  // codes of A, B and C the glyphs 7, 8 and 9, and one annotation. Flattened in place, the page got a /Resources of its
+  // own that hid the one it inherits: the image was gone and the text read "ABC". A link draws nothing, so its page
+  // isn't flattened; a field's page is, on a copy of the page holding its own copy of all it inherits.
+  for (const bool field : {false, true}) {
+    CAPTURE(field);
+    MadePdf made;
+    made.resourcesOnPages = true;
+    made.image = {100, 450, 200, 200};
+    made.coded = "ABC";
+    made.link = !field;
+    if (field) made.field = "FIELD";
+    const std::string file = tmpDir() + "/inherits.pdf";
+    writeFile(file, makePdf(made));
+    const auto page = mbm::renderPdf(file);
+    REQUIRE(page.bgr.rows == 2400);
+    cv::Mat gray;
+    cv::cvtColor(page.bgr, gray, cv::COLOR_BGR2GRAY);
+    // the image's rect on the render (612 x 792 pt), 3 px in from its edges: all of it ink
+    const float s = 2400.0f / 792;
+    const cv::Rect inside = pixelsOf({100 * s, (792 - 650) * s, 200 * s, 200 * s}, -3, gray.size());
+    CHECK(cv::countNonZero(gray(inside) < 160) == inside.area());
+    std::string letters;
+    for (const auto& c : page.chars) {
+      if (!isSpace(c.ch)) appendUtf8(letters, c.ch);
+    }
+    CAPTURE(letters);
+    if (field) CHECK((letters == "789FIELD" || letters == "FIELD789"));  // which run comes first is pdfium's choice
+    else CHECK(letters == "789");
+  }
+}
+
+TEST_CASE("text no one sees is left out: clip-only text, and text drawn under a page-size image") {
+  // A scan saved as a PDF can carry its scanner app's OCR as text that is never painted (render mode 3, or 7: clip
+  // only) or as text drawn first, under the scan's page-size image. Either way it is that app's reading, not what the
+  // page shows: the page is a picture. Text drawn on top of a page-size background image is seen, and kept.
+  const auto pageWith = [](const std::string& text, int mode, bool imageOver, cv::Rect image) {
+    MadePdf made;
+    made.text = text;
+    made.textMode = mode;
+    made.image = image;
+    made.imageGrey = 200;  // light: not ink (lettersOnInk counts under 160)
+    made.imageOverText = imageOver;
+    const std::string file = tmpDir() + "/seen.pdf";
+    writeFile(file, makePdf(made));
+    return mbm::renderPdf(file);
+  };
+  const cv::Rect whole(0, 0, 612, 792);
+  for (const int mode : {3, 7}) {
+    CAPTURE(mode);
+    const auto hidden = pageWith("HIDDEN", mode, false, whole);  // over the image, but never painted
+    CHECK(hidden.picture);
+    CHECK(hidden.chars.empty());
+  }
+  const auto under = pageWith("HIDDEN", 0, true, whole);
+  CHECK(under.picture);
+  CHECK(under.chars.empty());
+  // most of the page (80% or more of its area) is a page-size image; a smaller one hides nothing
+  CHECK(pageWith("HIDDEN", 0, true, {0, 0, 612, 674}).picture);  // 85% of the page
+  const auto small = pageWith("SHOWN", 0, true, {0, 0, 612, 594});  // 75%, below the text (its baseline at 600 pt)
+  CHECK_FALSE(small.picture);
+  CHECK(lettersOnInk(small) == "SHOWN");
+  const auto over = pageWith("SHOWN", 0, false, whole);  // a background image, the text drawn on it
+  CHECK_FALSE(over.picture);
+  CHECK(lettersOnInk(over) == "SHOWN");
 }
 
 TEST_CASE("a PDF's characters sit on their own ink, a form field's and a turned page's too") {

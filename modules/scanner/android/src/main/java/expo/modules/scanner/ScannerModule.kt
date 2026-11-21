@@ -34,8 +34,11 @@ internal class SaveNeedsAndroid10Exception :
 internal class SaveFailedException(cause: Throwable?) :
   CodedException("ERR_SAVE_FAILED", "Couldn't save the scan.", cause)
 
-/** readPdf's rejection. code: one of PdfInput.CODES (the app words each one itself; the message is for developers). */
-internal class PdfRefusedException(code: String, cause: Throwable?) : CodedException(code, pdfMessage(code), cause)
+/**
+ * readPdf's rejection. code: one of PdfInput.CODES (the app words each one itself; the message is for developers). Only
+ * the code goes out, never the failure behind it: its message can name the file (a content:// link, say).
+ */
+internal class PdfRefusedException(code: String) : CodedException(code, pdfMessage(code), null)
 
 private fun pdfMessage(code: String) = when (code) {
   "pdf_too_big" -> "The PDF is over 20 MB."
@@ -100,6 +103,8 @@ class ScannerModule : Module() {
     }
 
     AsyncFunction("displayName") { uri: String -> displayName(uri) }
+
+    AsyncFunction("releaseAccess") { uri: String -> releaseAccess(uri) }
 
     AsyncFunction("enhance") Coroutine { pageUri: String, mode: String ->
       withContext(scanThread) { enhance(pageUri, mode) }
@@ -224,7 +229,7 @@ class ScannerModule : Module() {
    * Reads page 1 of a PDF as scan() reads a photo, keeping its files: a content:// file (the person's own, from the
    * system's file picker) through a work copy, deleted afterwards; a file:// in place. The person's file is never
    * changed or deleted. Every failure rejects with a code (PdfInput.CODES); a file its app says is over 20 MB is
-   * refused before any of it is copied.
+   * refused before any of it is copied. Once it has been read, or refused, the picker's lasting access to it is given up.
    */
   private fun readPdf(uri: String): String = scanner.use { handle ->
     val work = File(context.cacheDir, "scan-work").apply {
@@ -239,9 +244,10 @@ class ScannerModule : Module() {
       json
     } catch (e: Throwable) {
       outDir.deleteRecursively()
-      throw PdfRefusedException(PdfInput.codeOf(e), e)
+      throw PdfRefusedException(PdfInput.codeOf(e))
     } finally {
       work.deleteRecursively()  // the copy: only needed while reading
+      runCatching { releaseAccess(uri) }  // nor is the picker's access to it; giving it up never fails the read
     }
   }
 
@@ -259,6 +265,26 @@ class ScannerModule : Module() {
         }
       }
       else -> throw IOException(PdfInput.UNREADABLE)
+    }
+  }
+
+  /**
+   * Gives up the lasting access the file picker took to a picked file (a content:// link), all of it and only that file's
+   * (PickedAccess). A file:// has none. The file itself is never touched.
+   */
+  private fun releaseAccess(uri: String) {
+    val parsed = Uri.parse(uri)
+    if (parsed.scheme != "content") return
+    val resolver = context.contentResolver
+    val held = resolver.persistedUriPermissions.map {
+      PickedAccess.Held(it.uri.toString(), it.isReadPermission, it.isWritePermission)
+    }
+    val flags = PickedAccess.toRelease(parsed.toString(), held)
+    if (flags == 0) return
+    try {
+      resolver.releasePersistableUriPermission(parsed, flags)
+    } catch (e: SecurityException) {
+      // given up meanwhile: nothing is held any more
     }
   }
 

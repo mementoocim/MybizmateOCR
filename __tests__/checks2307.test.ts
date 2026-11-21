@@ -201,7 +201,7 @@ test("a row's months and its tax", () => {
   expect(check(stem, { ewt1_tax: '4,196.32', ewt_total_tax: '4,196.32' }).flags).toEqual(['ewt1_tax']);
   // not in the table, so there's no rate to check the tax with
   expect(check(stem, { ewt1_atc: 'WZ999' }).flags).toEqual(['ewt1_atc']);
-  expect(check(stem, { ewt1_atc: '158' }).flags).toEqual(['ewt1_atc']); // "wc158" typed in a fillable PDF reads "158"
+  expect(check(stem, { ewt1_atc: '158' }).flags).toEqual(['ewt1_atc']); // a code read without its letters
   expect(check(stem, { ewt1_atc: '' }).flags).toEqual(['ewt1_atc']);
   expect(check(stem, { ewt1_atc: 'WV010' }).flags).toEqual(['ewt1_atc']); // a business tax's code
   // in the table without a rate: the tax isn't checked

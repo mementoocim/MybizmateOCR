@@ -16,6 +16,7 @@ const mockScanPhoto = jest.fn();
 const mockLibrary = jest.fn();
 const mockPick = jest.fn();
 const mockToast = jest.fn();
+const mockRelease = jest.fn(async (_uri: string) => undefined);
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
@@ -25,6 +26,7 @@ jest.mock('../modules/scanner', () => ({
   readPdf: (uri: string) => mockReadPdf(uri),
   displayName: (uri: string) => mockDisplayName(uri),
   scanPhoto: (uri: string, options: object) => mockScanPhoto(uri, options),
+  releaseAccess: (uri: string) => mockRelease(uri),
 }));
 jest.mock('../lib/toast', () => ({ toast: (m: string) => mockToast(m) }));
 jest.mock('expo-image-picker', () => ({
@@ -173,6 +175,28 @@ test('a copy the picker made is deleted once read', async () => {
   expect(memoryFs.files.has(copy)).toBe(false);
   await importPdf(picked('file:///tmp/Inbox/notes.txt', 'notes.txt', 'text/plain'));
   expect(memoryFs.files.has('file:///tmp/Inbox/notes.txt')).toBe(false);
+});
+
+test("the picker's lasting access to the file is given up once it has been read, refused, or isn't a PDF", async () => {
+  // Android's picker keeps a grant on every file it hands over; the scanner gives it up after its read too, and giving
+  // up a grant that is gone already does nothing
+  const uri = `${LINK}71`;
+  await importPdf(picked(uri, 'sales_text_0.pdf'));
+  expect(mockRelease.mock.calls).toEqual([[uri]]);
+  expect(mockReadPdf.mock.invocationCallOrder[0]).toBeLessThan(mockRelease.mock.invocationCallOrder[0]);
+  mockReadPdf.mockRejectedValueOnce(refused('pdf_password'));
+  await importPdf(picked(`${LINK}72`, 'locked.pdf'));
+  await importPdf(picked(`${STORAGE}notes.txt`, 'notes.txt', 'text/plain'));
+  expect(mockRelease.mock.calls).toEqual([[uri], [`${LINK}72`], [`${STORAGE}notes.txt`]]);
+  // a failure to give it up changes nothing for the person
+  mockRelease.mockRejectedValueOnce(new Error('gone'));
+  await importPdf(picked(`${LINK}73`, 'sales_text_0.pdf'));
+  expect(mockPush).toHaveBeenCalledTimes(2);
+  expect(mockToast.mock.calls).toEqual([['That PDF has a password. Save a copy without one, then import it.'], ['Choose a PDF file.']]);
+  // a copy the picker made (a file://) holds no grant: it is deleted instead
+  mockRelease.mockClear();
+  await importPdf(picked('file:///tmp/Inbox/sales_text_0.pdf', 'sales_text_0.pdf'));
+  expect(mockRelease).not.toHaveBeenCalled();
 });
 
 test('two quick presses open one picker', async () => {

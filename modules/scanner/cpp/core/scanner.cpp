@@ -219,6 +219,7 @@ std::vector<std::string> textInBoxes(const std::vector<PdfChar>& chars, const cv
         gap = !text.empty();
         continue;
       }
+      if (type == "code" && ch >= 'a' && ch <= 'z') ch -= 'a' - 'A';  // an ATC typed in small letters: still the code
       if (!keeps(type, ch)) continue;
       if (gap && keepsSpaces(type)) text += ' ';
       gap = false;
@@ -344,7 +345,8 @@ struct Scanner::Impl {
   }
 
   // The frame form whose border is found with the highest score (a finder finds nothing scoring under 0.75), or none.
-  // The photo's lines are searched once, for every form. refit: refine the corners (scans); the live camera skips it.
+  // The photo's lines are searched once, for every form. refit: refine the found corners at full resolution (scans);
+  // the live camera skips that, though a template that refits its finalists (the 2307's) still does, as its score needs.
   std::optional<FrameMatch> findFrame(const cv::Mat& gray, bool refit) const {
     const auto lines = findFrameLines(gray);
     if (!lines) return std::nullopt;
@@ -666,7 +668,7 @@ std::optional<FrameDetection> Scanner::detectFrame(const cv::Mat& gray) const {
     return detection("sales_invoice", *H, {{0, 0}, {w, 0}, {w, h}, {0, h}}, cv::Size(PAGE_W, PAGE_H),
                      quality::SALES_LIVE_MIN);
   }
-  if (auto match = im.findFrame(gray, false)) {  // the live outline skips the corner refit
+  if (auto match = im.findFrame(gray, false)) {  // the live outline skips the final corner refit (see findFrame)
     const ServiceTemplate& t = match->form->tmpl;
     const cv::Rect& p = t.paper;
     const auto x0 = static_cast<float>(p.x), y0 = static_cast<float>(p.y);

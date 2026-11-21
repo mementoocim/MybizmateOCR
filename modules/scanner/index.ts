@@ -43,6 +43,15 @@ export function displayName(uri: string): Promise<string | null> {
   return ScannerModule.displayName(uri);
 }
 
+/**
+ * Gives up the lasting access the system's file picker takes to every file it hands over (a content:// URI), once the
+ * app has read the file: readPdf does it itself, and Import PDF and the CSV import call this. Nothing else of the
+ * person's file is touched. A file:// has no such access.
+ */
+export function releaseAccess(uri: string): Promise<void> {
+  return ScannerModule.releaseAccess(uri);
+}
+
 /** The scan view's Enhanced or B&W image of a scan's page (made once, then reused): its file:// URI. */
 export function enhance(pageUri: string, mode: 'enhanced' | 'bw'): Promise<string> {
   return ScannerModule.enhance(pageUri, mode);

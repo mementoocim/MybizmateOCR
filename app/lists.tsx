@@ -25,6 +25,7 @@ import {
 } from '../lib/lists';
 import { bold, colors } from '../lib/theme';
 import { toast } from '../lib/toast';
+import { releaseAccess } from '../modules/scanner';
 
 // Your lists: the customers, suppliers and items the checks use, imported from CSV files (MyBizMate's export, saved as
 // CSV in Excel or Google Sheets). They stay on this phone.
@@ -93,9 +94,11 @@ export default function ListsScreen() {
     if (picking.current) return;
     picking.current = true;
     const into = tab;
+    let file: File | null = null;
     try {
       const picked = await File.pickFileAsync({ mimeTypes: ['*/*'] });
       if (picked.canceled) return;
+      file = picked.result;
       if (!isCsv(picked.result)) {
         toast('Choose a .csv file. In Excel or Google Sheets, save or download the sheet as CSV.');
         return;
@@ -119,6 +122,9 @@ export default function ListsScreen() {
         );
       }
     } finally {
+      // Read or not, the app needs no lasting access to the file (Android's picker takes it on every pick). Nothing else
+      // of the file is touched, nothing waits for it, and a failure to give it up changes nothing for the person.
+      if (file) void releaseAccess(file.uri).catch(() => undefined);
       picking.current = false;
     }
   }

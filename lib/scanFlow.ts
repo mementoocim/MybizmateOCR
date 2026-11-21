@@ -3,7 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
-import { displayName, readPdf, scanPhoto, type ScanResult } from '../modules/scanner';
+import { displayName, readPdf, releaseAccess, scanPhoto, type ScanResult } from '../modules/scanner';
 import { SAMPLES, sampleUri } from './samples';
 import { addScan, type ScanSource, type StoredScan } from './scans';
 import { toast } from './toast';
@@ -177,8 +177,9 @@ export function useScanFlow() {
 
   /**
    * A PDF from the system's file picker, its page 1 read, labelled with the file's name. Android's picker hands over
-   * the person's own file: a content:// link, which the scanner reads through a copy of its own and never changes.
-   * iOS's picker opens a copy in the app's temporary folder (a file://), deleted once it has been read.
+   * the person's own file: a content:// link, which the scanner reads through a copy of its own and never changes; the
+   * picker's lasting access to it is given up afterwards (readPdf does it too, once it has read it). iOS's picker opens
+   * a copy in the app's temporary folder (a file://), deleted once it has been read.
    */
   async function fromPdf(opts: { replace?: boolean } = {}): Promise<void> {
     await oneAtATime(async () => {
@@ -195,7 +196,9 @@ export function useScanFlow() {
         const scan = { label: name ? `PDF: ${name}` : 'PDF', source: 'pdf' } as const;
         await readAndOpen(() => readPdf(file.uri), scan, opts.replace, pdfFailed);
       } finally {
+        // giving up the access is no part of the read: nothing waits for it, and its failure changes nothing
         if (file.uri.startsWith('file://')) deleteCopy(file);
+        else void releaseAccess(file.uri).catch(() => undefined);
       }
     });
   }

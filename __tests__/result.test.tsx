@@ -20,6 +20,7 @@ const mockLibrary = jest.fn(async () => ({ canceled: true }));
 const mockPick = jest.fn();
 const mockReadPdf = jest.fn();
 const mockDisplayName = jest.fn();
+const mockRelease = jest.fn(async (_uri: string) => undefined);
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
@@ -36,6 +37,7 @@ jest.mock('../modules/scanner', () => ({
   scanPhoto: jest.fn(),
   readPdf: (uri: string) => mockReadPdf(uri),
   displayName: (uri: string) => mockDisplayName(uri),
+  releaseAccess: (uri: string) => mockRelease(uri),
 }));
 jest.mock('../lib/toast', () => ({ toast: (m: string) => mockToast(m) }));
 jest.mock('../lib/build', () => ({
@@ -395,4 +397,5 @@ test('retake', async () => {
   expect(mockReadPdf).toHaveBeenCalledWith(uri);
   expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
   expect(getScan(mockRouter.replace.mock.calls.at(-1)![0].params.id)?.label).toBe('PDF: sales_text_1.pdf');
+  expect(mockRelease).toHaveBeenCalledWith(uri); // the picker's lasting access to it, given up once read
 });

@@ -110,8 +110,8 @@ struct TextBox {
 //   character close by stays out.
 // - A box's characters are joined in pdfium's order, keeping only what its type allows: 0-9 for digits, tin and
 //   printed_digits (a 2307's comb boxes come as one digit per cell, and its TIN boxes also hold the form's own printed
-//   "-"); A-Z and 0-9 for code; 0-9, "," and "." for amount; a number's and a date's characters as the model reads
-//   them (recognizer.cpp); everything for text.
+//   "-"); A-Z and 0-9 for code (a-z taken as A-Z: "wc158" is WC158); 0-9, "," and "." for amount; a number's and a
+//   date's characters as the model reads them (recognizer.cpp); everything for text.
 // - Spaces and line breaks (the ones pdfium adds too) become one space between words in text, date and number boxes,
 //   and the ends are trimmed; the other types keep no space.
 // An empty text: the box holds nothing of the page's text that its type keeps.
@@ -155,8 +155,9 @@ class Scanner {
   ScanResult scanPdf(const std::string& pdfPath, const std::string& outDir);
 
   // The live camera's check of one frame (grey, upright; see frame_input.h): the corner squares first, else the frame
-  // forms' borders, as a scan finds them but without the corner refit (the test app's OcrEngine.detect). The outline
-  // is the found form's sheet (a frame form's paper). Reads only what the scanner loaded, so it never waits for a scan.
+  // forms' borders, as a scan finds them but without the final corner refit (the test app's OcrEngine.detect; the
+  // 2307's finder still refits its finalists, as its score needs). The outline is the found form's sheet (a frame
+  // form's paper). Reads only what the scanner loaded, so it never waits for a scan.
   std::optional<FrameDetection> detectFrame(const cv::Mat& gray) const;
 
  private:

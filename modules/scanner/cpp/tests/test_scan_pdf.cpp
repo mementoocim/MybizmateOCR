@@ -4,6 +4,7 @@
 // PDF should read is what synth_2307.py wrote into it (fixtures/core/expected2307), and the Sales Invoice's picture PDF
 // holds photos/inv_0007.jpg itself.
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -21,6 +22,11 @@
 #include "core/result_json.h"
 #include "core/scanner.h"
 #include "core/service_template.h"
+#include "cpp/fpdf_scopers.h"
+#include "fpdf_edit.h"
+#include "fpdf_save.h"
+#include "fpdf_text.h"
+#include "fpdfview.h"
 
 namespace {
 
@@ -153,6 +159,84 @@ std::string patched(std::string pdf, const std::string& from, const std::string&
   return pdf.replace(at, from.size(), to);
 }
 
+size_t editDistance(const std::string& a, const std::string& b) {
+  std::vector<size_t> row(b.size() + 1);
+  for (size_t j = 0; j <= b.size(); j++) row[j] = j;
+  for (size_t i = 1; i <= a.size(); i++) {
+    size_t diagonal = row[0];
+    row[0] = i;
+    for (size_t j = 1; j <= b.size(); j++) {
+      const size_t above = row[j];
+      row[j] = std::min({row[j] + 1, row[j - 1] + 1, diagonal + (a[i - 1] == b[j - 1] ? 0 : 1)});
+      diagonal = above;
+    }
+  }
+  return row[b.size()];
+}
+
+// pdfium's way of saving a document: into these bytes.
+struct SavedPdf : FPDF_FILEWRITE {
+  std::string bytes;
+  SavedPdf() : FPDF_FILEWRITE() {
+    version = 1;
+    WriteBlock = [](FPDF_FILEWRITE* self, const void* data, unsigned long size) {
+      static_cast<SavedPdf*>(self)->bytes.append(static_cast<const char*>(data), size);
+      return 1;
+    };
+  }
+};
+
+// bir2307_text_0.pdf with the text of one of its values swapped for a picture of that text's own ink, by pdfium's edit
+// API: the page looks the same, but that box holds no PDF text (a value pasted in as an image, say).
+std::string withValueAsPicture(const std::string& value) {
+  FPDF_InitLibrary();  // once per process: a second call (renderPdf's own set-up included) does nothing
+  ScopedFPDFDocument doc(FPDF_LoadDocument(pdfPath("bir2307_text_0").c_str(), nullptr));
+  REQUIRE(doc);
+  ScopedFPDFPage page(FPDF_LoadPage(doc.get(), 0));
+  REQUIRE(page);
+  // the value's own text object (each value is one, its text ending in a space or not)
+  FPDF_PAGEOBJECT found = nullptr;
+  {
+    ScopedFPDFTextPage text(FPDFText_LoadPage(page.get()));
+    for (int i = 0; i < FPDFPage_CountObjects(page.get()) && !found; i++) {
+      FPDF_PAGEOBJECT object = FPDFPage_GetObject(page.get(), i);
+      if (FPDFPageObj_GetType(object) != FPDF_PAGEOBJ_TEXT) continue;
+      const unsigned long bytes = FPDFTextObj_GetText(object, text.get(), nullptr, 0);  // UTF-16, its NUL included
+      std::vector<FPDF_WCHAR> utf16(bytes / 2 + 1, 0);
+      FPDFTextObj_GetText(object, text.get(), utf16.data(), bytes);
+      std::string ascii;
+      for (FPDF_WCHAR c : utf16) {
+        if (c == 0) break;
+        if (c != ' ') ascii += static_cast<char>(c);
+      }
+      if (ascii == value) found = object;
+    }
+  }
+  REQUIRE(found);
+  float left = 0, bottom = 0, right = 0, top = 0;
+  REQUIRE(FPDFPageObj_GetBounds(found, &left, &bottom, &right, &top));
+  // its ink, at 4 px a point, on white
+  const double k = 4, pageW = FPDF_GetPageWidthF(page.get()), pageH = FPDF_GetPageHeightF(page.get());
+  const int w = static_cast<int>(std::ceil((right - left) * k)), h = static_cast<int>(std::ceil((top - bottom) * k));
+  ScopedFPDFBitmap ink(FPDFBitmap_Create(w, h, 0));
+  REQUIRE(ink);
+  FPDFBitmap_FillRect(ink.get(), 0, 0, w, h, 0xFFFFFFFF);
+  FPDF_RenderPageBitmap(ink.get(), page.get(), static_cast<int>(std::lround(-left * k)),
+                        static_cast<int>(std::lround(-(pageH - top) * k)), static_cast<int>(std::lround(pageW * k)),
+                        static_cast<int>(std::lround(pageH * k)), 0, 0);
+  REQUIRE(FPDFPage_RemoveObject(page.get(), found));
+  FPDFPageObj_Destroy(found);
+  FPDF_PAGEOBJECT picture = FPDFPageObj_NewImageObj(doc.get());
+  REQUIRE(picture);
+  REQUIRE(FPDFImageObj_SetBitmap(nullptr, 0, picture, ink.get()));
+  REQUIRE(FPDFImageObj_SetMatrix(picture, w / k, 0, 0, h / k, left, top - h / k));  // its top-left where the text's was
+  FPDFPage_InsertObject(page.get(), picture);
+  REQUIRE(FPDFPage_GenerateContent(page.get()));
+  SavedPdf out;
+  REQUIRE(FPDF_SaveAsCopy(doc.get(), &out, 0));
+  return out.bytes;
+}
+
 }  // namespace
 
 TEST_CASE("a text 2307 reads exactly from its text") {
@@ -180,6 +264,36 @@ TEST_CASE("a text 2307 reads exactly from its text") {
     REQUIRE(a.size() == b.size());
     CHECK(cv::norm(a, b, cv::NORM_INF) == 0);
   }
+}
+
+TEST_CASE("a text page's box holding no PDF text is read by the model, the rest from the text") {
+  // bir2307_text_0.pdf with ewt1_m2 (5,206.88) as a picture of its own ink: the page still has text, so it isn't a
+  // picture page, but that box has nothing of it. It is read from the page as in a photo; every other box still takes
+  // the PDF's own text.
+  const std::string file = tmpDir() + "/one_picture.pdf";
+  writeFile(file, withValueAsPicture("5,206.88"));
+  const auto r = scanner().scanPdf(file, tmpDir());
+  CHECK(r.picture == false);
+  REQUIRE(r.aligned);
+  CHECK(r.form == "bir_2307");
+  const nlohmann::json values = expected("bir2307_text_0")["values"];
+  REQUIRE(r.reads.size() == values.size());
+  int fromModel = 0;
+  for (const auto& b : r.reads) {
+    CAPTURE(b.name);
+    CAPTURE(b.text);
+    REQUIRE(values.contains(b.name));
+    const std::string want = values.at(b.name).get<std::string>();
+    if (b.name == "ewt1_m2") {
+      CHECK_FALSE(b.fromText);
+      CHECK(editDistance(b.text, want) <= 1);  // the model's reading of that ink
+      fromModel++;
+    } else {
+      CHECK(b.fromText);
+      CHECK(b.text == want);
+    }
+  }
+  CHECK(fromModel == 1);
 }
 
 TEST_CASE("text goes to the box that holds its centre") {
@@ -289,6 +403,7 @@ TEST_CASE("each box keeps only what its type allows from the PDF's text") {
       {"digits", U"1 0 0 1 2 0 2 6", "10012026"},
       {"tin", U"- - -\r\n2 1 1 3 0 5 4 1 8 0 0 0 0 0", "21130541800000"},
       {"code", U"WC 158", "WC158"},
+      {"code", U"wc158", "WC158"},  // an ATC typed in small letters, in a fillable PDF say: still the code
       {"amount", U"P1,500.00", "1,500.00"},
       {"printed_digits", U"No. 0000888", "0000888"},
       {"number", U"1  1/2 pcs", "1 1/2"},

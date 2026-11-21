@@ -236,7 +236,7 @@ TEST_CASE("a comb box's crop holds only its digits: the ticks and the TIN's dash
       REQUIRE_FALSE(crop.empty());
       cv::Mat labels;
       const int parts = cv::connectedComponents(crop < 128, labels, 8) - 1;  // each typed digit is one stroke
-      CHECK(parts == static_cast<int>(values[b.name].get<std::string>().size()));
+      CHECK(parts == static_cast<int>(values.value(b.name, std::string()).size()));
       combs++;
     }
     CHECK(combs == 6);
@@ -308,6 +308,30 @@ TEST_CASE("no other form's photo or camera frame is found as a 2307") {
   }
   CHECK(photos == 27);  // the Sales and Service Invoices, their variants, and the blank page
   CHECK(frames == 5);
+}
+
+TEST_CASE("the Service Invoice's finder alone finds nothing in a 2307, at the scan's size or the camera's") {
+  // A 2307 is found as itself because the Service Invoice's finder doesn't find it at all, not only because the 2307's
+  // border scores higher: should the 2307's finder ever miss, the scan says no form was found, never a Service Invoice.
+  static const mbm::ServiceTemplate service =
+      mbm::ServiceTemplate::parse(readText(assetsDir() + "/service_invoice.json"));
+  const mbm::FrameAligner aligner(service);
+  for (const auto& stem : all2307()) {
+    CAPTURE(stem);
+    const cv::Mat bgr = image2307(stem);
+    CHECK_FALSE(aligner.find(grayOf(bgr), true).has_value());
+    CHECK_FALSE(aligner.find(cameraFrame(bgr).gray, false).has_value());
+  }
+}
+
+TEST_CASE("the camera finds each 2307 as a 2307") {
+  // every 2307 image as the camera's frame, its hardest size: the 2307, never the Service Invoice
+  for (const auto& stem : all2307()) {
+    CAPTURE(stem);
+    const auto d = scanner().detectFrame(cameraFrame(image2307(stem)).gray);
+    CHECK(d.has_value());
+    if (d) CHECK(d->form == "bir_2307");
+  }
 }
 
 TEST_CASE("the camera finds a 2307: its paper's outline and the Service Invoice's live minimum") {

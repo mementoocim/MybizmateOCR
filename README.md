@@ -64,7 +64,8 @@ so Android and iPhone will read a photo or a PDF the same way.
     known code, or the same TIN and name, updates that party and keeps what its blank cells leave out.
   - Items: Name (or Description), Unit and Price (or List price). The same name updates the item.
   - A file picked from Android's Downloads may come as a link without its name, so a CSV is known by its name or by
-    the type the phone gives it.
+    the type the phone gives it. Android's picker keeps a lasting access to every file it hands over; the app gives
+    it up once the file has been read.
   - Excel's plain "CSV (Comma delimited)" (Windows-1252) and "CSV UTF-8", and Google Sheets' download, all keep their
     ñ: the file is read as UTF-8 when it is valid UTF-8, else as Windows-1252.
 - **Saving** (Save, on a scan): the date, the customer or supplier, Gross (VAT included), the tax type (suggested
@@ -109,15 +110,25 @@ so Android and iPhone will read a photo or a PDF the same way.
   a BIR Form 2307. Import another PDF."
 - **A picture PDF** (a scan, or a photo saved as a PDF) has no visible text. It is read like a photo, photo checks
   included, and says "The PDF is a picture: read like a photo." The hidden text a scanner app lays over its scans is
-  that app's own OCR, so it is ignored.
+  that app's own OCR, so it is ignored: text that is never painted (render mode 3, invisible, or 7, clip only), and
+  text drawn under an image that covers most of the page (80% of its area or more). Text drawn on top of such an
+  image, as a background, is the page's own.
 - **Refused, each with its message** (a toast, and no scan is added):
   - over 20 MB (20 × 1024 × 1024 bytes): "That PDF is over 20 MB. Choose a smaller file." It is refused before any
     of it is copied when its app gives its size, else as soon as the copy passes 20 MB;
-  - a page over 2000 pt on its long side: "That PDF's page is too big to read.";
+  - a page over 14,400 pt (200 inches, the PDF format's own limit) on its long side: "That PDF's page is too big to
+    read." Within it, a page's size costs nothing (it is always rendered 2400 px on its long side), so a photo saved
+    as a PDF at 1 px = 1 pt reads;
   - a password: "That PDF has a password. Save a copy without one, then import it.";
   - broken, or not a PDF inside: "Couldn't read that PDF."
 - **Safe to open:** pdfium's build has no JavaScript and no XFA, runs no form actions and fetches nothing. The PDF is
   only read: a picked file is copied into the scanner's work folder for the read, and the copy is deleted afterwards.
+  Android's picker keeps a lasting access to the file it hands over; the app gives it up once the file has been read,
+  or refused. A refusal carries only its code, never the failure behind it (whose message could name the file).
+- **Form fields, typed notes and stamps:** a value typed into a fillable PDF's field, a note typed onto the page
+  (FreeText, as phone PDF editors keep typed values) and a stamp are read with the page: a copy of page 1 is made in
+  memory, holding its own copy of everything the page inherits (its `/Resources`, its boxes), and the copy is
+  flattened. A page with no such annotation, or only links and popups, is read as it is.
 - **BIR Form 2307, page 1** (`modules/scanner/assets/scanner/bir_2307.json`, 160 boxes): the period From and To; the
   payee's and the payor's TIN, name, registered address and ZIP; Part III's 10 income payment rows and 10 business
   tax rows (the payment, its ATC, the quarter's 3 months, the total and the tax withheld), and each table's total
@@ -355,7 +366,8 @@ run the same `scan_file` again.
   and read the 2307s and PDFs against the values written into them. They push about 200 MB to
   `/data/local/tmp/scanner_tests` (265 MB after a run); remove that folder when the emulator is short of space.
 - From `android/`: `./gradlew :scanner:testDebugUnitTest`: the module's Kotlin tests (auto capture, image sizes, the
-  scanner holder, the PDF's size limit and work copy, a picked file's name).
+  scanner holder, the PDF's size limit and work copy, a refusal's code, a picked file's name, and what of a picked
+  file's lasting access is given up).
 - `npx tsc --noEmit`: the typecheck. `npm run lint`: ESLint (Expo's config).
 - From `../prototype/benchmark`: `..\..\.venv\Scripts\python.exe test_export_check_fixtures.py`: the test of the
   exporter that writes `fixtures/checks/` and `fixtures/lists/`.
@@ -377,7 +389,8 @@ doctest (68 test cases, 8938 assertions), the module's Kotlin tests (29), and th
 3. **Two pages** (`two_pages.pdf`): "Read from the PDF: 55 boxes from its text, 0 read from the page. Only page 1 of
    2 was read." 55 of 55 boxes as written.
 4. **The refusals:** `password.pdf`, `broken.pdf`, a 22.4 MB PDF and a PDF whose page is 2142 × 3276 pt each gave
-   their message, and no scan was added.
+   their message, and no scan was added. (Since the final review's fixes, such a page reads: the limit is now the
+   format's own 14,400 pt.)
 5. **The MyBizMate-printed test 2307** (pushed under a neutral name; the PDF was deleted afterwards): 17 boxes, every
    one from the PDF's text, and every one the same as what MyBizMate printed (read on the laptop with pypdfium2): the
    period; the payee's name, address, TIN and ZIP; the payor's name and TIN; the payment (its description, ATC, month,
@@ -429,15 +442,11 @@ Base times that rate, and the offset account 1105. The rows stay as drafts, date
   under it ("Closest match: …"); fixing the payor's name or TIN is the only way to settle it.
 - **A phone's time.** A full Part III takes 8 s in the emulator's release-built core; a phone's time, with a team
   release, is still to measure (with milestone 2's phone checks, below).
-- **The picker's lasting access.** expo-file-system's picker takes a lasting (persistable) grant on every PDF (and
-  CSV) picked, read and, when offered, write, and nothing releases it: the app keeps access to every file imported.
-- **ONNX Runtime's telemetry line.** At start, onnxruntime-android 1.32.0's Java layer logs "ORTTelemetry: Unable to
-  initialize telemetry" with an UnsatisfiedLinkError. The scanner reads through the C++ core; check what that Java
-  layer is for, and that nothing in it can go online.
-- **renderPdf, for the final review.** Three cases an unusual PDF could hit: on a page 1 with a visible annotation (a
-  field, a link, a comment), flattening hides the `/Resources` the page inherits from `/Pages`, so images vanish and
-  fonts fall back; text in render mode 7 (clip only, never painted) counts as visible; and OCR text drawn under a
-  page-sized image counts as the page's text, so a scan's own OCR would fill its boxes.
+- **ONNX Runtime's telemetry.** The core switches ONNX Runtime's own telemetry off (`DisableTelemetryEvents` on its
+  environment), and `libonnxruntime.so` imports no socket function. onnxruntime-android 1.32.0's Java layer still
+  adds a provider that starts its telemetry client when the app does (Microsoft's, which reads the phone's
+  `android_id`); today it fails ("ORTTelemetry: Unable to initialize telemetry", an UnsatisfiedLinkError), and it is
+  to be removed from the merged manifest.
 - **Open-source notices.** The app shows none yet. A release needs them: pdfium's (above), and those of the other
   libraries it ships.
 

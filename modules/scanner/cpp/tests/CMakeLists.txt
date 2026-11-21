@@ -24,4 +24,5 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/.. core)
 
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 add_executable(scanner_tests ${TEST_SOURCES})
-target_link_libraries(scanner_tests PRIVATE scanner_core)
+# pdfium too: some tests make their own PDFs with its edit API
+target_link_libraries(scanner_tests PRIVATE scanner_core scanner::pdfium)

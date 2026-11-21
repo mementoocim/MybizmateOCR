@@ -17,8 +17,14 @@ namespace {
 constexpr int kBatch = 8;
 constexpr int kHeight = 48;
 
+// ONNX Runtime's own telemetry is switched off for the process: nothing about the model or the phone is sent (the app
+// promises that nothing leaves the phone).
 Ort::Env& env() {
-  static Ort::Env e(ORT_LOGGING_LEVEL_ERROR, "mbm-scanner");
+  static Ort::Env e = [] {
+    Ort::Env made(ORT_LOGGING_LEVEL_ERROR, "mbm-scanner");
+    made.DisableTelemetryEvents();
+    return made;
+  }();
   return e;
 }
 

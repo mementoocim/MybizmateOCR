@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -14,9 +15,11 @@
 
 #include "core/scanner.h"  // MAX_SIDE
 #include "cpp/fpdf_scopers.h"
+#include "fpdf_annot.h"
 #include "fpdf_edit.h"
 #include "fpdf_flatten.h"
 #include "fpdf_formfill.h"
+#include "fpdf_ppo.h"
 #include "fpdf_text.h"
 #include "fpdf_transformpage.h"
 #include "fpdfview.h"
@@ -45,7 +48,7 @@ void initPdfium() {
 PdfError refusal(const std::string& code) {
   const char* why = code == "too_big"        ? "the PDF is over 20 MB"
                     : code == "password"     ? "the PDF is locked with a password"
-                    : code == "page_too_big" ? "the PDF's page 1 is over 2000 pt long"
+                    : code == "page_too_big" ? "the PDF's page 1 is over 14,400 pt long"
                                              : "the PDF can't be read";
   return PdfError(code, why);
 }
@@ -91,6 +94,100 @@ FormPage loadPage1(FPDF_DOCUMENT doc, FPDF_FORMHANDLE form) {
   return FormPage(page, FormPageCloser{form});
 }
 
+// Whether a page has an annotation that flattening would draw onto it: anything but a link or a popup, such as a form
+// field's value, a stamp, or a note typed onto the page (FreeText: how phone PDF editors keep typed values).
+bool drawsAnnotation(FPDF_PAGE page) {
+  const int count = FPDFPage_GetAnnotCount(page);
+  for (int i = 0; i < count; i++) {
+    ScopedFPDFAnnotation annot(FPDFPage_GetAnnot(page, i));
+    if (!annot) continue;
+    const FPDF_ANNOTATION_SUBTYPE type = FPDFAnnot_GetSubtype(annot.get());
+    if (type != FPDF_ANNOT_LINK && type != FPDF_ANNOT_POPUP) return true;
+  }
+  return false;
+}
+
+// Which of a page's text objects are seen. Not one drawn in a mode that paints nothing (3, invisible; 7, clip only), nor
+// one drawn before a top-level image that covers most of the page (COVER of its area or more), which lies over it: a
+// scanner app's OCR text, under the scan's own image. Text drawn after such an image, on top of a background, is seen.
+class SeenText {
+ public:
+  explicit SeenText(FPDF_PAGE page) {
+    FS_RECTF box;
+    const double area =
+        FPDF_GetPageBoundingBox(page, &box) ? std::abs(double(box.right) - box.left) * std::abs(double(box.top) - box.bottom)
+                                            : 0;
+    const int count = FPDFPage_CountObjects(page);
+    for (int i = 0; i < count; i++) {
+      FPDF_PAGEOBJECT object = FPDFPage_GetObject(page, i);
+      if (!object) continue;
+      place(object, i);
+      float left = 0, bottom = 0, right = 0, top = 0;
+      if (area > 0 && FPDFPageObj_GetType(object) == FPDF_PAGEOBJ_IMAGE &&
+          FPDFPageObj_GetBounds(object, &left, &bottom, &right, &top)) {
+        // the part of the page the image covers (its bounds, in the page's own space, like the page's box)
+        const double w = std::min<double>(right, box.right) - std::max<double>(left, box.left);
+        const double h = std::min<double>(top, box.top) - std::max<double>(bottom, box.bottom);
+        if (w > 0 && h > 0 && w * h >= COVER * area) cover_ = i;
+      }
+    }
+  }
+
+  bool seen(FPDF_PAGEOBJECT text) const {
+    const int mode = FPDFTextObj_GetTextRenderMode(text);
+    if (mode == FPDF_TEXTRENDERMODE_INVISIBLE || mode == FPDF_TEXTRENDERMODE_CLIP) return false;
+    const auto it = place_.find(text);
+    return it == place_.end() || it->second > cover_;
+  }
+
+ private:
+  static constexpr double COVER = 0.8;
+
+  // An object's place: its top-level object's index on the page, a form's nested objects included (they are drawn
+  // when their form is).
+  void place(FPDF_PAGEOBJECT object, int top) {
+    place_[object] = top;
+    if (FPDFPageObj_GetType(object) != FPDF_PAGEOBJ_FORM) return;
+    const int count = FPDFFormObj_CountObjects(object);
+    for (int k = 0; k < count; k++) {
+      if (FPDF_PAGEOBJECT inner = FPDFFormObj_GetObject(object, static_cast<unsigned long>(k))) place(inner, top);
+    }
+  }
+
+  std::map<FPDF_PAGEOBJECT, int> place_;
+  int cover_ = -1;  // the last top-level image covering most of the page, or none
+};
+
+// The characters of a page rendered at this size, in pdfium's order, without the text no one sees (SeenText), nor a
+// character pdfium adds itself (a space or a line break) right after one of those.
+std::vector<PdfChar> charsOf(FPDF_PAGE page, cv::Size size) {
+  std::vector<PdfChar> out;
+  ScopedFPDFTextPage text(FPDFText_LoadPage(page));
+  const int count = text ? FPDFText_CountChars(text.get()) : 0;
+  const SeenText seenText(page);
+  bool shown = false;  // whether the last character from the page itself is seen
+  for (int i = 0; i < count; i++) {
+    if (FPDFText_IsGenerated(text.get(), i) != 1) {
+      FPDF_PAGEOBJECT object = FPDFText_GetTextObject(text.get(), i);
+      shown = !object || seenText.seen(object);
+    }
+    double left = 0, right = 0, bottom = 0, top = 0;
+    if (!shown || !FPDFText_GetCharBox(text.get(), i, &left, &right, &bottom, &top)) continue;
+    // Two opposite corners make a box (on a turned page they swap places).
+    const cv::Rect2f glyph(onRender(page, size, left, top), onRender(page, size, right, bottom));
+    // The loose box, mapped as the glyph's box is. When it has no area (pdfium gives a character it adds its empty
+    // glyph box), the glyph's box stands in.
+    cv::Rect2f loose = glyph;
+    FS_RECTF l;
+    if (FPDFText_GetLooseCharBox(text.get(), i, &l)) {
+      const cv::Rect2f r(onRender(page, size, l.left, l.top), onRender(page, size, l.right, l.bottom));
+      if (r.width > 0 && r.height > 0) loose = r;
+    }
+    out.push_back({static_cast<char32_t>(FPDFText_GetUnicode(text.get(), i)), glyph, loose});
+  }
+  return out;
+}
+
 }  // namespace
 
 PdfPage renderPdf(const std::string& path) {
@@ -118,23 +215,37 @@ PdfPage renderPdf(const std::string& path) {
   if (!(w > 0 && h > 0)) throw refusal("broken");
   if (std::max(w, h) > MAX_PDF_PAGE_PT) throw refusal("page_too_big");
 
-  // Form fields' values become page content: FPDF_RenderPageBitmap doesn't draw them and the text page doesn't list
-  // them. Flattening writes the page's own MediaBox and CropBox, from the boxes the page itself holds, else Letter, so a
-  // box the page inherits from /Pages would be lost: the box it shows is written onto the page first. The flattened page
-  // is read again from the document, and must still have the size it showed.
-  FS_RECTF box;
-  if (FPDF_GetPageBoundingBox(page.get(), &box)) {
-    FPDFPage_SetMediaBox(page.get(), box.left, box.bottom, box.right, box.top);
-    FPDFPage_SetCropBox(page.get(), box.left, box.bottom, box.right, box.top);
-  }
-  if (FPDFPage_Flatten(page.get(), FLAT_NORMALDISPLAY) == FLATTEN_SUCCESS) {
-    page.reset();
-    page = loadPage1(doc.get(), form.get());
-    if (!page) throw refusal("broken");
-    if (std::abs(FPDF_GetPageWidthF(page.get()) - w) > 0.01f || std::abs(FPDF_GetPageHeightF(page.get()) - h) > 0.01f) {
+  // An annotation's contents become page content when it is flattened: FPDF_RenderPageBitmap doesn't draw a form field's
+  // value, and the text page lists no annotation's text. A page with nothing to flatten (no annotation, or only links
+  // and popups, which draw nothing) is read as it is. Any other is flattened on a copy, never in place: flattening gives
+  // a page that inherits its /Resources from /Pages a /Resources of its own, which hides the inherited one (its images
+  // and fonts are gone). A copy made with FPDF_ImportPagesByIndex holds its own copy of everything the page inherits
+  // (its /Resources, its boxes, its /Rotate), and the fields' appearances the form environment drew above. Flattening
+  // then writes the copy's MediaBox and CropBox from the boxes the copy itself holds (a CropBox past the MediaBox would
+  // grow it), so the box it shows is written onto it first; the flattened copy, read again, must still have that size.
+  ScopedFPDFDocument copy;
+  ScopedFPDFPage flat;  // page 1's flattened copy, in `copy`
+  if (drawsAnnotation(page.get())) {
+    copy.reset(FPDF_CreateNewDocument());
+    const int first = 0;
+    if (!copy || !FPDF_ImportPagesByIndex(copy.get(), doc.get(), &first, 1, 0)) throw refusal("broken");
+    flat.reset(FPDF_LoadPage(copy.get(), 0));
+    if (!flat) throw refusal("broken");
+    FS_RECTF box;
+    if (FPDF_GetPageBoundingBox(flat.get(), &box)) {
+      FPDFPage_SetMediaBox(flat.get(), box.left, box.bottom, box.right, box.top);
+      FPDFPage_SetCropBox(flat.get(), box.left, box.bottom, box.right, box.top);
+    }
+    if (FPDFPage_Flatten(flat.get(), FLAT_NORMALDISPLAY) == FLATTEN_SUCCESS) {
+      flat.reset();  // closed before it is read again
+      flat.reset(FPDF_LoadPage(copy.get(), 0));
+      if (!flat) throw refusal("broken");
+    }
+    if (std::abs(FPDF_GetPageWidthF(flat.get()) - w) > 0.01f || std::abs(FPDF_GetPageHeightF(flat.get()) - h) > 0.01f) {
       throw refusal("broken");
     }
   }
+  FPDF_PAGE read = flat ? flat.get() : page.get();  // the page rendered and read
 
   const double scale = static_cast<double>(MAX_SIDE) / std::max(w, h);
   const cv::Size size(std::max(1, static_cast<int>(std::lround(w * scale))),
@@ -142,35 +253,12 @@ PdfPage renderPdf(const std::string& path) {
   ScopedFPDFBitmap bitmap(FPDFBitmap_CreateEx(size.width, size.height, FPDFBitmap_BGRx, nullptr, 0));
   if (!bitmap) throw std::bad_alloc();
   FPDFBitmap_FillRect(bitmap.get(), 0, 0, size.width, size.height, 0xFFFFFFFF);  // white paper
-  FPDF_RenderPageBitmap(bitmap.get(), page.get(), 0, 0, size.width, size.height, 0, FPDF_ANNOT);
+  FPDF_RenderPageBitmap(bitmap.get(), read, 0, 0, size.width, size.height, 0, FPDF_ANNOT);
   const cv::Mat bgrx(size, CV_8UC4, FPDFBitmap_GetBuffer(bitmap.get()),
                      static_cast<size_t>(FPDFBitmap_GetStride(bitmap.get())));
   cv::cvtColor(bgrx, out.bgr, cv::COLOR_BGRA2BGR);
 
-  // The text, in pdfium's order. Invisible text (render mode 3, a scanner app's OCR layer) is left out, and so is a
-  // character pdfium adds (a space or a line break) after an invisible one.
-  ScopedFPDFTextPage text(FPDFText_LoadPage(page.get()));
-  const int count = text ? FPDFText_CountChars(text.get()) : 0;
-  bool shown = false;  // whether the last character from the page itself is drawn
-  for (int i = 0; i < count; i++) {
-    if (FPDFText_IsGenerated(text.get(), i) != 1) {
-      FPDF_PAGEOBJECT object = FPDFText_GetTextObject(text.get(), i);
-      shown = !object || FPDFTextObj_GetTextRenderMode(object) != FPDF_TEXTRENDERMODE_INVISIBLE;
-    }
-    double left = 0, right = 0, bottom = 0, top = 0;
-    if (!shown || !FPDFText_GetCharBox(text.get(), i, &left, &right, &bottom, &top)) continue;
-    // Two opposite corners make a box (on a turned page they swap places).
-    const cv::Rect2f glyph(onRender(page.get(), size, left, top), onRender(page.get(), size, right, bottom));
-    // The loose box, mapped as the glyph's box is. When it has no area (pdfium gives a character it adds its empty
-    // glyph box), the glyph's box stands in.
-    cv::Rect2f loose = glyph;
-    FS_RECTF l;
-    if (FPDFText_GetLooseCharBox(text.get(), i, &l)) {
-      const cv::Rect2f r(onRender(page.get(), size, l.left, l.top), onRender(page.get(), size, l.right, l.bottom));
-      if (r.width > 0 && r.height > 0) loose = r;
-    }
-    out.chars.push_back({static_cast<char32_t>(FPDFText_GetUnicode(text.get(), i)), glyph, loose});
-  }
+  out.chars = charsOf(read, size);
   out.picture = std::none_of(out.chars.begin(), out.chars.end(), [](const PdfChar& c) { return inks(c.ch); });
   return out;
 }
