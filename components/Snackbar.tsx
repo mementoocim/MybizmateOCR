@@ -13,16 +13,18 @@ import {
   topHost,
 } from '../lib/snackbar';
 import { colors, durations, elevation, radius, space, touch, type } from '../lib/theme';
+import { useKeyboardHeight } from './Screen';
 import { Tap } from './Tap';
 
 // Design B §5.5, §5.6 and §8, and the plan's call 4: the snackbar, in place of Android's toasts. A host is where the
 // message can show: the root layout has one, and so does every open sheet, inside its Modal (the photo viewer gets one
 // too). Only the newest host shows it (lib/snackbar), so it's never dimmed behind a modal. It's an ink bar, 16 dp in from
 // each side, with paper text and an optional action in brand. It sits above the bottom bar, or the navigation bar when
-// there's none; in a sheet, above the action row. It slides up 16 dp as it fades in, and goes back the same way; with
-// reduced motion it only fades. A new message takes the place of the one that's up, where it is. A message is up for
-// the time the phone recommends for 4 s, or for 8 s with an action, so it lasts longer for someone who needs it, and
-// its action takes it down too. It's a polite live region.
+// there's none, and above the keyboard while it's open: Android doesn't resize the window for it, so it covers the bar
+// (components/Screen's useEndPadding). In a sheet, it sits above the action row. It slides up 16 dp as it fades in,
+// and goes back the same way; with reduced motion it only fades. A new message takes the place of the one that's up,
+// where it is. A message is up for the time the phone recommends for 4 s, or for 8 s with an action, so it lasts
+// longer for someone who needs it, and its action takes it down too. It's a polite live region.
 
 /** How far it slides up as it fades in, in dp (§5.5). */
 const RISE = 16;
@@ -36,6 +38,7 @@ export function SnackbarHost({ bottomOffset }: { bottomOffset?: number }) {
   const current = useSyncExternalStore(subscribeSnack, currentSnack);
   const clearance = useSyncExternalStore(subscribeSnack, bottomClearance);
   const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardHeight(); // above the navigation bar (ruling T5-1)
   const reduced = useReducedMotion();
   const live = onTop ? current : null; // the message this host shows now
   // What's on the screen: the live message, or the last one while it goes.
@@ -88,7 +91,7 @@ export function SnackbarHost({ bottomOffset }: { bottomOffset?: number }) {
       style={[
         styles.bar,
         action && styles.withAction,
-        { bottom: bottomOffset ?? (clearance || insets.bottom) + space.s },
+        { bottom: bottomOffset ?? Math.max(clearance || insets.bottom, insets.bottom + keyboard) + space.s },
         reduced ? { opacity: progress } : { opacity: progress, transform: [{ translateY: rise }] },
       ]}>
       <Text style={[type.body, styles.message]}>{shown.message}</Text>

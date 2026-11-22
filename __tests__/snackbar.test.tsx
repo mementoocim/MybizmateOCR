@@ -231,6 +231,32 @@ test('in a sheet, it sits above the action row, or above the inset and the keybo
   await keyboard(0);
 });
 
+test('on a screen, it sits above an open keyboard, which covers the bottom bar', async () => {
+  const ui = (bar: boolean) => (
+    <>
+      {bar && <BottomBar buttons={[{ label: 'Import CSV', onPress: noop }]} />}
+      <SnackbarHost />
+    </>
+  );
+  await withInsets(ui(true));
+  await layout('bottom-bar', 80);
+  await raise('Imported 21 customers.');
+  expect(snackbar()).toHaveStyle({ bottom: 80 + space.s });
+  // A field has focus. Android doesn't resize the window, so the keyboard covers the bar: the message sits over it.
+  await keyboard(300);
+  expect(snackbar()).toHaveStyle({ bottom: BOTTOM + 300 + space.s });
+  await keyboard(40); // one that stops below the bar's top leaves it above the bar
+  expect(snackbar()).toHaveStyle({ bottom: 80 + space.s });
+  await keyboard(0); // closed: back at the bar's clearance
+  expect(snackbar()).toHaveStyle({ bottom: 80 + space.s });
+
+  await screen.rerender(ui(false)); // with no bar, the same over the navigation bar
+  await keyboard(300);
+  expect(snackbar()).toHaveStyle({ bottom: BOTTOM + 300 + space.s });
+  await keyboard(0);
+  expect(snackbar()).toHaveStyle({ bottom: BOTTOM + space.s });
+});
+
 test('motion: it slides up 16 dp as it fades in, and back out, over 200 ms; with reduced motion it only fades', async () => {
   let timing = jest.spyOn(Animated, 'timing').mockReturnValue(still);
   const configs = () => timing.mock.calls.map(([, config]) => config);
