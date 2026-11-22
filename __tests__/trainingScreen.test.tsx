@@ -111,7 +111,7 @@ test('the training screen exports and marks', async () => {
 
   // now it can: the zip of both is shared, then the question
   await press(screen.getByRole('button', { name: 'Export training data' }));
-  expect(mockShare).toHaveBeenCalledWith('file:///cache/exports/MyBizMate Scan training data 2026-11-18.zip', {
+  expect(mockShare).toHaveBeenCalledWith('file:///cache/exports/MyBizMate Scan training data 2026-11-18 100000 4a3f.zip', {
     mimeType: 'application/zip',
     dialogTitle: 'Send the file',
   });

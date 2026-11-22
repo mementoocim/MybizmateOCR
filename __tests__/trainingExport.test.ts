@@ -20,7 +20,8 @@ const DETAILS = { taxType: 'VAT', account: 'Sales Revenue', terms: 'account', at
 const CERT = { account: 'Creditable Withholding Tax' };
 const TAG = { client: 'C014', writer: 'W03' };
 // half past midnight: east of Greenwich, UTC is still on the day before, and the file is named by the phone's own day
-const AT = new Date(2026, 10, 18, 0, 30);
+// and time
+const AT = new Date(2026, 10, 18, 0, 30, 5);
 const INDEX = 'file:///docs/saved.json';
 
 type Modules = {
@@ -128,7 +129,11 @@ test('the zip holds the manifest and each training crop', async () => {
   const crops = records.flatMap((r) => r.boxes.map((b) => b.crop));
 
   const out = await m.exp.buildTrainingExport(pairs, AT);
-  expect(out.name).toBe('MyBizMate Scan training data 2026-11-18.zip');
+  // the phone's date and time to the second, and the install ID's first 4 characters: so one phone's exports a minute
+  // apart, or the team's phones' exports on one day, don't share a name
+  expect(out.name).toBe('MyBizMate Scan training data 2026-11-18 003005 4a3f.zip');
+  const late = await m.exp.buildTrainingExport(pairs, new Date(2026, 10, 18, 23, 59, 59));
+  expect(late.name).toBe('MyBizMate Scan training data 2026-11-18 235959 4a3f.zip'); // a 24-hour clock
   expect(out).toMatchObject({ boxes: crops.length, missing: 0 });
   const entries = unzipStored(out.bytes);
   // the manifest, then each training box's crop at its record's path: nothing else

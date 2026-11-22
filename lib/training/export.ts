@@ -43,6 +43,18 @@ export async function pendingTraining(): Promise<StoredScan[]> {
   return scans.sort((a, b) => (at(a) < at(b) ? -1 : at(a) > at(b) ? 1 : 0));
 }
 
+const two = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * The export's file name: the phone's own date and time to the second, then the install ID's first 4 characters
+ * ("MyBizMate Scan training data 2026-11-22 143205 1df7.zip"). So a file saved next to another export, one phone's a
+ * minute later or a teammate's from the same day, doesn't replace it.
+ */
+function exportName(at: Date, install: string): string {
+  const time = two(at.getHours()) + two(at.getMinutes()) + two(at.getSeconds());
+  return `MyBizMate Scan training data ${localIsoDate(at)} ${time} ${install.slice(0, 4)}.zip`;
+}
+
 /** A crop's PNG; null when the scan kept none, or its file can't be read (its folder deleted or moved). */
 async function cropOf(uri: string | null): Promise<Uint8Array | null> {
   if (uri === null) return null;
@@ -93,7 +105,7 @@ export async function buildTrainingExport(
   };
   const files = [{ name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(manifest)) }, ...crops];
   return {
-    name: `MyBizMate Scan training data ${localIsoDate(at)}.zip`,
+    name: exportName(at, install),
     bytes: zipStored(files, at),
     boxes: crops.length,
     missing,
