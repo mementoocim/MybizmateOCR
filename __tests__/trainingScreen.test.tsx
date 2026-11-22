@@ -17,7 +17,17 @@ import { unzipStored } from '../test-utils/unzip';
 const mockToast = jest.fn();
 const mockShare = jest.fn(async (_uri: string, _options: object) => {});
 const mockAvailable = jest.fn(async () => true);
+// A scan whose training record comes out null, as a rule in trainingRecord alone (one isTrainingScan lacks) would make
+let mockNoRecord: string | null = null;
 
+jest.mock('../lib/training/record', () => {
+  const actual = jest.requireActual('../lib/training/record');
+  return {
+    ...actual,
+    trainingRecord: (scan: { id: string }, ...rest: unknown[]) =>
+      scan.id === mockNoRecord ? null : actual.trainingRecord(scan, ...rest),
+  };
+});
 jest.mock('../lib/toast', () => ({ toast: (m: string) => mockToast(m) }));
 jest.mock('expo-sharing', () => ({
   shareAsync: (uri: string, options: object) => mockShare(uri, options),
@@ -65,8 +75,16 @@ const answer = (label: string) =>
 beforeAll(() => pinToday(NOW));
 afterAll(() => jest.useRealTimers());
 
+/** The IDs of the scans in the last zip shared. */
+function sharedIds(): string[] {
+  const zip = unzipStored(memoryFs.files.get(mockShare.mock.calls.at(-1)![0]) as Uint8Array);
+  return JSON.parse(new TextDecoder().decode(zip[0].data)).scans.map((s: { id: string }) => s.id);
+}
+
 beforeEach(async () => {
   jest.clearAllMocks();
+  jest.setSystemTime(NOW);
+  mockNoRecord = null;
   memoryFs.reset();
   await loadSaved(); // nothing saved
   alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
@@ -143,4 +161,57 @@ test('one scan: "Not yet" keeps it, and none is left once it\'s marked', async (
   await answer('Mark as exported');
   expect(mockToast).toHaveBeenLastCalledWith('Marked 1 scan as exported.');
   expect(screen.getByText('No annotated scans to export yet.')).toBeTruthy();
+});
+
+test('each export takes the oldest 50, and marks exactly those', async () => {
+  // annotated scans saved a second apart, the first the oldest
+  const ids: string[] = [];
+  const saveNext = async () => {
+    jest.setSystemTime(new Date(NOW.getTime() - (51 - ids.length) * 1000));
+    ids.push(await saveAnnotated('inv_0051'));
+    jest.setSystemTime(NOW);
+  };
+  while (ids.length < 50) await saveNext();
+  await render(<TrainingScreen />);
+  expect(screen.getByText('50 annotated scans not exported yet.')).toBeTruthy();
+  expect(screen.queryByText('Each export takes the oldest 50.')).toBeNull(); // they fit in one export
+  await act(saveNext);
+  expect(screen.getByText('51 annotated scans not exported yet.')).toBeTruthy();
+  expect(screen.getByText('Each export takes the oldest 50.')).toBeTruthy();
+
+  // the zip holds the oldest 50, the question counts them, and only they are marked
+  await press(screen.getByRole('button', { name: 'Export training data' }));
+  expect(sharedIds().sort()).toEqual(ids.slice(0, 50).sort());
+  expect(alertSpy).toHaveBeenLastCalledWith(
+    'Did the file go where you wanted?',
+    'Mark these 50 scans as exported, so the next export leaves them out.',
+    expect.anything(),
+  );
+  await answer('Mark as exported');
+  expect(mockToast).toHaveBeenLastCalledWith('Marked 50 scans as exported.');
+  expect(ids.filter((id) => savedSummary(id)!.trainingExportedAt === NOW.toISOString())).toEqual(ids.slice(0, 50));
+  expect(savedSummary(ids[50])).toMatchObject({ trainingExportedAt: null });
+  expect(screen.getByText('1 annotated scan not exported yet.')).toBeTruthy();
+  expect(screen.queryByText('Each export takes the oldest 50.')).toBeNull();
+
+  // the next export takes the last one
+  await press(screen.getByRole('button', { name: 'Export training data' }));
+  expect(sharedIds()).toEqual([ids[50]]);
+  await answer('Mark as exported');
+  expect(mockToast).toHaveBeenLastCalledWith('Marked 1 scan as exported.');
+  expect(screen.getByText('No annotated scans to export yet.')).toBeTruthy();
+});
+
+test('a scan with no training record stops the export, and nothing is marked', async () => {
+  const sale = await saveAnnotated('inv_0051');
+  const cert = await saveAnnotated('bir2307_photo_0');
+  mockNoRecord = cert;
+  await render(<TrainingScreen />);
+  expect(screen.getByText('2 annotated scans not exported yet.')).toBeTruthy();
+  await press(screen.getByRole('button', { name: 'Export training data' }));
+  expect(mockToast).toHaveBeenCalledWith("Couldn't make the file.");
+  expect(mockShare).not.toHaveBeenCalled();
+  expect(alertSpy).not.toHaveBeenCalled();
+  for (const id of [sale, cert]) expect(savedSummary(id)).toMatchObject({ trainingExportedAt: null });
+  expect(screen.getByText('2 annotated scans not exported yet.')).toBeTruthy();
 });

@@ -339,6 +339,18 @@ test('the export refuses more than the zip can hold', async () => {
   expect(fits).toMatchObject({ boxes: 65534, missing: 0 });
   const end = new DataView(fits.bytes.buffer, fits.bytes.byteOffset + fits.bytes.length - 22);
   expect([end.getUint32(0, true), end.getUint16(10, true)]).toEqual([0x06054b50, 65535]);
-  // one more is refused
+  // one more is refused, counted from the records before any crop is read
+  const read = jest.spyOn(require('expo-file-system').File.prototype, 'bytes');
   await expect(m.exp.buildTrainingExport(times(65535), AT)).rejects.toThrow('too_big');
+  expect(read).not.toHaveBeenCalled();
+  read.mockRestore();
+});
+
+test('a scan that is not training data stops the write, and nothing is written', async () => {
+  const m = await annotationMode();
+  const sale = await saveAnnotated(m, 'inv_0051');
+  const plain = await savePlain(m, 'inv_0007'); // saved with the mode off: it has no training record
+  const scans = await Promise.all([sale, plain].map((id) => m.saved.readScan(id)));
+  await expect(m.exp.writeTrainingExport(scans.map((s) => s!), AT)).rejects.toThrow('not_training');
+  expect([...memoryFs.files.keys()].filter((k) => k.startsWith('file:///cache/'))).toEqual([]);
 });
