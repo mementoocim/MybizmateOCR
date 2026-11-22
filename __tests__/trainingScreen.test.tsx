@@ -73,7 +73,8 @@ beforeEach(async () => {
 });
 
 test('the training screen exports and marks', async () => {
-  expect(() => installId()).toThrow('install_not_loaded'); // as when the start couldn't keep it: the export loads it
+  // the file's first test, so nothing has loaded the install ID yet: as when the start couldn't keep it
+  expect(() => installId()).toThrow('install_not_loaded');
   const sale = await saveAnnotated('inv_0051');
   const cert = await saveAnnotated('bir2307_photo_0');
   await updateSettings({ annotation: false });

@@ -49,7 +49,7 @@ async function cropOf(uri: string | null): Promise<Uint8Array | null> {
  * The zip of these scans' training data, dated `at`: manifest.json, written from the records alone, then each box's
  * crop, read from its scan's own files. A box whose crop can't be read is left out and counted in `missing` (the
  * manifest says it too); a scan whose crops are all gone stays, with no boxes. Throws too_big past the 65,535 entries a
- * zip without ZIP64 can hold.
+ * zip without ZIP64 can hold, and install_not_loaded until the install ID is loaded (the manifest holds it).
  */
 export async function buildTrainingExport(
   scans: readonly { record: TrainingScan; scan: StoredScan }[],
