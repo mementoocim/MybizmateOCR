@@ -311,7 +311,7 @@ test('permission: Allow the camera, then Camera access is off with Open settings
   expect(header(CAMERA_TEXT.allowTitle)).toHaveStyle({ ...type.headline, color: colors.cameraText });
   expect(screen.getByText(PERMISSION_TEXT)).toHaveStyle({ ...type.body, color: colors.cameraMute });
   expect(button('Allow the camera')).toHaveStyle({ backgroundColor: colors.brand });
-  expect(screen.getByText(CAMERA_APP)).toHaveStyle({ color: colors.cameraText }); // a light label on the dark panel
+  expect(screen.getByText(CAMERA_APP)).toHaveStyle({ color: colors.brand }); // coral on the dark panel (T16-2)
   expect(button('Gallery')).toBeTruthy();
   expect(screen.queryByRole('switch', { name: 'Auto capture' })).toBeNull();
   expect(screen.queryByLabelText('Take the photo')).toBeNull();
@@ -379,7 +379,8 @@ test('camera app needs the permission too', async () => {
   await press(button(CAMERA_APP));
   await settle();
   expect(alert).toHaveBeenCalledWith(
-    'The camera app needs the camera permission too. Choose a photo from the gallery instead.',
+    'The camera app needs the camera permission too.',
+    'Choose a photo from the gallery instead.',
   );
 });
 

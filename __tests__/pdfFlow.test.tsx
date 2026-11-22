@@ -8,8 +8,8 @@ import { coreJson } from '../test-utils/coreJson';
 import { memoryFs } from '../test-utils/memoryFs';
 
 // Import PDF, on Home: the system's file picker hands over a PDF, the scanner reads its page 1 (readPdf) and its
-// result opens, labelled with the file's name. A PDF the scanner refuses is named in plain words, in a dialog (the
-// plan's call 16).
+// result opens, labelled with the file's name. A PDF the scanner refuses is named in plain words, in a dialog: the
+// reason as its title, what to do as its message (the plan's call 16, ruling T16-1).
 
 const mockPush = jest.fn();
 const mockReadPdf = jest.fn();
@@ -117,7 +117,7 @@ test('a cancelled pick does nothing', async () => {
 
 test('not a PDF', async () => {
   await importPdf(picked(`${STORAGE}notes.txt`, 'notes.txt', 'text/plain'));
-  expect(alert).toHaveBeenCalledWith('Choose a PDF file.');
+  expect(alert).toHaveBeenCalledWith('', 'Choose a PDF file.'); // one sentence: whole in the message
   expect(mockReadPdf).not.toHaveBeenCalled();
   expect(mockPush).not.toHaveBeenCalled();
 
@@ -140,22 +140,22 @@ test('a refused PDF says why in a dialog', async () => {
   expect(screen.queryByText('Straightening the photo and reading every box')).toBeNull();
 
   await act(async () => refuse(refused('pdf_password')));
-  expect(alert.mock.calls).toEqual([['That PDF has a password. Save a copy without one, then import it.']]);
+  expect(alert.mock.calls).toEqual([['That PDF has a password.', 'Save a copy without one, then import it.']]);
   expect(screen.queryByText('Reading…')).toBeNull();
   expect(screen.queryByText('PDF: locked.pdf')).toBeNull(); // nothing in Recent scans
   expect(mockPush).not.toHaveBeenCalled();
 });
 
 test.each([
-  ['pdf_too_big', 'That PDF is over 20 MB. Choose a smaller file.'],
-  ['pdf_password', 'That PDF has a password. Save a copy without one, then import it.'],
-  ['pdf_broken', "Couldn't read that PDF."],
-  ['pdf_unreadable', "Couldn't read that PDF."],
-  ['pdf_page_too_big', "That PDF's page is too big to read."],
-])('refused (%s): "%s"', async (code, words) => {
+  ['pdf_too_big', 'That PDF is over 20 MB.', 'Choose a smaller file.'],
+  ['pdf_password', 'That PDF has a password.', 'Save a copy without one, then import it.'],
+  ['pdf_broken', '', "Couldn't read that PDF."],
+  ['pdf_unreadable', '', "Couldn't read that PDF."],
+  ['pdf_page_too_big', '', "That PDF's page is too big to read."],
+])('refused (%s): "%s" "%s"', async (code, title, message) => {
   mockReadPdf.mockRejectedValueOnce(refused(code));
   await importPdf(picked(`${STORAGE}${code}.pdf`, `${code}.pdf`));
-  expect(alert).toHaveBeenCalledWith(words);
+  expect(alert).toHaveBeenCalledWith(title, message);
   expect(alert).toHaveBeenCalledTimes(1);
   expect(mockPush).not.toHaveBeenCalled();
   expect(screen.queryByText(`PDF: ${code}.pdf`)).toBeNull(); // nothing in Recent scans
@@ -171,8 +171,8 @@ test("the scanner failing isn't put on the PDF", async () => {
   mockReadPdf.mockRejectedValueOnce(failure);
   await importPdf(picked(`${STORAGE}y.pdf`, 'y.pdf'));
   expect(alert.mock.calls).toEqual([
-    ["Couldn't read that photo: The scanner was closed"],
-    ["Couldn't read that PDF: The scanner was closed"],
+    ["Couldn't read that photo", 'The scanner was closed'],
+    ["Couldn't read that PDF", 'The scanner was closed'],
   ]);
   expect(mockPush).not.toHaveBeenCalled();
 });
@@ -214,8 +214,8 @@ test("the picker's lasting access to the file is given up once it has been read,
   await importPdf(picked(`${LINK}73`, 'sales_text_0.pdf'));
   expect(mockPush).toHaveBeenCalledTimes(2);
   expect(alert.mock.calls).toEqual([
-    ['That PDF has a password. Save a copy without one, then import it.'],
-    ['Choose a PDF file.'],
+    ['That PDF has a password.', 'Save a copy without one, then import it.'],
+    ['', 'Choose a PDF file.'],
   ]);
   // a copy the picker made (a file://) holds no grant: it is deleted instead
   mockRelease.mockClear();

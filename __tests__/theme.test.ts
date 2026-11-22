@@ -40,6 +40,7 @@ const PAIRS: [Role, Role, string, number, number][] = [
   ['danger', 'dangerTint', 'text', 4.71, 4.5],
   ['cameraText', 'cameraPanel', 'text', 16.84, 4.5], ['cameraMute', 'camera', 'text', 14.0, 4.5],
   ['brand', 'cameraPanel', 'ring', 6.52, 3], ['paper', 'ink', 'selection', 17.37, 4.5],
+  ['brand', 'cameraPanel', 'text', 6.52, 4.5], // the camera panels' text buttons, in coral (ruling T16-2)
 ];
 
 test.each(PAIRS)('the documented pairs meet their thresholds: %s on %s (%s)', (fg, bg, name, figure, threshold) => {

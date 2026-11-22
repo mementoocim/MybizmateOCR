@@ -151,7 +151,7 @@ test('a switch IconButton given no checked state says it is off, never undefined
   expect(flashlight).not.toBeChecked();
 });
 
-test("a text button on the camera: a light label and the camera's white ripple", async () => {
+test("a text button on the camera: a coral label and the camera's white ripple", async () => {
   // Android draws the ripple from the pressable's nativeBackgroundAndroid; jest runs as iOS, which has none.
   const os = jest.replaceProperty(Platform, 'OS', 'android');
   try {
@@ -163,7 +163,8 @@ test("a text button on the camera: a light label and the camera's white ripple",
       </>,
     );
     const rippleOf = (name: string) => button(name).props.nativeBackgroundAndroid;
-    expect(screen.getByText("Use the phone's camera app instead")).toHaveStyle({ color: colors.cameraText });
+    // brand on cameraPanel is text-grade (theme.test's pairs: 6.52:1); brandText would be 2.85:1 there
+    expect(screen.getByText("Use the phone's camera app instead")).toHaveStyle({ color: colors.brand });
     expect(rippleOf("Use the phone's camera app instead")).toMatchObject({
       color: processColor(ripple.camera.color),
       borderless: false,

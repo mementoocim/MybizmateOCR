@@ -1132,7 +1132,7 @@ test('a retake shows the reading card for what it reads, and a read that fails s
   expect(screen.getByText('Reading…')).toBeOnTheScreen();
   expect(screen.getByText('Reading the PDF')).toBeOnTheScreen();
   await act(async () => refuse(Object.assign(new Error('refused'), { code: 'pdf_password' })));
-  expect(alert.mock.calls).toEqual([['That PDF has a password. Save a copy without one, then import it.']]);
+  expect(alert.mock.calls).toEqual([['That PDF has a password.', 'Save a copy without one, then import it.']]);
   expect(screen.queryByText('Reading…')).toBeNull();
   expect(mockRouter.replace).not.toHaveBeenCalled();
   expect(mockToast).not.toHaveBeenCalled(); // a dialog, not the snackbar
@@ -1142,6 +1142,6 @@ test('a retake shows the reading card for what it reads, and a read that fails s
   await show('inv_0007', { source: 'gallery' });
   mockLibrary.mockRejectedValueOnce(new Error('the picker failed'));
   await press(button('Retake'));
-  expect(alert.mock.calls).toEqual([["Couldn't open that photo."]]);
+  expect(alert.mock.calls).toEqual([['', "Couldn't open that photo."]]); // one sentence: whole in the message
   expect(mockToast).not.toHaveBeenCalled();
 });

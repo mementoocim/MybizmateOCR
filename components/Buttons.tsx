@@ -7,13 +7,13 @@ import { Tap } from './Tap';
 
 // Design B's buttons (§5.6). Primary is the brand fill with an ink label; secondary a panel fill in an outline border,
 // with an ink label; text a brandText label; destructive a panel fill in a dangerLine border, with a danger label;
-// destructiveText a danger label. On the camera's dark panels (tone camera), a text button has a light cameraText
-// label, as brandText is too dark to read there, and the camera's white ripple; the filled variants look the same on
-// either. Large is at least 56 dp tall and default 48; both grow with the label. Disabled is a sand fill with a mute
-// label, on every variant. Loading keeps the label, shows a spinner before it and blocks presses, and so does a press
-// whose promise hasn't settled: a double tap runs once. A button can report how many lines its label took, so a row of
-// them (ButtonRow) can stack when one wraps. Its ref is its pressable's view: a sheet it opens gives TalkBack focus
-// back to it.
+// destructiveText a danger label. On the camera's dark panels (tone camera), a text button has a coral (brand) label,
+// 6.52:1 on cameraPanel where brandText would be 2.85:1, and the camera's white ripple (ruling T16-2); the filled
+// variants look the same on either. Large is at least 56 dp tall and default 48; both grow with the label. Disabled is
+// a sand fill with a mute label, on every variant. Loading keeps the label, shows a spinner before it and blocks
+// presses, and so does a press whose promise hasn't settled: a double tap runs once. A button can report how many lines
+// its label took, so a row of them (ButtonRow) can stack when one wraps. Its ref is its pressable's view: a sheet it
+// opens gives TalkBack focus back to it.
 
 export type ButtonVariant = 'primary' | 'secondary' | 'text' | 'destructive' | 'destructiveText';
 export type ButtonProps = {
@@ -52,7 +52,7 @@ export function Button({
   const busy = loading || pending;
   const fill = FILL[variant];
   const onCamera = tone === 'camera' && variant === 'text';
-  const color = disabled ? colors.mute : onCamera ? colors.cameraText : LABEL[variant];
+  const color = disabled ? colors.mute : onCamera ? colors.brand : LABEL[variant];
 
   const press = () => {
     if (running.current) return;

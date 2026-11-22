@@ -123,7 +123,8 @@ test('a refused PDF says why in a dialog', async () => {
   mockReadPdf.mockRejectedValueOnce(Object.assign(new Error('refused'), { code: 'pdf_password' }));
   await render(<Home />);
   await act(async () => fireEvent.press(screen.getByText('Import PDF')));
-  expect(alert).toHaveBeenCalledWith('That PDF has a password. Save a copy without one, then import it.');
+  // the reason, then what to do
+  expect(alert).toHaveBeenCalledWith('That PDF has a password.', 'Save a copy without one, then import it.');
   expect(alert).toHaveBeenCalledTimes(1);
   expect(screen.queryByText('Reading…')).toBeNull();
   expect(mockPush).not.toHaveBeenCalled();

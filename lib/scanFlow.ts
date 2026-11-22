@@ -47,6 +47,25 @@ function isPdf(name: string | null, type: string | null): boolean {
   return (name ?? '').toLowerCase().endsWith('.pdf') || mime === PDF_TYPE;
 }
 
+/**
+ * A failure's words as a dialog's title and message (ruling T16-1): the reason, then what to do. The words are today's,
+ * split at the colon after "Couldn't read that photo" (or PDF) or at the end of the first sentence, whichever comes
+ * first. A full stop, "?" or "!" ends a sentence only when a space and more words follow, so a file's name never
+ * splits. Android stops a dialog's title at two lines with an ellipsis, so one sentence goes whole into the message,
+ * under an empty title.
+ */
+export function failureDialog(words: string): [title: string, message: string] {
+  const split = /: |[.?!] (?=\S)/.exec(words);
+  if (!split) return ['', words];
+  const reasonEnd = split[0] === ': ' ? split.index : split.index + 1; // a sentence keeps its full stop; a colon goes
+  return [words.slice(0, reasonEnd), words.slice(split.index + split[0].length)];
+}
+
+/** A failure that stops a capture, said in a dialog (design B §9.2, the plan's call 16). */
+function sayWhy(words: string): void {
+  Alert.alert(...failureDialog(words));
+}
+
 /** The picker's own copy of a file, once it has been read. */
 function deleteCopy(file: File): void {
   try {
@@ -60,7 +79,7 @@ function deleteCopy(file: File): void {
  * Getting a photo or a PDF read: from the camera, the phone's camera app, the gallery, a sample or the file picker,
  * then on to its result. One at a time: while one is being picked or read (busy), another does nothing. While one is
  * read, readingWhat says what it is (a photo, a sample's too, or a PDF), for the reading card. A failure that stops a
- * capture is said in a dialog, in today's words (design B §9.2, the plan's call 16).
+ * capture is said in a dialog, in today's words (sayWhy).
  */
 export function useScanFlow() {
   const router = useRouter();
@@ -112,7 +131,7 @@ export function useScanFlow() {
       if (replace) router.replace(target);
       else router.push(target);
     } catch (e: unknown) {
-      Alert.alert(failed(e));
+      sayWhy(failed(e));
     }
   }
 
@@ -124,7 +143,7 @@ export function useScanFlow() {
       try {
         uri = await getUri();
       } catch {
-        Alert.alert(openError);
+        sayWhy(openError);
         return;
       }
       if (!uri) return;
@@ -162,7 +181,7 @@ export function useScanFlow() {
       async () => {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('The camera app needs the camera permission too. Choose a photo from the gallery instead.');
+          sayWhy('The camera app needs the camera permission too. Choose a photo from the gallery instead.');
           return null;
         }
         const taken = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
@@ -195,7 +214,7 @@ export function useScanFlow() {
         // the name its app gives: a link's own last segment can be an id (Android's Downloads: …/document/msf%3A54)
         const name = await displayName(file.uri).catch(() => null);
         if (!isPdf(name, file.type)) {
-          Alert.alert('Choose a PDF file.');
+          sayWhy('Choose a PDF file.');
           return;
         }
         const scan = { label: name ? `PDF: ${name}` : 'PDF', source: 'pdf' } as const;
