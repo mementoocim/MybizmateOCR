@@ -430,9 +430,9 @@ test('annotation mode blocks an unchecked save', async () => {
   expect(blockWords('unchecked', scan())).toBe('Check every box first: 1 left.');
   await press(screen.getByLabelText('Close'));
 
-  // the Recent row says it as the card does
+  // Home's recent row agrees with the strip: it can't be saved yet (design B §9.2: the badge, without the reason)
   await render(<RecentRow scan={scan()} onPress={() => {}} />);
-  expect(screen.getByText(/^Check every box first: 1 left · 0 ms · \d{1,2}:\d{2} (AM|PM)$/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: /, Can't save yet$/ })).toBeTruthy();
 
   // once every box is checked, Save opens the save sheet
   await act(async () => confirmBox(id, 'period_from'));

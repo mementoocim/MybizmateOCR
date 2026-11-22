@@ -91,7 +91,7 @@ test('a PDF is read and opened', async () => {
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
   const scan = getScan(mockPush.mock.calls[0][0].params.id);
   expect(scan).toMatchObject({ label: 'PDF: sales_text_0.pdf', source: 'pdf' });
-  expect(screen.getAllByText('PDF: sales_text_0.pdf').length).toBeGreaterThan(0); // in Recent scans
+  expect(screen.getAllByText('sales_text_0.pdf').length).toBeGreaterThan(0); // in Recent scans, by its file name
   expect(screen.queryByText(/msf/)).toBeNull(); // never the link's own id
   expect(memoryFs.files.has(uri)).toBe(true); // the person's file is only read
   expect(alert).not.toHaveBeenCalled();
@@ -143,7 +143,7 @@ test('a refused PDF says why in a dialog', async () => {
   await act(async () => refuse(refused('pdf_password')));
   expect(alert.mock.calls).toEqual([['That PDF has a password.', 'Save a copy without one, then import it.']]);
   expect(screen.queryByText('Reading…')).toBeNull();
-  expect(screen.queryByText('PDF: locked.pdf')).toBeNull(); // nothing in Recent scans
+  expect(screen.queryByText('locked.pdf')).toBeNull(); // nothing in Recent scans
   expect(mockPush).not.toHaveBeenCalled();
 });
 
@@ -158,7 +158,7 @@ test.each([
   await importPdf(picked(`${STORAGE}${code}.pdf`, `${code}.pdf`));
   expect(alert.mock.calls).toStrictEqual([dialog]); // once, with exactly these arguments
   expect(mockPush).not.toHaveBeenCalled();
-  expect(screen.queryByText(`PDF: ${code}.pdf`)).toBeNull(); // nothing in Recent scans
+  expect(screen.queryByText(`${code}.pdf`)).toBeNull(); // nothing in Recent scans
   expect(screen.queryByText('Reading…')).toBeNull();
 });
 
@@ -167,7 +167,7 @@ test("the scanner failing isn't put on the PDF", async () => {
   const failure = Object.assign(new Error('The scanner was closed'), { code: 'ERR_UNEXPECTED' });
   mockLibrary.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'content://media/1' }] });
   mockScanPhoto.mockRejectedValueOnce(failure);
-  await act(async () => fireEvent.press(screen.getByText('Choose from gallery')));
+  await act(async () => fireEvent.press(screen.getByText('From gallery')));
   mockReadPdf.mockRejectedValueOnce(failure);
   await importPdf(picked(`${STORAGE}y.pdf`, 'y.pdf'));
   expect(alert.mock.calls).toEqual([

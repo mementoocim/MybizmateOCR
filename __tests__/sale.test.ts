@@ -23,6 +23,7 @@ const SETTINGS: Settings = {
   annotation: false,
   clientCode: '',
   writerCode: '',
+  setupDone: false,
 };
 const EMPTY: Lists = { parties: [], items: [], version: 0 };
 

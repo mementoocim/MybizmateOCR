@@ -42,6 +42,7 @@ const SETTINGS: Settings = {
   annotation: false,
   clientCode: '',
   writerCode: '',
+  setupDone: false,
 };
 const scanOf = (stem: string) =>
   getScan(addScan({ label: stem, source: 'sample', sampleId: stem, result: parseScanResult(coreJson(stem)) }))!;

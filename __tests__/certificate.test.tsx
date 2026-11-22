@@ -51,6 +51,7 @@ const SETTINGS: Settings = {
   annotation: false,
   clientCode: '',
   writerCode: '',
+  setupDone: false,
 };
 
 /** A made-up 2307's scan screen, with some of its boxes saying something else (an edit of '' clears a box). */

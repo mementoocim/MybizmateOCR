@@ -1,62 +1,27 @@
-import { useMemo, useSyncExternalStore } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-
-import { certOf, is2307 } from '../lib/cert';
-import { blockWords, saveBlock } from '../lib/exportRows';
-import { formatClock, formatMs } from '../lib/format';
-import { lists, subscribeLists } from '../lib/lists';
-import { isInvoice, saleOf } from '../lib/sale';
+import { formatClock } from '../lib/format';
+import { FORMS } from '../lib/forms';
 import type { StoredScan } from '../lib/scans';
-import { annotationOn, settings, subscribeSettings } from '../lib/settings';
-import { bold, colors } from '../lib/theme';
-import { ChevronRight, CircleAlert, CircleCheck } from './icons';
+import { homeBadge, shownLabel, useScanCheck } from '../lib/scanState';
+import { ListRow } from './ListRow';
 
 /**
- * One of Home's recent scans: where it stands (its form not found, saved, its things to check, what it still needs
- * before it can be saved, or ready: an invoice to post, a 2307 to save), how long it took, and when (the test app's
- * HomeActivity.java:301-338). It runs the scan's own screen's checks, with the lists as they are now, so the two
- * always agree.
+ * One of Home's recent scans (design B §9.2): where it came from ("Camera photo", a PDF's file name, "Sample 0051"),
+ * when it was read and the form found ("10:24 AM · Service Invoice", or the time alone when no form was found), and
+ * its one state as a badge, the state the Scan screen's strip shows (lib/scanState). Its checks run with the lists, the
+ * settings and its saved summary as they are now, so the two always agree. The badge is part of the row's spoken label.
  */
 export function RecentRow({ scan, onPress }: { scan: StoredScan; onPress: () => void }) {
-  const r = scan.result;
-  const theLists = useSyncExternalStore(subscribeLists, lists);
-  const theSettings = useSyncExternalStore(subscribeSettings, settings);
-  const annotation = useSyncExternalStore(subscribeSettings, annotationOn);
-  const certificate = is2307(scan);
-  const checked = useMemo(
-    () =>
-      isInvoice(scan) ? saleOf(scan, theLists, theSettings) : is2307(scan) ? certOf(scan, theLists, theSettings) : null,
-    [scan, theLists, theSettings],
-  );
-  // as the scan's card says it (a 2307 with no payments read, or boxes not checked yet in annotation mode, say),
-  // without the sentence's full stop
-  const blocked =
-    checked === null ? null : (blockWords(saveBlock(scan, checked, { annotation }), scan)?.replace(/\.$/, '') ?? null);
-  const status =
-    checked === null
-      ? 'Form not found'
-      : scan.saved
-        ? `Saved as a ${certificate ? '2307' : scan.kind}`
-        : checked.problems.length > 0
-          ? `${checked.problems.length} to check`
-          : (blocked ?? (certificate ? 'Ready to save' : 'Ready to post'));
-  const ok = checked !== null && (scan.saved !== null || (checked.problems.length === 0 && blocked === null));
+  const { state, saved } = useScanCheck(scan);
+  const time = formatClock(scan.at);
+  const form = scan.result.aligned ? scan.result.form : null;
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      {ok ? <CircleCheck size={24} color={colors.pine} /> : <CircleAlert size={24} color={colors.ember} />}
-      <View style={styles.words}>
-        <Text style={styles.label}>{scan.label}</Text>
-        <Text style={styles.status}>{`${status} · ${formatMs(r.timing.totalMs)} · ${formatClock(scan.at)}`}</Text>
-      </View>
-      <ChevronRight size={20} color={colors.mute} />
-    </Pressable>
+    <ListRow
+      title={shownLabel(scan)}
+      sub={form ? `${time} · ${FORMS[form].title}` : time}
+      subMono
+      subCaps
+      badge={state && homeBadge(scan, state, saved)}
+      onPress={onPress}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
-  pressed: { opacity: 0.6 },
-  words: { flex: 1 },
-  label: { ...bold, fontSize: 15, color: colors.ink },
-  status: { fontSize: 13, color: colors.mute, marginTop: 2 },
-});
