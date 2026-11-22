@@ -395,10 +395,11 @@ test('Banner: role alert, tone fill and border', async () => {
       <Banner tone="warning" text="2 boxes are still marked to check." />
     </>,
   );
+  // Ruling T4-3: a tint fill in a line border (§5.6), the tone's color at 45% or 30%; the words in the full color.
   const danger = screen.getByRole('alert', { name: 'This file has no Name column.' });
   expect(danger).toHaveStyle({
     backgroundColor: colors.dangerTint,
-    borderColor: colors.danger,
+    borderColor: colors.dangerLine,
     borderWidth: 1,
     borderRadius: radius.panel,
   });
