@@ -274,11 +274,14 @@ test('a 2307 needs its payments first, and its card says so', async () => {
 
 test('codes are codes', () => {
   expect(cleanCode('c014')).toBe('C014');
+  expect(cleanCode('W03')).toBe('W03');
   expect(cleanCode('W-03')).toBe('W-03');
   expect(cleanCode(' w03 ')).toBe('W03');
   expect(cleanCode('C01234567890')).toBe('C01234567890'); // 12 characters
-  // a name, nothing, a space inside, 13 characters, a letter outside A-Z, no digit at all
-  for (const text of ['Juan', '', 'C 014', 'C012345678901', 'ñ1', 'WC-']) expect(cleanCode(text)).toBeNull();
+  // a name, nothing, a space inside, 13 characters, a letter outside A-Z, no digit at all; and what doesn't start
+  // with a letter: a phone number, a TIN, a dash
+  const refused = ['Juan', '', 'C 014', 'C012345678901', 'ñ1', 'WC-', '09171234567', '123-456-789', '-03'];
+  expect(refused.map(cleanCode)).toEqual(refused.map(() => null));
 });
 
 test('the save sheet asks for the codes', async () => {
