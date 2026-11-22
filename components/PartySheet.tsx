@@ -1,5 +1,5 @@
-import { useState, useSyncExternalStore } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { type RefObject, useState, useSyncExternalStore } from 'react';
+import { StyleSheet, Text, View, type ViewInstance } from 'react-native';
 
 import { formFields } from '../lib/forms';
 import { addParty, customersOf, formatTin, lists, type Party, subscribeLists } from '../lib/lists';
@@ -19,11 +19,13 @@ export function PartySheet({
   scan,
   sale,
   onClose,
+  returnFocus,
 }: {
   visible: boolean;
   scan: StoredScan;
   sale: SaleView;
   onClose: () => void;
+  returnFocus?: RefObject<ViewInstance | null>; // the row that opened it
 }) {
   const theLists = useSyncExternalStore(subscribeLists, lists);
   const [picking, setPicking] = useState(false);
@@ -121,7 +123,8 @@ export function PartySheet({
       title="Customer"
       scan={scan}
       boxes={fields.filter((f) => CUSTOMER_BOXES.includes(f))}
-      onClose={onClose}>
+      onClose={onClose}
+      returnFocus={returnFocus}>
       <View style={styles.section}>
         <Text style={sectionLabel}>IN YOUR CUSTOMERS</Text>
         {section}

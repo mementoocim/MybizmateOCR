@@ -49,7 +49,11 @@ export function ScrollIntoViewScope({ scrollRef, children }: { scrollRef: Scroll
   return <ScrollIntoView value={scrollIntoView}>{children}</ScrollIntoView>;
 }
 
-function scrollIntoViewOf(scrollRef: ScrollRef | null, target: ScrollTarget | null) {
+/**
+ * Scrolls a target into view in that scroll, 24 dp under its top, never past the top: a focused field (through its
+ * scope), or the row a flag chip opens (the Scan screen). A no-op without the scroll or its content.
+ */
+export function scrollIntoViewOf(scrollRef: ScrollRef | null, target: ScrollTarget | null) {
   const scrollView = scrollRef?.current;
   const content = scrollView?.getInnerViewRef(); // where y is measured from: the top of the scroll's content
   if (target == null || scrollView == null || content == null) return;

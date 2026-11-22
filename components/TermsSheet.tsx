@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
+import type { RefObject } from 'react';
+import { Pressable, StyleSheet, Text, type ViewInstance } from 'react-native';
 
 import type { Terms } from '../lib/checks/finalize';
 import { FORMS } from '../lib/forms';
@@ -9,7 +10,17 @@ import { CircleCheck } from './icons';
 import { Sheet } from './Sheet';
 
 /** The terms: what the ticks on the paper show, and the person's pick when they are unclear or wrong. */
-export function TermsSheet({ visible, scan, onClose }: { visible: boolean; scan: StoredScan; onClose: () => void }) {
+export function TermsSheet({
+  visible,
+  scan,
+  onClose,
+  returnFocus,
+}: {
+  visible: boolean;
+  scan: StoredScan;
+  onClose: () => void;
+  returnFocus?: RefObject<ViewInstance | null>; // the row that opened it
+}) {
   const form = FORMS[scan.result.form!];
   const paper = scan.result.terms;
   const subtitle =
@@ -24,7 +35,7 @@ export function TermsSheet({ visible, scan, onClose }: { visible: boolean; scan:
     onClose();
   };
   return (
-    <Sheet visible={visible} title="Terms" subtitle={subtitle} onClose={onClose}>
+    <Sheet visible={visible} title="Terms" subtitle={subtitle} onClose={onClose} returnFocus={returnFocus}>
       {(['cash', 'account'] as const).map((t) => (
         <Pressable
           key={t}

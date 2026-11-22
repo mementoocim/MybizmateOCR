@@ -16,7 +16,7 @@ import {
   subscribeRecent,
   updateScan,
 } from '../lib/scans';
-import { homeBadge, savedStateOf, type ScanState, scanStateOf, useScanCheck } from '../lib/scanState';
+import { homeBadge, savedStateOf, type ScanState, scanStateOf, shownLabel, useScanCheck } from '../lib/scanState';
 import { settings, updateSettings } from '../lib/settings';
 import { uncheckedBoxes } from '../lib/training/boxes';
 import type { ScanResult } from '../modules/scanner';
@@ -261,4 +261,13 @@ test('useScanCheck: the checks, the state and the saved state, as the stores cha
   // no scan: nothing to show
   const { result: none } = await renderHook(() => useScanCheck(undefined));
   expect(none.current).toEqual({ sale: null, cert: null, state: null, saved: 'no', summary: undefined, annotation: false });
+});
+
+test("shownLabel: a PDF's file name without the PDF: before it", () => {
+  // Task 11's not-found subtitle, and Task 17's recent rows
+  expect(shownLabel({ label: 'PDF: sales_text_1.pdf' })).toBe('sales_text_1.pdf');
+  expect(shownLabel({ label: 'PDF' })).toBe('PDF'); // a PDF its app gave no name
+  expect(shownLabel({ label: 'Camera photo' })).toBe('Camera photo');
+  expect(shownLabel({ label: 'Sample 0051' })).toBe('Sample 0051');
+  expect(shownLabel({ label: 'PDF: PDF: odd.pdf' })).toBe('PDF: odd.pdf'); // only the label's own
 });

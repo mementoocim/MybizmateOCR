@@ -1,5 +1,5 @@
-import { useState, useSyncExternalStore } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { type RefObject, useState, useSyncExternalStore } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View, type ViewInstance } from 'react-native';
 
 import { addParty, lists, subscribeLists, suppliersOf } from '../lib/lists';
 import { SAMPLE_NAMES, type SaleView } from '../lib/sale';
@@ -15,11 +15,13 @@ export function SupplierSheet({
   visible,
   scan,
   onClose,
+  returnFocus,
 }: {
   visible: boolean;
   scan: StoredScan;
   sale: SaleView;
   onClose: () => void;
+  returnFocus?: RefObject<ViewInstance | null>; // the row that opened it
 }) {
   const theLists = useSyncExternalStore(subscribeLists, lists);
   const [name, setName] = useState('');
@@ -56,7 +58,8 @@ export function SupplierSheet({
       visible={visible}
       title="Supplier"
       subtitle="Who sold it to you: the business printed at the top of the invoice. The scanner doesn't read that part, so choose it here."
-      onClose={onClose}>
+      onClose={onClose}
+      returnFocus={returnFocus}>
       {suppliers.length > 0 && (
         <PartyPicker parties={suppliers} placeholder="Search your suppliers" onPick={(p) => pick({ listId: p.id })} />
       )}

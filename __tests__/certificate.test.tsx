@@ -1,5 +1,4 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import type { ReactElement } from 'react';
 
 import Result from '../app/result';
 import { certOf } from '../lib/cert';
@@ -22,10 +21,6 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: jest.fn() }),
   useIsFocused: () => true,
-  Stack: {
-    Screen: ({ options }: { options?: { headerTitle?: (p: object) => ReactElement } }) =>
-      options?.headerTitle ? options.headerTitle({}) : null,
-  },
 }));
 jest.mock('../modules/scanner', () => ({
   enhance: async (_uri: string, mode: string) => `file:///x/${mode}.img`,
@@ -97,9 +92,9 @@ beforeEach(async () => {
 test("a 2307's sections", async () => {
   // a text PDF: 4 income payments and 1 business-tax row, Q4 2026; no customers yet
   await show('bir2307_text_1');
-  expect(screen.getByText('BIR Form 2307')).toBeTruthy();
-  expect(screen.getByText('Ready to save')).toBeTruthy();
-  expect(screen.getByText(/^Every check passed\. Read on this phone in .*, offline\.$/)).toBeTruthy();
+  expect(screen.getByRole('header', { name: 'BIR Form 2307' })).toBeTruthy();
+  expect(screen.getByRole('header', { name: 'Checks passed' })).toBeTruthy();
+  expect(screen.getByText('Look over the values, then save')).toBeTruthy();
 
   expect(screen.getByText('PERIOD')).toBeTruthy();
   expect(screen.getByText('Oct 1 – Dec 31, 2026 (Q4)')).toBeTruthy();
@@ -140,7 +135,8 @@ test("a 2307's sections", async () => {
   expect(screen.getAllByText('Tax withheld ₱9,462.76')).toHaveLength(2);
 
   // none of an invoice's; saved as a 2307
-  for (const invoice of ['THIS INVOICE IS', 'INVOICE', 'Terms', 'Total due', 'Ready to post', 'Save sale']) {
+  expect(screen.queryByRole('radiogroup', { name: 'This invoice is' })).toBeNull();
+  for (const invoice of ['Invoice', 'Terms', 'Total due', 'Save sale']) {
     expect([invoice, screen.queryByText(invoice)]).toEqual([invoice, null]);
   }
   expect(screen.getByTestId('save-open')).toHaveTextContent('Save 2307');
@@ -164,7 +160,7 @@ test('a period that is not one calendar quarter', async () => {
   await show('bir2307_text_1', { edits: { period_to: '11302026' } });
   expect(screen.getByText('10012026 – 11302026')).toBeTruthy();
   expect(screen.getByText('Not one calendar quarter')).toHaveStyle({ color: colors.ember });
-  expect(screen.getByText(/^Check: Period\./)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Period, to check' })).toBeTruthy();
   // the boxes as read, a box that wasn't read as a dash
   await show('bir2307_text_1', { edits: { period_to: '' } });
   expect(screen.getByText('10012026 – —')).toBeTruthy();
@@ -175,7 +171,7 @@ test("the rows' flags", async () => {
   // bir2307_text_2's row 2: WC158 (1%) on 208,043.00, tax 2,080.43; the total row's tax is changed to match
   await show('bir2307_text_2', { edits: { ewt2_tax: '4,160.86', ewt_total_tax: '24,779.42' } });
   expect(screen.getByText('Tax withheld ₱4,160.86 · not 1% of the total')).toHaveStyle({ color: colors.ember });
-  expect(screen.getByText(/^Check: Row 2 tax\./)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Row 2 tax, to check' })).toBeTruthy();
   // a rate like 0.5%, as people write it
   await show('bir2307_text_2', { edits: { ewt2_atc: 'WC156' } });
   expect(screen.getByText('Tax withheld ₱2,080.43 · not 0.5% of the total')).toBeTruthy();
@@ -189,26 +185,27 @@ test("the rows' flags", async () => {
   // a business-tax row's own words
   await show('bir2307_photo_1', { edits: { bt1_atc: 'WC158' } });
   expect(screen.getByText('Tax withheld ₱7,475.70 · not an ATC for business tax')).toBeTruthy();
-  expect(screen.getByText(/^Check: Business tax row 1 ATC\./)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Business tax row 1 ATC, to check' })).toBeTruthy();
 });
 
 test('fixing a month re-runs the checks', async () => {
   const id = await show('bir2307_text_0');
-  expect(screen.getByText('Ready to save')).toBeTruthy();
+  expect(screen.getByRole('header', { name: 'Checks passed' })).toBeTruthy();
   await press(screen.getByText('WC610 · Purchase of corn'));
   await press(screen.getByTestId('fix-ewt1_m1'));
   await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), '100,674.00'));
   await press(screen.getByTestId('box-save'));
   expect(screen.getByText('You changed it to “100,674.00”.')).toBeTruthy();
   // the row's months, and the total row's 1st month, no longer add up
-  expect(screen.getByText('2 things to check')).toBeTruthy();
-  expect(screen.getByText(/^Check: Row 1 months, Totals\.\sRead on this phone in /)).toBeTruthy();
+  expect(screen.getByRole('header', { name: '2 to check' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Row 1 months, to check' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Totals, to check' })).toBeTruthy();
   await press(screen.getByLabelText('Close'));
   expect(screen.getByText("Tax withheld ₱1,144.03 · the months don't add up to the total")).toBeTruthy();
   expect(screen.getByText("Tax withheld ₱10,039.79 · the rows don't add up to the total row")).toBeTruthy();
   // back as written: every check passes again
   await act(async () => setEdit(id, 'ewt1_m1', '100,664.00'));
-  expect(screen.getByText('Ready to save')).toBeTruthy();
+  expect(screen.getByRole('header', { name: 'Checks passed' })).toBeTruthy();
   expect(screen.getByText('Tax withheld ₱1,144.03')).toBeTruthy();
 });
 
@@ -219,13 +216,13 @@ test("the payor's match", async () => {
   await show('bir2307_text_0', { edits: { payor_name: 'REYES SARI SARI STORE' } });
   expect(screen.getByText('Reyes Sari-Sari Store')).toBeTruthy();
   expect(screen.getByText('Matched in your customers TIN 456-789-012-00000 · ZIP 3306')).toBeTruthy();
-  expect(screen.getByText('Ready to save')).toBeTruthy();
+  expect(screen.getByRole('header', { name: 'Checks passed' })).toBeTruthy();
 
   const stranger = { payor_name: 'Magsaysay Hardware', payor_tin: '99988877700000' };
   await show('bir2307_text_0', { edits: stranger });
   expect(screen.getByText('Magsaysay Hardware')).toBeTruthy();
   expect(screen.getByText('Not in your customers TIN 999-888-777-00000 · ZIP 3306')).toHaveStyle({ color: colors.ember });
-  expect(screen.getByText(/^Check: Payor \(not in your customers\)\./)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Payor (not in your customers), to check' })).toBeTruthy();
 
   // Santos Merchandise and Santos General Merchandise are both customers: an unsure match is shown as written, the
   // name that goes out, with the closest customer under it (a 2307's payor can't be chosen yet)
@@ -233,13 +230,13 @@ test("the payor's match", async () => {
   expect(screen.getByText('Santos Merchandising')).toBeTruthy();
   expect(screen.getByText('Closest match: Santos Merchandise TIN 999-888-777-00000 · ZIP 3306')).toBeTruthy();
   expect(screen.queryByText(/Tap to compare/)).toBeNull();
-  expect(screen.getByText(/^Check: Payor \(confirm the match\)\./)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Payor (confirm the match), to check' })).toBeTruthy();
 
   // no payor written: never an invoice's walk-in
   await show('bir2307_text_0', { edits: { payor_name: '', payor_tin: '' } });
   expect(screen.getByText('Not in your customers TIN — · ZIP 3306')).toBeTruthy();
   expect(screen.queryByText(/VARIOUS|Walk-in/)).toBeNull();
-  expect(screen.getByText(/^Check: Payor's TIN\./)).toBeTruthy();
+  expect(screen.getByRole('button', { name: "Payor's TIN, to check" })).toBeTruthy();
 
   // the payee isn't matched: the business is the payee
   await show('bir2307_text_0');
@@ -251,16 +248,16 @@ test('the photo checks: a photo or a PDF read from its page, never a page read f
     r.sharpness = 0.1; // the 2307's minimum is 0.5
   };
   await show('bir2307_photo_0', { edit: blurry });
-  expect(screen.getByText(/^Check: Blurry photo \(retake it\)\./)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Blurry photo (retake it), to check' })).toBeTruthy();
   await show('bir2307_picture_0', { edit: blurry });
-  expect(screen.getByText(/^Check: Blurry photo \(retake it\)\./)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Blurry photo (retake it), to check' })).toBeTruthy();
   await show('bir2307_text_0', {
     edit: (r) => {
       r.sharpness = 0.1;
       r.light = 10;
     },
   });
-  expect(screen.getByText('Ready to save')).toBeTruthy();
+  expect(screen.getByRole('header', { name: 'Checks passed' })).toBeTruthy();
   // a page with visible text that isn't a picture, one box of it read by the model from the page
   await show('bir2307_text_0', {
     edit: (r) => {
@@ -268,7 +265,7 @@ test('the photo checks: a photo or a PDF read from its page, never a page read f
       r.reads[0] = { ...r.reads[0], fromText: false };
     },
   });
-  expect(screen.getByText(/^Check: Blurry photo \(retake it\)\./)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Blurry photo (retake it), to check' })).toBeTruthy();
 });
 
 test("the business-tax table, and a total row that isn't a total", async () => {
@@ -282,14 +279,14 @@ test("the business-tax table, and a total row that isn't a total", async () => {
   // a template's total line printing 0.00 or a dash, with no rows, isn't a total
   const zeros = (prefix: string) => Object.fromEntries(columns(prefix, TOTAL).map((box) => [box, '0.00']));
   await show('bir2307_text_0', { edits: zeros('bt_total') });
-  expect(screen.getByText('Ready to save')).toBeTruthy();
+  expect(screen.getByRole('header', { name: 'Checks passed' })).toBeTruthy();
   expect(screen.queryByText('Business tax')).toBeNull();
   await show('bir2307_text_0', { edits: { bt_total_total: '-', bt_total_tax: '-' } });
   expect(screen.queryByText('Business tax')).toBeNull();
 
   // zeros in the total row under real rows aren't shown as a total, and the rows don't add up to them
   await show('bir2307_text_0', { edits: zeros('ewt_total') });
-  expect(screen.getByText(/^Check: Totals\./)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Totals, to check' })).toBeTruthy();
   expect(screen.queryByText('₱0.00')).toBeNull();
   expect(screen.getByText("Tax withheld — · the rows don't add up to the total row")).toBeTruthy();
   expect(await boxesIn('Income payments')).toEqual(columns('ewt_total', TOTAL));

@@ -10,7 +10,7 @@ import type { StoredScan } from './scans';
 import { annotationOn, settings, subscribeSettings } from './settings';
 
 // Design B §9.5 and §9.2: a scan's one state, which the status strip and Home's badge both show, so the two always
-// agree. In today's order (StatusCard): its form not found; things to check, which come first; what it still needs
+// agree. In the old status card's order: its form not found; things to check, which come first; what it still needs
 // before it can be saved (a 2307 with no payments read, say, or boxes not checked yet in annotation mode); or checks
 // passed. Samples are made up, so they're never blocked: their screen says why they can't be saved. Apart from that,
 // whether a saved scan has changed since it was saved.
@@ -42,6 +42,14 @@ export function savedStateOf(scan: StoredScan, summary: SavedSummary | undefined
   if (summary === undefined || scan.saved === null) return 'no';
   const marksChanged = annotation && !!scan.savedMarks && marksOf(scan) !== scan.savedMarks;
   return marksChanged || !sameRows(rowsNow(scan), summaryRows(summary)) ? 'changed' : 'unchanged';
+}
+
+/**
+ * A scan's label as the screens show it: a PDF's is its file's own name, without the "PDF: " it's kept with
+ * ("sales_text_1.pdf"). The Scan screen's subtitle when the form wasn't found, and Home's recent rows.
+ */
+export function shownLabel(scan: Pick<StoredScan, 'label'>): string {
+  return scan.label.replace(/^PDF: /, '');
 }
 
 /**

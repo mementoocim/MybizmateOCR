@@ -1,5 +1,4 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import type { ReactElement } from 'react';
 
 import Result from '../app/result';
 import { saveBlock } from '../lib/exportRows';
@@ -25,10 +24,6 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: jest.fn() }),
   useIsFocused: () => true,
-  Stack: {
-    Screen: ({ options }: { options?: { headerTitle?: (p: object) => ReactElement } }) =>
-      options?.headerTitle ? options.headerTitle({}) : null,
-  },
 }));
 jest.mock('../modules/scanner', () => ({
   enhance: async (_uri: string, mode: string) => `file:///x/${mode}.img`,
@@ -69,8 +64,8 @@ const checkEveryBox = (id: string) =>
 const keptScan = (id: string) => JSON.parse(memoryFs.files.get(`file:///docs/saved/${id}/scan.json`) as string);
 const keptRecent = (id: string) =>
   JSON.parse(memoryFs.files.get('file:///docs/recent.json') as string).find((s: { id: string }) => s.id === id);
-const CHANGED = 'Changed since it was saved. The export still has the saved version: tap Save changes.';
-const SAVED = 'Saved as a sale on Nov 18, 2026. Not exported yet.';
+const CHANGED = 'Changed since it was saved. The export still has the saved version. Save changes to update it.';
+const SAVED = 'Saved as a sale · Nov 18 · Not exported yet';
 /** Saves the sale on screen with the save sheet: the first save of the test, so it asks about VAT. */
 async function saveSale() {
   await press(screen.getByTestId('save-open'));
@@ -131,7 +126,7 @@ test('saving', async () => {
   await type('Revenue account', '4010');
   await press(screen.getByTestId('save-confirm'));
   expect(mockToast).toHaveBeenCalledWith('Saved. Export it from Saved invoices.');
-  expect(screen.getByText('Saved as a sale on Nov 18, 2026. Not exported yet.')).toBeTruthy();
+  expect(screen.getByText(SAVED)).toBeTruthy();
   expect(screen.getByTestId('save-open')).toHaveTextContent('Save changes');
   expect(settings().revenueAccount).toBe('4010');
 });
@@ -139,7 +134,7 @@ test('saving', async () => {
 test("a sample can't be saved", async () => {
   await show('inv_0007', { source: 'sample' });
   expect(screen.queryByTestId('save-open')).toBeNull();
-  expect(screen.getByText("Sample invoices are made up, so they can't be saved.")).toBeTruthy();
+  expect(screen.getByText("Samples are made up, so they can't be saved.")).toBeTruthy();
 });
 
 test('the date is needed first', async () => {
@@ -152,7 +147,7 @@ test('the date is needed first', async () => {
 
 test('a purchase needs its supplier first', async () => {
   await show('inv_0007');
-  await press(screen.getByText('A purchase'));
+  await press(screen.getByText('Purchase'));
   expect(screen.getByTestId('save-open')).toHaveTextContent('Save purchase');
   await press(screen.getByTestId('save-open'));
   expect(mockToast).toHaveBeenCalledWith('Choose the supplier first: tap Supplier.');
@@ -175,19 +170,15 @@ test('a change after saving says the export still has the saved version', async 
   await press(screen.getByText('Not VAT-registered'));
   await type('Revenue account', '4010');
   await press(screen.getByTestId('save-confirm'));
-  expect(screen.getByText('Saved as a sale on Nov 18, 2026. Not exported yet.')).toBeTruthy();
+  expect(screen.getByText(SAVED)).toBeTruthy();
   await act(async () => setEdit(id, 'invoice_no', '0007999'));
-  expect(
-    screen.getByText("Changed since it was saved. The export still has the saved version: tap Save changes."),
-  ).toBeTruthy();
+  expect(screen.getByText(CHANGED)).toBeTruthy();
   await press(screen.getByTestId('save-open'));
   await press(screen.getByTestId('save-confirm'));
-  expect(screen.getByText('Saved as a sale on Nov 18, 2026. Not exported yet.')).toBeTruthy();
+  expect(screen.getByText(SAVED)).toBeTruthy();
   // a switch to a purchase changes what would go out too
-  await press(screen.getByText('A purchase'));
-  expect(
-    screen.getByText("Changed since it was saved. The export still has the saved version: tap Save changes."),
-  ).toBeTruthy();
+  await press(screen.getByText('Purchase'));
+  expect(screen.getByText(CHANGED)).toBeTruthy();
 });
 
 // A made-up 2307 (fixtures/core/expected2307) imported as a text PDF. bir2307_text_1, Q4 2026: four income payments
@@ -210,20 +201,18 @@ test('saving a 2307: the first save asks for the offset account', async () => {
   expect(screen.getByTestId('save-confirm')).toBeEnabled();
   await press(screen.getByTestId('save-confirm'));
   expect(mockToast).toHaveBeenCalledWith('Saved. Export it from Saved invoices.');
-  expect(screen.getByText('Saved as a 2307 on Nov 18, 2026. Not exported yet.')).toBeTruthy();
+  expect(screen.getByText('Saved as a 2307 · Nov 18 · Not exported yet')).toBeTruthy();
   expect(screen.getByTestId('save-open')).toHaveTextContent('Save changes');
   expect(settings().offsetAccount).toBe('1205 CWT Receivable');
 
   // a change after saving: the export still has the saved rows until Save changes
   await act(async () => setEdit(id, 'ewt1_tax', '21,942.00'));
-  expect(
-    screen.getByText("Changed since it was saved. The export still has the saved version: tap Save changes."),
-  ).toBeTruthy();
+  expect(screen.getByText(CHANGED)).toBeTruthy();
   await press(screen.getByTestId('save-open'));
   expect(screen.getByLabelText('Offset account').props.value).toBe('1205 CWT Receivable'); // as it was saved
   expect(screen.getByText('₱57,400.06')).toBeTruthy(); // the rows' tax, not the total rows'
   await press(screen.getByTestId('save-confirm'));
-  expect(screen.getByText('Saved as a 2307 on Nov 18, 2026. Not exported yet.')).toBeTruthy();
+  expect(screen.getByText('Saved as a 2307 · Nov 18 · Not exported yet')).toBeTruthy();
 
   // the next 2307 has the account already
   await show('bir2307_text_0', { source: 'pdf' });
@@ -244,7 +233,7 @@ test("an unsure payor: the save sheet names the payor as written, the name that 
     await press(screen.getByTestId('save-open'));
     expect(screen.getByText('Santos Merchandising (match not confirmed)')).toBeTruthy();
   } finally {
-    await clearParties('customer');
+    await act(async () => clearParties('customer')); // the screen is still up, and the lists change under it
   }
 });
 
@@ -256,18 +245,18 @@ test('a 2307 needs its period first', async () => {
   expect(screen.queryByLabelText('Offset account')).toBeNull();
 });
 
-test('a 2307 needs its payor first, and its card says so', async () => {
+test('a 2307 needs its payor first, and its strip says so', async () => {
   // no name, and a TIN that matches no customer (there are none yet): nothing to check, but no payor to export
   const id = await show('bir2307_text_1', { source: 'pdf' });
   await act(async () => setEdit(id, 'payor_name', ''));
   expect(screen.getByText('Add the payor first: tap Payor')).toBeTruthy();
-  expect(screen.queryByText('Ready to save')).toBeNull();
+  expect(screen.queryByText('Checks passed')).toBeNull();
   await press(screen.getByTestId('save-open'));
   expect(mockToast).toHaveBeenCalledWith('Add the payor first: tap Payor.');
   expect(screen.queryByLabelText('Offset account')).toBeNull();
 });
 
-test('a 2307 needs its payments first, and its card says so', async () => {
+test('a 2307 needs its payments first, and its strip says so', async () => {
   await show('bir2307_text_0', {
     source: 'pdf',
     edit: (r) => {
@@ -275,7 +264,7 @@ test('a 2307 needs its payments first, and its card says so', async () => {
     },
   });
   expect(screen.getByText('No income payments were read')).toBeTruthy();
-  expect(screen.queryByText('Ready to save')).toBeNull();
+  expect(screen.queryByText('Checks passed')).toBeNull();
   await press(screen.getByTestId('save-open'));
   expect(mockToast).toHaveBeenCalledWith('No income payments were read.');
   expect(screen.queryByLabelText('Offset account')).toBeNull();
@@ -373,7 +362,7 @@ test('without annotation mode nothing changes', async () => {
     const scan = getScan(id)!;
     expect(uncheckedBoxes(scan).length).toBeGreaterThan(0);
     expect(saveBlock(scan, saleOf(scan, lists(), settings()), { annotation: annotationOn() })).toBeNull();
-    expect(screen.getByText('Ready to post')).toBeTruthy();
+    expect(screen.getByText('Checks passed')).toBeTruthy();
     await press(screen.getByTestId('save-open'));
     expect(screen.getByText('Save as a sale')).toBeTruthy();
     expect(screen.queryByLabelText('Client code')).toBeNull();

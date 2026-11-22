@@ -1,68 +1,467 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState, useSyncExternalStore } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  AccessibilityInfo,
+  Alert,
+  Image,
+  type ScrollViewInstance,
+  StyleSheet,
+  Text,
+  View,
+  type ViewInstance,
+} from 'react-native';
 
+import { BottomBar } from '../components/BottomBar';
 import { BoxSheet } from '../components/BoxSheet';
-import { OutlinedButton, PrimaryButton, TextButton } from '../components/Buttons';
+import { Button, type ButtonProps } from '../components/Buttons';
 import { CertificateSections } from '../components/CertificateSections';
-import { Camera } from '../components/icons';
+import { Header } from '../components/Header';
+import { IconButton } from '../components/IconButton';
+import { More } from '../components/icons';
+import { invoiceSections, Ledger, type LedgerOpen } from '../components/InvoiceLedger';
+import { Menu } from '../components/Menu';
 import { PartySheet } from '../components/PartySheet';
+import { PhotoThumb, PhotoViewer } from '../components/PhotoViewer';
 import { ReadingOverlay } from '../components/ReadingOverlay';
-import { SaleRow } from '../components/SaleRow';
 import { CertSaveSheet, SaveSheet } from '../components/SaveSheet';
-import { ScanImage } from '../components/ScanImage';
+import { Screen, scrollIntoViewOf } from '../components/Screen';
 import { Segmented } from '../components/Segmented';
-import { StatusCard } from '../components/StatusCard';
+import { useLingering } from '../components/Sheet';
+import { StatusStrip } from '../components/StatusStrip';
 import { SupplierSheet } from '../components/SupplierSheet';
+import { Tap } from '../components/Tap';
 import { TermsSheet } from '../components/TermsSheet';
 import { TEAM_BUILD } from '../lib/build';
-import { certOf, is2307 } from '../lib/cert';
 import { localIsoDate } from '../lib/checks/dates';
-import { candidates } from '../lib/checks/num';
-import { blockWords, saveBlock, sameRows } from '../lib/exportRows';
-import { formatMs, peso, prettyDate, qty } from '../lib/format';
-import { FORMS, formFields } from '../lib/forms';
-import { addItem, lists, subscribeLists } from '../lib/lists';
-import { boxValue, isInvoice, rawFromScan, saleOf, type SaleView } from '../lib/sale';
+import { blockWords, saveBlock } from '../lib/exportRows';
+import { flagTarget } from '../lib/flagTargets';
+import { formatClock, formatMs, monthDay } from '../lib/format';
+import { FORMS } from '../lib/forms';
+import { addItem } from '../lib/lists';
+import { boxValue, type SaleView } from '../lib/sale';
 import { compareWithSample, sampleInfo } from '../lib/samples';
-import { marksOf, rowsNow, savedSummary, subscribeSaved, summaryRows } from '../lib/saved';
+import { deleteSaved, type SavedSummary } from '../lib/saved';
 import { useScanFlow } from '../lib/scanFlow';
+import { shownLabel, useScanCheck } from '../lib/scanState';
 import { getScan, type InvoiceKind, type StoredScan, subscribeRecent, updateScan } from '../lib/scans';
-import { annotationOn, settings, subscribeSettings } from '../lib/settings';
-import { bold, colors, sectionLabel } from '../lib/theme';
+import { colors, radius, space, type } from '../lib/theme';
 import { toast } from '../lib/toast';
 import { uncheckedBoxes } from '../lib/training/boxes';
 import type { ScanResult } from '../modules/scanner';
 
-const CUSTOMER_BOXES = ['customer_name', 'customer_tin', 'customer_address'];
-const TOTAL_BOXES = [
-  'total_due',
-  'total_due_2',
-  'total_sales',
-  'amount_figure',
-  'amount_words',
-  'discount',
-  'withholding',
-  'zero_rated',
-  'vat_exempt',
-];
+// Design B §9.5: the Scan screen. The header names the form, with the photo behind its thumbnail (and ⋮ for a saved
+// scan); the status strip is pinned under it, with a flag chip per thing to check. The scroll holds the saved line, the
+// kind switch, the invoice as a ledger (a 2307's sections until Task 12) and the footnote; the bottom bar holds Retake
+// and the save. Every row opens what the camera saw in its boxes, each box fixable, and the checks run again. When
+// the form wasn't found, the photo and how to retake it take the strip's and the ledger's place.
+
 const KINDS = [
-  { value: 'sale', label: 'A sale' },
-  { value: 'purchase', label: 'A purchase' },
+  { value: 'sale', label: 'Sale' },
+  { value: 'purchase', label: 'Purchase' },
 ] as const;
 const KIND_CAPTION: Record<InvoiceKind, string> = {
   sale: "You issued it. It becomes a row in MyBizMate's Sales import.",
   purchase: "Another business issued it to you. It becomes a row in MyBizMate's Purchases import.",
 };
+const CHANGED = 'Changed since it was saved. The export still has the saved version. Save changes to update it.';
+const NOT_FOUND_PDF =
+  "Page 1 of this PDF isn't a MyBizMate Sales Invoice, a Service Invoice or a BIR Form 2307. Import another PDF.";
+const WHOLE_FORM = [
+  'All 4 corner squares of a MyBizMate invoice',
+  'The whole table of a Service Invoice',
+  'The whole page of a BIR Form 2307',
+];
+/** The photo's height when the form wasn't found, in dp (§9.5). */
+const PHOTO_HEIGHT = 240;
 
-type OpenSheet =
-  | { kind: 'boxes'; title: string; boxes: string[]; row?: number } // row: an item row's sheet
-  | { kind: 'terms' }
-  | { kind: 'customer' }
-  | { kind: 'supplier' }
-  | { kind: 'save' };
+/** What a sheet opens with: a row's (LedgerOpen), or the save sheet; n counts the openings, so each starts fresh. */
+type SheetOpen = LedgerOpen | { kind: 'save' };
+type Opening = SheetOpen & { n: number };
 
-const dayOf = (iso: string) => prettyDate(localIsoDate(new Date(iso)));
+const dayOf = (iso: string) => monthDay(localIsoDate(new Date(iso)));
+
+export default function Result() {
+  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
+  const router = useRouter();
+  const flow = useScanFlow();
+  const scan = useSyncExternalStore(subscribeRecent, () => (id ? getScan(id) : undefined));
+  const { sale, cert, state, saved, summary, annotation } = useScanCheck(scan);
+  // Deleted from ⋮: the header's words as they were, while the screen goes back.
+  const [leaving, setLeaving] = useState<{ title: string; subtitle: string } | null>(null);
+  const [open, setOpen] = useState<Opening | null>(null);
+  const [viewing, setViewing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const sheetUp = useRef(false); // set at once, so a second tap is refused before the sheet is up
+  const openings = useRef(0);
+  // Each sheet's opener (the row, or the chip's row), which TalkBack focus goes back to when it closes.
+  const boxesOpener = useRef<ViewInstance | null>(null);
+  const termsOpener = useRef<ViewInstance | null>(null);
+  const customerOpener = useRef<ViewInstance | null>(null);
+  const supplierOpener = useRef<ViewInstance | null>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const stripRef = useRef<ViewInstance>(null);
+  const moreRef = useRef<ViewInstance>(null);
+  const [rowRefs] = useState(() => new Map<string, ViewInstance | null>());
+  const sections = useMemo(() => (scan && sale ? invoiceSections(scan, sale) : []), [scan, sale]);
+  // Each sheet stays mounted with what it last showed, so it can slide away; its key changes at each opening.
+  const boxes = useLingering(open?.kind === 'boxes' ? open : null);
+  const terms = useLingering(open?.kind === 'terms' ? open : null);
+  const customer = useLingering(open?.kind === 'customer' ? open : null);
+  const supplier = useLingering(open?.kind === 'supplier' ? open : null);
+  const save = useLingering(open?.kind === 'save' ? open : null);
+
+  // Straight from a read (not opened from Home or Saved): TalkBack starts at the strip, which says where it stands.
+  useEffect(() => {
+    if (from === undefined && stripRef.current) AccessibilityInfo.sendAccessibilityEvent(stripRef.current, 'focus');
+  }, [from]);
+
+  if (leaving) {
+    // it's going back already: Back stays where it was, and does nothing more
+    return <Screen scroll={false} header={<Header title={leaving.title} subtitle={leaving.subtitle} onBack={noop} />} />;
+  }
+  if (!scan || !state) {
+    return (
+      <Screen header={<Header title="Scan" />}>
+        <Text style={[type.body, styles.gone]}>This scan is no longer here. Go back and read the photo again.</Text>
+      </Screen>
+    );
+  }
+
+  const r = scan.result;
+  const found = state.kind !== 'not_found';
+  const isSample = scan.source === 'sample';
+  const isSaved = saved !== 'no' && summary !== undefined;
+  const back = from === 'recent' || from === 'saved';
+  const title = found && r.form ? FORMS[r.form].title : 'Scan';
+  const subtitle = subtitleOf(scan, found, sale, isSaved ? summary : undefined);
+
+  // what it still needs before it can be saved: Save says it, and so does the strip (never "ready")
+  const block = saveBlock(scan, sale ?? cert, { annotation });
+  const blocked = blockWords(block, scan);
+  // in annotation mode, Save opens every box not checked yet: those no section shows too
+  const unchecked = block === 'unchecked' ? uncheckedBoxes(scan) : null;
+  const saveLabel = isSaved ? 'Save changes' : cert ? 'Save 2307' : scan.kind === 'sale' ? 'Save sale' : 'Save purchase';
+  const rows = sections.flatMap((s) => s.rows);
+  const flaggedKeys = new Set(rows.filter((row) => row.flagged).map((row) => row.key));
+
+  /** Opens a sheet, once: a second tap while one is open (or opening) does nothing. */
+  function openSheet(sheet: SheetOpen, opener: ViewInstance | null) {
+    if (sheetUp.current) return;
+    sheetUp.current = true;
+    if (sheet.kind === 'boxes') boxesOpener.current = opener;
+    else if (sheet.kind === 'terms') termsOpener.current = opener;
+    else if (sheet.kind === 'customer') customerOpener.current = opener;
+    else if (sheet.kind === 'supplier') supplierOpener.current = opener;
+    openings.current += 1;
+    setOpen({ ...sheet, n: openings.current });
+  }
+  function closeSheet() {
+    sheetUp.current = false;
+    setOpen(null);
+  }
+
+  function openSave() {
+    if (unchecked) openSheet({ kind: 'boxes', title: 'Check every box first', boxes: unchecked }, null);
+    else if (block === null) openSheet({ kind: 'save' }, null);
+    else if (blocked) toast(blocked);
+  }
+
+  /** A flag chip: the photo opens the viewer; any other scrolls its row into view and opens it, as tapping it does. */
+  function onChip(problem: string) {
+    const key = flagTarget(problem, flaggedKeys);
+    if (key === 'photo') {
+      setViewing(true);
+      return;
+    }
+    const row = rows.find((candidate) => candidate.key === key);
+    if (!row?.open) return;
+    const view = rowRefs.get(row.key) ?? null;
+    scrollIntoViewOf(scrollRef, view);
+    openSheet(row.open, view);
+  }
+
+  /**
+   * ⋮ › Delete saved scan. The screen shows only its header from then on, so the scan's going never shows as "This scan
+   * is no longer here": React renders the scans' change, the navigator's and this state's together (one sync batch).
+   */
+  function confirmDelete(scanId: string) {
+    Alert.alert('Delete this saved scan?', "It's removed from this phone. Files you already exported don't change.", [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          setLeaving({ title, subtitle });
+          router.back();
+          void deleteSaved(scanId);
+        },
+      },
+    ]);
+  }
+
+  const retake = () => flow.retake(scan, back);
+  const buttons: ButtonProps[] = !found
+    ? [
+        scan.source === 'pdf'
+          ? { label: 'Choose a PDF', variant: 'secondary', onPress: () => flow.fromPdf({ replace: true }) }
+          : { label: 'Choose a photo', variant: 'secondary', onPress: () => flow.fromGallery({ replace: true }) },
+        {
+          label: 'Retake',
+          // the plan's call 8: the camera, or the camera app again; opened from Home or Saved, back
+          onPress: back || scan.source === 'camera' || scan.source === 'camera_app' ? retake : () => router.replace('/camera'),
+        },
+      ]
+    : isSample
+      ? [{ label: 'Retake', variant: 'secondary', onPress: retake }]
+      : [
+          { label: 'Retake', variant: 'secondary', onPress: retake },
+          { label: saveLabel, testID: 'save-open', onPress: openSave },
+        ];
+
+  const header = (
+    <Header
+      title={title}
+      subtitle={subtitle}
+      right={
+        found || isSaved ? (
+          <>
+            {found ? <PhotoThumb result={r} onPress={() => setViewing(true)} /> : null}
+            {isSaved ? (
+              // The menu's anchor: a view of its own, so Android measures it where it is.
+              <View ref={moreRef} collapsable={false}>
+                <IconButton icon={More} label="More options" onPress={() => setMenuOpen(true)} />
+              </View>
+            ) : null}
+          </>
+        ) : undefined
+      }
+    />
+  );
+
+  return (
+    <View style={styles.root}>
+      <Screen
+        header={header}
+        pinned={
+          state.kind === 'not_found' ? null : (
+            <StatusStrip
+              ref={stripRef}
+              state={state}
+              fixed={Object.keys(scan.edits).length}
+              sample={isSample}
+              saved={saved}
+              onChip={onChip}
+            />
+          )
+        }
+        bottom={<BottomBar buttons={buttons} />}
+        scrollRef={scrollRef}>
+        {found ? (
+          <>
+            {isSaved ? <SavedLine summary={summary} changed={saved === 'changed'} /> : null}
+            {sale ? (
+              <View style={styles.kind}>
+                <Segmented
+                  label="This invoice is"
+                  options={KINDS}
+                  value={scan.kind === 'purchase' ? 'purchase' : 'sale'}
+                  // the party chosen for one is never the other's: a sale's customer didn't issue the invoice
+                  onChange={(kind) => {
+                    if (kind !== scan.kind) updateScan(scan.id, { kind, party: null });
+                  }}
+                />
+                <Text style={[type.label, styles.mute]}>{KIND_CAPTION[scan.kind === 'purchase' ? 'purchase' : 'sale']}</Text>
+              </View>
+            ) : null}
+            {sale ? (
+              <Ledger
+                sections={sections}
+                rowRefs={rowRefs}
+                onOpen={(row, view) => {
+                  if (row.open) openSheet(row.open, view);
+                }}
+              />
+            ) : null}
+            {cert ? (
+              // until Task 12 makes the 2307 a ledger too
+              <View style={styles.cert}>
+                <CertificateSections
+                  scan={scan}
+                  view={cert}
+                  openBoxes={(boxTitle, names) => openSheet({ kind: 'boxes', title: boxTitle, boxes: names }, null)}
+                />
+              </View>
+            ) : null}
+          </>
+        ) : (
+          <NotFound result={r} onPhoto={() => setViewing(true)} />
+        )}
+        <Footnote lines={footnoteOf(scan)} />
+      </Screen>
+      {boxes ? (
+        <BoxSheet
+          key={boxes.n}
+          visible={open?.kind === 'boxes'}
+          title={boxes.title}
+          scan={scan}
+          boxes={boxes.boxes}
+          onClose={closeSheet}
+          returnFocus={boxesOpener}>
+          {boxes.row !== undefined && sale ? <NewItem scan={scan} sale={sale} row={boxes.row} /> : null}
+        </BoxSheet>
+      ) : null}
+      {terms ? (
+        <TermsSheet
+          key={terms.n}
+          visible={open?.kind === 'terms'}
+          scan={scan}
+          onClose={closeSheet}
+          returnFocus={termsOpener}
+        />
+      ) : null}
+      {customer && sale ? (
+        <PartySheet
+          key={customer.n}
+          visible={open?.kind === 'customer'}
+          scan={scan}
+          sale={sale}
+          onClose={closeSheet}
+          returnFocus={customerOpener}
+        />
+      ) : null}
+      {supplier && sale ? (
+        <SupplierSheet
+          key={supplier.n}
+          visible={open?.kind === 'supplier'}
+          scan={scan}
+          sale={sale}
+          onClose={closeSheet}
+          returnFocus={supplierOpener}
+        />
+      ) : null}
+      {save && sale ? (
+        <SaveSheet key={save.n} visible={open?.kind === 'save'} scan={scan} sale={sale} onClose={closeSheet} />
+      ) : null}
+      {save && cert ? (
+        <CertSaveSheet key={save.n} visible={open?.kind === 'save'} scan={scan} view={cert} onClose={closeSheet} />
+      ) : null}
+      <PhotoViewer visible={viewing} result={r} onClose={() => setViewing(false)} />
+      {isSaved ? (
+        <Menu
+          visible={menuOpen}
+          anchor={moreRef}
+          items={[{ label: 'Delete saved scan', destructive: true, onPress: () => confirmDelete(scan.id) }]}
+          onClose={() => setMenuOpen(false)}
+        />
+      ) : null}
+      <ReadingOverlay visible={flow.reading} />
+    </View>
+  );
+}
+
+const noop = () => {};
+
+/**
+ * The header's line under the form's name, the first that applies: where it came from and when, when the form wasn't
+ * found; saved, and when; a sample's name; a text PDF; else the invoice's number (a 2307 has none) and the read time.
+ */
+function subtitleOf(scan: StoredScan, found: boolean, sale: SaleView | null, summary: SavedSummary | undefined): string {
+  const r = scan.result;
+  const t = formatMs(r.timing.totalMs);
+  if (!found) return `${shownLabel(scan)} · ${formatClock(scan.at)}`;
+  if (summary) return `Saved as a ${summary.kind} · ${dayOf(summary.savedAt)}`;
+  if (scan.source === 'sample') return `${scan.label} · Read in ${t}`;
+  if (r.source === 'pdf' && r.picture === false) return `From the PDF's text · ${t}`;
+  const number = r.form ? FORMS[r.form].number : '';
+  const no = sale?.final.invoice_no ?? '';
+  return number && no ? `${number} ${no} · Read in ${t}` : `Read in ${t}`;
+}
+
+/** A saved scan's slim line at the top of the scroll: when it was saved and exported, or that it changed since. */
+function SavedLine({ summary, changed }: { summary: SavedSummary; changed: boolean }) {
+  const exported = summary.exportedAt ? `Exported ${dayOf(summary.exportedAt)}` : 'Not exported yet';
+  return (
+    <View testID="saved-line" style={[styles.savedLine, changed ? styles.changedLine : styles.unchangedLine]}>
+      <Text style={[type.label, changed ? styles.warning : styles.ink]}>
+        {changed ? CHANGED : `Saved as a ${summary.kind} · ${dayOf(summary.savedAt)} · ${exported}`}
+      </Text>
+    </View>
+  );
+}
+
+/** The form wasn't found: the photo, which opens the viewer, and how to get the whole form in the next one. */
+function NotFound({ result, onPhoto }: { result: ScanResult; onPhoto: () => void }) {
+  return (
+    <View style={styles.notFound}>
+      {result.originalUri ? (
+        <Tap
+          accessibilityRole="button"
+          accessibilityLabel="Photo of the form"
+          accessibilityHint="Opens it full screen"
+          onPress={onPhoto}
+          focusRadius={radius.field}>
+          <Image
+            testID="not-found-photo"
+            source={{ uri: result.originalUri }}
+            resizeMode="contain"
+            style={styles.photo}
+          />
+        </Tap>
+      ) : null}
+      <Text accessibilityRole="header" style={[type.headline, styles.ink]}>
+        {"Couldn't find the form"}
+      </Text>
+      {/* what the scanner read (a photo or a PDF), not how the scan came in: a PDF has no photo to retake */}
+      {result.source === 'pdf' ? (
+        <Text style={[type.body, styles.ink]}>{NOT_FOUND_PDF}</Text>
+      ) : (
+        <>
+          <Text style={[type.body, styles.ink]}>Get the whole form in the photo, then retake it:</Text>
+          {WHOLE_FORM.map((line, i) => (
+            <View key={line} accessible style={styles.numbered}>
+              <Text style={[type.figure, styles.number]}>{String(i + 1)}</Text>
+              <Text style={[type.body, styles.numberedLine]}>{line}</Text>
+            </View>
+          ))}
+        </>
+      )}
+    </View>
+  );
+}
+
+/** Once, at the end of the scroll: one paragraph per line. */
+function Footnote({ lines }: { lines: readonly string[] }) {
+  return (
+    <View testID="footnote" style={styles.footnote}>
+      {lines.map((line) => (
+        <Text key={line} style={[type.label, styles.mute]}>
+          {line}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * The footnote's lines: how long it took, on the phone; in team builds, its stages; how many boxes were read; a PDF's
+ * own line; and for a sample, how it read against what's written on it.
+ */
+function footnoteOf(scan: StoredScan): string[] {
+  const r = scan.result;
+  const total = formatMs(r.timing.totalMs);
+  const boxes = `${r.reads.length} ${r.reads.length === 1 ? 'box' : 'boxes'}`;
+  const lines: (string | null)[] = r.aligned
+    ? [
+        `Read on this phone in ${total}. Nothing left the phone.`,
+        TEAM_BUILD ? `Straighten ${formatMs(r.timing.alignMs)}, read ${formatMs(r.timing.readMs)}.` : null,
+        `${boxes} read.`,
+      ]
+    : [`Checked on this phone in ${total}. Nothing left the phone.`];
+  // r.source is what the scanner read (a photo or a PDF); scan.source is how the scan came in
+  if (r.source === 'pdf') lines.push(pdfFootnote(r));
+  if (scan.source === 'sample' && r.aligned) lines.push(sampleLine(scan));
+  return lines.filter((line) => line !== null);
+}
 
 /**
  * A PDF's own footnote: where its boxes came from (its text, or its rendered page; a picture PDF is read like a photo)
@@ -76,138 +475,12 @@ function pdfFootnote(r: ScanResult): string | null {
   return [how, pages].filter((s) => s !== null).join(' ') || null;
 }
 
-// The result (the test app's ResultActivity): the checks' card, the scan view, an invoice's sale or a 2307's sections
-// with every row opening what the camera saw in its boxes (each box fixable, the checks run again at once), the
-// footnote, and Retake.
-export default function Result() {
-  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
-  const flow = useScanFlow();
-  const scan = useSyncExternalStore(subscribeRecent, () => (id ? getScan(id) : undefined));
-  const theLists = useSyncExternalStore(subscribeLists, lists);
-  const theSettings = useSyncExternalStore(subscribeSettings, settings);
-  const annotation = useSyncExternalStore(subscribeSettings, annotationOn);
-  const sale = useMemo(
-    () => (scan && isInvoice(scan) ? saleOf(scan, theLists, theSettings) : null),
-    [scan, theLists, theSettings],
-  );
-  const cert = useMemo(
-    () => (scan && is2307(scan) ? certOf(scan, theLists, theSettings) : null),
-    [scan, theLists, theSettings],
-  );
-  const summary = useSyncExternalStore(subscribeSaved, () => (id ? savedSummary(id) : undefined));
-  const [sheet, setSheet] = useState<OpenSheet | null>(null);
-  if (!scan) {
-    return (
-      <View style={styles.screen}>
-        <Text style={styles.gone}>This scan is no longer here. Go back and read the photo again.</Text>
-      </View>
-    );
-  }
-  const r = scan.result;
-  const form = r.form ? FORMS[r.form] : null;
-
-  const total = formatMs(r.timing.totalMs);
-  const boxes = `${r.reads.length} ${r.reads.length === 1 ? 'box' : 'boxes'}`;
-  const footnote = !r.aligned
-    ? `Checked on this phone in ${total}. Nothing left the phone.`
-    : TEAM_BUILD
-      ? `${boxes} read on this phone in ${total} (straighten ${formatMs(r.timing.alignMs)}, read ${formatMs(r.timing.readMs)}). Nothing left the phone.`
-      : `${boxes} read on this phone in ${total}. Nothing left the phone.`;
-  // r.source is what the scanner read (a photo or a PDF); scan.source is how the scan came in
-  const pdfLine = r.source === 'pdf' ? pdfFootnote(r) : null;
-  let sampleLine: string | null = null;
-  if (scan.sampleId && r.aligned) {
-    const { exact, written } = compareWithSample(r.reads, sampleInfo(scan.sampleId));
-    sampleLine = `Sample invoice: ${exact} of ${written} boxes read exactly as written.`;
-  }
-  const isSample = scan.source === 'sample';
-  const canSave = r.aligned && !isSample && (sale !== null || cert !== null);
-  const saveLabel = summary ? 'Save changes' : cert ? 'Save 2307' : scan.kind === 'sale' ? 'Save sale' : 'Save purchase';
-  // what it still needs before it can be saved: Save says it, and so does the card (never "ready")
-  const block = saveBlock(scan, sale ?? cert, { annotation });
-  const blocked = blockWords(block, scan);
-  // in annotation mode, Save opens every box not checked yet: those no section shows too
-  const unchecked = block === 'unchecked' ? uncheckedBoxes(scan) : null;
-  // A saved one changed here (a box, sale or purchase, its party) goes out as saved until Save changes. In annotation
-  // mode, so does any box's edit or check, one outside the import rows too: the training export has the saved labels.
-  const marksChanged = annotation && !!scan.savedMarks && marksOf(scan) !== scan.savedMarks;
-  const changed =
-    summary !== undefined && scan.saved !== null && (marksChanged || !sameRows(rowsNow(scan), summaryRows(summary)));
-  const savedLine = !summary
-    ? null
-    : changed
-      ? 'Changed since it was saved. The export still has the saved version: tap Save changes.'
-      : `Saved as a ${summary.kind} on ${dayOf(summary.savedAt)}. ${summary.exportedAt ? `Exported ${dayOf(summary.exportedAt)}.` : 'Not exported yet.'}`;
-  const back = from === 'recent' || from === 'saved';
-
-  function openSave() {
-    if (unchecked) setSheet({ kind: 'boxes', title: 'Check every box first', boxes: unchecked });
-    else if (block === null) setSheet({ kind: 'save' });
-    else if (blocked) toast(blocked);
-  }
-
-  return (
-    <View style={styles.screen}>
-      <Stack.Screen options={{ headerTitle: () => <Title subtitle={form?.title} /> }} />
-      <ScrollView contentContainerStyle={styles.content}>
-        <StatusCard
-          result={r}
-          problems={sale?.problems ?? cert?.problems ?? null}
-          ready={cert ? 'Ready to save' : 'Ready to post'}
-          blocked={blocked}
-        />
-        <ScanImage result={r} />
-        {sale && <SaleSections scan={scan} sale={sale} open={setSheet} />}
-        {cert && (
-          <CertificateSections
-            scan={scan}
-            view={cert}
-            openBoxes={(title, boxes) => setSheet({ kind: 'boxes', title, boxes })}
-          />
-        )}
-        <Text style={styles.footnote}>{footnote}</Text>
-        {pdfLine && <Text style={styles.footnote}>{pdfLine}</Text>}
-        {sampleLine && <Text style={styles.footnote}>{sampleLine}</Text>}
-        {isSample && r.aligned && (
-          <Text style={styles.footnote}>{"Sample invoices are made up, so they can't be saved."}</Text>
-        )}
-      </ScrollView>
-      <View style={styles.bottom}>
-        {savedLine && <Text style={[styles.saved, changed && styles.changed]}>{savedLine}</Text>}
-        {r.aligned ? (
-          <View style={styles.buttons}>
-            <View style={styles.button}>
-              <OutlinedButton label="Retake" onPress={() => flow.retake(scan, back)} />
-            </View>
-            {canSave && (
-              <View style={styles.button}>
-                <PrimaryButton testID="save-open" label={saveLabel} onPress={openSave} />
-              </View>
-            )}
-          </View>
-        ) : (
-          <PrimaryButton label="Retake" icon={Camera} onPress={() => flow.retake(scan, back)} />
-        )}
-      </View>
-      {sheet?.kind === 'boxes' && (
-        <BoxSheet visible title={sheet.title} scan={scan} boxes={sheet.boxes} onClose={() => setSheet(null)}>
-          {sheet.row !== undefined && sale && <NewItem scan={scan} sale={sale} row={sheet.row} />}
-        </BoxSheet>
-      )}
-      {sheet?.kind === 'terms' && <TermsSheet visible scan={scan} onClose={() => setSheet(null)} />}
-      {sheet?.kind === 'customer' && sale && (
-        <PartySheet visible scan={scan} sale={sale} onClose={() => setSheet(null)} />
-      )}
-      {sheet?.kind === 'supplier' && sale && (
-        <SupplierSheet visible scan={scan} sale={sale} onClose={() => setSheet(null)} />
-      )}
-      {sheet?.kind === 'save' && sale && <SaveSheet visible scan={scan} sale={sale} onClose={() => setSheet(null)} />}
-      {sheet?.kind === 'save' && cert && (
-        <CertSaveSheet visible scan={scan} view={cert} onClose={() => setSheet(null)} />
-      )}
-      <ReadingOverlay visible={flow.reading} />
-    </View>
-  );
+/** A sample: how many of the boxes written on it were read exactly; and that samples can't be saved. */
+function sampleLine(scan: StoredScan): string {
+  const made = "Samples are made up, so they can't be saved.";
+  if (!scan.sampleId) return made;
+  const { exact, written } = compareWithSample(scan.result.reads, sampleInfo(scan.sampleId));
+  return `Sample invoice: ${exact} of ${written} boxes read exactly as written. ${made}`;
 }
 
 /** On a sale, an item the lists don't have: one tap adds it, with its unit and the row's unit price. */
@@ -218,230 +491,24 @@ function NewItem({ scan, sale, row }: { scan: StoredScan; sale: SaleView; row: n
     await addItem({ name: item.description, unit: boxValue(scan, `item${row}_unit`) ?? '', price: item.unit_price });
     toast('Added to your items.');
   };
-  return <TextButton label={`Add “${item.description}” to your items`} onPress={() => void add()} />;
-}
-
-/** The sale's sections: sale or purchase, the invoice, its items and its totals. */
-function SaleSections({ scan, sale, open }: { scan: StoredScan; sale: SaleView; open: (sheet: OpenSheet) => void }) {
-  const r = scan.result;
-  const form = FORMS[r.form!];
-  const fields = formFields(r.form!);
-  const final = sale.final;
-  const has = (flag: string) => final.flags.includes(flag);
-  const raw = rawFromScan(scan);
-  const amount = (box: string) => candidates(raw.boxes[box])[0] ?? 0;
-  const anyRead = (names: string[]) => names.some((b) => boxValue(scan, b) !== null);
-  const boxesOf = (title: string, names: readonly string[], row?: number) => () =>
-    open({ kind: 'boxes', title, boxes: fields.filter((f) => names.includes(f)), row });
-
-  const dc = final.date_choice;
-  const dateSub = dc.rebuilt
-    ? `Read as “${boxValue(scan, 'date') ?? ''}”, the slashes unclear. Check the date.`
-    : has('date') && dc.other
-      ? `Could also be read as ${prettyDate(dc.other)}. Check the date.`
-      : has('date')
-        ? final.date === null
-          ? "Couldn't make out a date"
-          : 'Not a date in the last 6 months'
-        : null;
-
-  const party = sale.party;
-  const tin = party.listParty?.tin || (boxValue(scan, 'customer_tin') ?? '');
-  const customerSub: Record<string, string> = {
-    auto: tin ? `TIN ${tin} · matched in your customers` : 'Matched in your customers',
-    chosen: 'Chosen from your customers',
-    unsure: 'Closest match. Tap to compare.',
-    new: 'Not in your customer list',
-    unlisted: 'Add your customers in Your lists to check names',
-    blank: 'No customer written',
-  };
-  const supplierSub: Record<string, string> = {
-    chosen: 'From your suppliers',
-    typed: 'Not in your supplier list',
-    various: 'Exported as VARIOUS-SUPP',
-    missing: 'Printed at the top of the invoice: tap to choose it',
-  };
-  const termsValue = sale.terms === 'cash' ? form.cash : sale.terms === 'account' ? form.account : 'Unclear';
-  const termsSub =
-    sale.terms === null ? `Tick ${form.cash} or ${form.account} clearly` : scan.terms !== null ? 'Chosen by you' : null;
-
-  const vatShown = sale.taxType === 'VAT' || final.flags.some((f) => f.startsWith('check_'));
-  const rowsSum = final.items.reduce((sum, it) => sum + (it.amount ?? 0), 0);
-  const totalSub = has('total')
-    ? "The written totals don't agree"
-    : has('total_rows')
-      ? `The rows add up to ${peso(rowsSum)}. Check each row's price and amount.`
-      : has('check_total_sales')
-        ? "Total sales doesn't match the total due"
-        : 'The written totals agree';
-  const n = final.items.length;
-
-  return (
-    <>
-      <Text style={sectionLabel}>THIS INVOICE IS</Text>
-      <View style={styles.kind}>
-        <Segmented
-          label="This invoice is"
-          options={KINDS}
-          value={scan.kind}
-          // the party chosen for one is never the other's: a sale's customer didn't issue the invoice
-          onChange={(kind) => kind !== scan.kind && updateScan(scan.id, { kind, party: null })}
-        />
-      </View>
-      <Text style={styles.caption}>{KIND_CAPTION[scan.kind === 'purchase' ? 'purchase' : 'sale']}</Text>
-
-      <Text style={[sectionLabel, styles.section]}>INVOICE</Text>
-      <View style={styles.card}>
-        <SaleRow label={form.number} value={final.invoice_no || null} onPress={boxesOf(form.number, ['invoice_no'])} />
-        <SaleRow
-          label="Date"
-          value={prettyDate(final.date) ?? boxValue(scan, 'date')}
-          sub={dateSub}
-          flagged={has('date')}
-          onPress={boxesOf('Date', ['date'])}
-        />
-        {scan.kind === 'sale' ? (
-          <SaleRow
-            label="Customer"
-            value={party.shown}
-            sub={customerSub[party.status]}
-            flagged={party.status === 'unsure' || party.status === 'new'}
-            onPress={() => open({ kind: 'customer' })}
-          />
-        ) : (
-          <>
-            <SaleRow
-              label="Supplier"
-              value={party.shown}
-              sub={supplierSub[party.status]}
-              flagged={party.status === 'missing'}
-              onPress={() => open({ kind: 'supplier' })}
-            />
-            <SaleRow
-              label="Sold to"
-              value={boxValue(scan, 'customer_name') || null}
-              sub="You, as the invoice names you"
-              onPress={boxesOf('Sold to', CUSTOMER_BOXES)}
-            />
-          </>
-        )}
-        <SaleRow
-          label="Terms"
-          value={termsValue}
-          sub={termsSub}
-          flagged={has('terms')}
-          onPress={() => open({ kind: 'terms' })}
-        />
-      </View>
-
-      <Text style={[sectionLabel, styles.section]}>{n === 1 ? '1 ITEM' : `${n} ITEMS`}</Text>
-      <View style={styles.card}>
-        {n === 0 ? (
-          <SaleRow value="No items read" />
-        ) : (
-          final.items.map((it) => {
-            const row = it.row;
-            const sub =
-              `${qty(it.qty)} × ${peso(it.unit_price)}` +
-              (has(`row${row}`) ? " · doesn't add up" : '') +
-              (has(`item${row}`) ? ' · not in your item list' : '') +
-              (has(`price${row}`) ? ` · your list price is ${peso(sale.listPrices[row] ?? null)}` : '');
-            const title = it.description || `Item ${row}`;
-            return (
-              <SaleRow
-                key={row}
-                value={title}
-                sub={sub}
-                amount={peso(it.amount)}
-                flagged={has(`row${row}`) || has(`item${row}`) || has(`price${row}`)}
-                onPress={boxesOf(
-                  title,
-                  ['qty', 'unit', 'description', 'unit_price', 'amount'].map((c) => `item${row}_${c}`),
-                  row,
-                )}
-              />
-            );
-          })
-        )}
-      </View>
-
-      <Text style={[sectionLabel, styles.section]}>TOTALS</Text>
-      <View style={styles.card}>
-        {(vatShown || anyRead(['vatable_sales', 'net_of_vat'])) && (
-          <SaleRow
-            label="VATable sales"
-            value={peso(final.vatable_sales)}
-            sub={has('check_vatable_sales') || has('check_net_of_vat') ? "A written VATable amount doesn't match the total" : null}
-            flagged={has('check_vatable_sales') || has('check_net_of_vat')}
-            onPress={boxesOf('VATable sales', ['vatable_sales', 'net_of_vat'])}
-          />
-        )}
-        {(vatShown || anyRead(['vat', 'less_vat', 'add_vat'])) && (
-          <SaleRow
-            label="VAT 12%"
-            value={peso(final.vat)}
-            sub={has('check_vat') || has('check_less_vat') || has('check_add_vat') ? "A written VAT doesn't match 12/112" : null}
-            flagged={has('check_vat') || has('check_less_vat') || has('check_add_vat')}
-            onPress={boxesOf('VAT 12%', ['vat', 'less_vat', 'add_vat'])}
-          />
-        )}
-        {amount('zero_rated') > 0 && (
-          <SaleRow
-            label="Zero-rated sales"
-            value={peso(amount('zero_rated'))}
-            onPress={boxesOf('Zero-rated sales', ['zero_rated'])}
-          />
-        )}
-        {amount('vat_exempt') > 0 && (
-          <SaleRow
-            label="VAT-exempt sales"
-            value={peso(amount('vat_exempt'))}
-            onPress={boxesOf('VAT-exempt sales', ['vat_exempt'])}
-          />
-        )}
-        <SaleRow
-          label="Total due"
-          value={peso(final.total_due)}
-          sub={totalSub}
-          flagged={has('total') || has('total_rows') || has('check_total_sales')}
-          onPress={boxesOf('Total due', TOTAL_BOXES)}
-        />
-        {final.less > 0 && (
-          <SaleRow
-            label="Gross (VAT included)"
-            value={peso(sale.gross)}
-            sub="Before the discount and withholding tax. This goes to MyBizMate."
-            onPress={boxesOf('Gross (VAT included)', ['total_sales', 'discount', 'withholding'])}
-          />
-        )}
-      </View>
-    </>
-  );
-}
-
-function Title({ subtitle }: { subtitle?: string }) {
-  return (
-    <View>
-      <Text style={styles.title}>Scan</Text>
-      {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
-    </View>
-  );
+  return <Button variant="text" label={`Add “${item.description}” to your items`} onPress={add} />;
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.paper },
-  content: { padding: 16, paddingBottom: 24 },
-  gone: { fontSize: 15, color: colors.ink, padding: 16 },
-  kind: { marginTop: 8 },
-  caption: { fontSize: 14, color: colors.mute, marginTop: 8, lineHeight: 20 },
-  section: { marginTop: 24, marginBottom: 8 },
-  card: { backgroundColor: colors.panel, borderRadius: 18, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
-  footnote: { fontSize: 13, color: colors.mute, marginTop: 16, lineHeight: 18 },
-  bottom: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, backgroundColor: colors.panel },
-  saved: { fontSize: 13, color: colors.pine, marginBottom: 12 },
-  changed: { color: colors.ember },
-  buttons: { flexDirection: 'row', gap: 12 },
-  button: { flex: 1 },
-  title: { ...bold, fontSize: 18, color: colors.ink },
-  subtitle: { fontSize: 13, color: colors.mute },
+  root: { flex: 1 },
+  gone: { color: colors.ink, padding: space.l },
+  savedLine: { paddingHorizontal: space.l, paddingVertical: space.s },
+  unchangedLine: { backgroundColor: colors.sand },
+  changedLine: { backgroundColor: colors.warningTint },
+  kind: { padding: space.l, gap: space.s },
+  cert: { paddingHorizontal: space.l, paddingTop: space.l },
+  notFound: { padding: space.l, gap: space.m },
+  photo: { width: '100%', height: PHOTO_HEIGHT, backgroundColor: colors.crop, borderRadius: radius.field },
+  numbered: { flexDirection: 'row', gap: space.m },
+  number: { color: colors.brandText },
+  numberedLine: { flex: 1, color: colors.ink },
+  footnote: { paddingHorizontal: space.l, paddingTop: space.l, gap: space.xs },
+  ink: { color: colors.ink },
+  mute: { color: colors.mute },
+  warning: { color: colors.warning },
 });

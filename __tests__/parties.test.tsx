@@ -1,5 +1,4 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import type { ReactElement } from 'react';
 
 import Result from '../app/result';
 import { clearItems, clearParties, importPartiesCsv, lists } from '../lib/lists';
@@ -16,10 +15,6 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: jest.fn() }),
   useIsFocused: () => true,
-  Stack: {
-    Screen: ({ options }: { options?: { headerTitle?: (p: object) => ReactElement } }) =>
-      options?.headerTitle ? options.headerTitle({}) : null,
-  },
 }));
 jest.mock('../modules/scanner', () => ({
   enhance: async (_uri: string, mode: string) => `file:///x/${mode}.img`,
@@ -120,7 +115,7 @@ test('an empty customer list', async () => {
 test('a supplier from the list', async () => {
   await importPartiesCsv(PARTIES, 'customer');
   await showSample();
-  await press(screen.getByText('A purchase'));
+  await press(screen.getByText('Purchase'));
   await press(screen.getByText('Supplier'));
   await type('Search your suppliers', 'wholesale');
   await press(screen.getByText('Isabela Wholesale Trading'));
@@ -131,7 +126,7 @@ test('a supplier from the list', async () => {
 
 test('a typed supplier', async () => {
   await showSample();
-  await press(screen.getByText('A purchase'));
+  await press(screen.getByText('Purchase'));
   await press(screen.getByText('Supplier'));
   await type("Supplier's name", 'Juan Hardware');
   await press(screen.getByText('Use this name'));
@@ -141,7 +136,7 @@ test('a typed supplier', async () => {
 
 test('various suppliers', async () => {
   await showSample();
-  await press(screen.getByText('A purchase'));
+  await press(screen.getByText('Purchase'));
   await press(screen.getByText('Supplier'));
   await press(screen.getByText('Various suppliers'));
   expect(screen.getByText('Various suppliers')).toBeTruthy();
@@ -150,7 +145,7 @@ test('various suppliers', async () => {
 
 test('add a typed supplier to the list', async () => {
   await showScan();
-  await press(screen.getByText('A purchase'));
+  await press(screen.getByText('Purchase'));
   await press(screen.getByText('Supplier'));
   await type("Supplier's name", 'Juan Hardware');
   await press(screen.getByText('Add to your suppliers'));
@@ -162,7 +157,7 @@ test('add a typed supplier to the list', async () => {
 test('search by TIN', async () => {
   await importPartiesCsv(PARTIES, 'customer');
   await showSample();
-  await press(screen.getByText('A purchase'));
+  await press(screen.getByText('Purchase'));
   await press(screen.getByText('Supplier'));
   await type('Search your suppliers', '900000002');
   expect(screen.getByText('Maria Santos Reyes')).toBeTruthy();
@@ -188,7 +183,7 @@ test("a sample's made-up names aren't added to the lists", async () => {
   await press(screen.getByText('Sugar'));
   expect(screen.queryByText('Add “Sugar” to your items')).toBeNull();
   await press(screen.getByLabelText('Close'));
-  await press(screen.getByText('A purchase'));
+  await press(screen.getByText('Purchase'));
   await press(screen.getByText('Supplier'));
   await type("Supplier's name", 'Juan Hardware');
   expect(screen.getByText('Use this name')).toBeTruthy();
@@ -204,11 +199,11 @@ test('switching between a sale and a purchase drops the chosen party', async () 
   await type('Search your customers', 'santos');
   await press(screen.getByText('Santos General Merchandise'));
   await press(screen.getByLabelText('Close'));
-  await press(screen.getByText('A purchase'));
+  await press(screen.getByText('Purchase'));
   // the customer chosen for the sale isn't the supplier who issued the invoice
   expect(screen.getByText('Not chosen yet')).toBeTruthy();
   expect(screen.getByText(/Supplier \(choose one\)/)).toBeTruthy();
-  await press(screen.getByText('A sale'));
+  await press(screen.getByText('Sale'));
   expect(screen.queryByText('Chosen from your customers')).toBeNull();
   expect(screen.getByText('Torres Construction Supply')).toBeTruthy();
 });

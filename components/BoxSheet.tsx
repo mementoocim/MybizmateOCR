@@ -1,5 +1,5 @@
-import { type ReactNode, useState, useSyncExternalStore } from 'react';
-import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { type ReactNode, type RefObject, useState, useSyncExternalStore } from 'react';
+import { Image, Pressable, StyleSheet, Text, TextInput, View, type ViewInstance } from 'react-native';
 
 import { fieldLabel } from '../lib/forms';
 import { boxValue } from '../lib/sale';
@@ -23,7 +23,8 @@ const STATE_LINE: Record<BoxState, string> = {
  * What the camera saw in the given boxes, each one fixable: the person types what the box says (an edit is "the box
  * says this", kept apart from the reading), and the checks run again. In annotation mode each box that can become
  * training data says whether it's checked yet, and its value can be confirmed as it stands ("Looks right"), until
- * something else is picked or typed. children: more under the boxes (the customer).
+ * something else is picked or typed. children: more under the boxes (the customer). returnFocus: the row that opened
+ * it, which TalkBack focus goes back to.
  */
 export function BoxSheet({
   visible,
@@ -31,6 +32,7 @@ export function BoxSheet({
   scan,
   boxes,
   onClose,
+  returnFocus,
   children,
 }: {
   visible: boolean;
@@ -38,6 +40,7 @@ export function BoxSheet({
   scan: StoredScan;
   boxes: readonly string[];
   onClose: () => void;
+  returnFocus?: RefObject<ViewInstance | null>;
   children?: ReactNode;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -63,7 +66,7 @@ export function BoxSheet({
       (t) => t !== '',
     );
     return (
-      <Sheet visible={visible} title={title} onClose={close}>
+      <Sheet visible={visible} title={title} onClose={close} returnFocus={returnFocus}>
         <Text style={styles.heading}>{fieldLabel(form, editing)}</Text>
         {read?.cropUri && <Image source={{ uri: read.cropUri }} style={styles.bigCrop} resizeMode="contain" />}
         {read && <Text style={[styles.reading, read.conf < 0.9 && styles.unsure]}>{readingText(read)}</Text>}
@@ -119,7 +122,8 @@ export function BoxSheet({
       visible={visible}
       title={title}
       subtitle="What the camera saw in each box. If a box was read wrong, type what it says."
-      onClose={close}>
+      onClose={close}
+      returnFocus={returnFocus}>
       {boxes.map((box) => {
         const read = readOf(box);
         const edit = hasOwn(scan.edits, box) ? scan.edits[box] : null;
