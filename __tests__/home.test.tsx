@@ -145,14 +145,13 @@ async function fromMenu(label: string) {
   await press(within(screen.getByTestId('menu-items')).getByText(label));
 }
 
-test('the menu in a client build', async () => {
+test('the menu', async () => {
   await render(<Home />);
   await press(screen.getByTestId('menu'));
   const items = within(screen.getByTestId('menu-items'));
   expect(items.getByText('Saved invoices')).toBeTruthy();
   expect(items.getByText('Your lists')).toBeTruthy();
   expect(items.getByText('Settings')).toBeTruthy();
-  expect(items.queryByText('Speed test')).toBeNull();
   await press(items.getByText('Saved invoices'));
   expect(mockPush).toHaveBeenLastCalledWith('/saved');
   await fromMenu('Your lists');
@@ -161,11 +160,16 @@ test('the menu in a client build', async () => {
   expect(mockPush).toHaveBeenLastCalledWith('/settings');
 });
 
-test('the menu in a team build', async () => {
-  mockTeam = true;
-  await render(<Home />);
-  await fromMenu('Speed test');
-  expect(mockPush).toHaveBeenLastCalledWith('/speed');
+test("the speed test left Home's menu", async () => {
+  for (const team of [false, true]) {
+    mockTeam = team; // a team build has it in Settings › Team tools
+    await render(<Home />);
+    await press(screen.getByTestId('menu'));
+    const items = within(screen.getByTestId('menu-items'));
+    expect(items.getByText('Settings')).toBeTruthy();
+    expect(items.queryByText('Speed test')).toBeNull();
+    await screen.unmount();
+  }
 });
 
 test('the saved invoices row', async () => {

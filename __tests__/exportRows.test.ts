@@ -22,7 +22,16 @@ import { pinToday } from '../test-utils/today';
 
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 
-const SETTINGS: Settings = { vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '', offsetAccount: '' };
+const SETTINGS: Settings = {
+  vatRegistered: null,
+  revenueAccount: '',
+  expenseAccount: '',
+  atc: '',
+  offsetAccount: '',
+  annotation: false,
+  clientCode: '',
+  writerCode: '',
+};
 const DETAILS = { taxType: 'VAT', account: '4010', terms: 'account', atc: '' } as const;
 const OFFSET = { account: '1205' } as const; // a 2307's: its offset account
 
