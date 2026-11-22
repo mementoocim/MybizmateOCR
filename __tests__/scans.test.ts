@@ -17,6 +17,7 @@ const UNTOUCHED = {
   annotated: false,
   tag: null,
   testImage: false,
+  savedMarks: '',
 };
 
 function result(dir: string): ScanResult {

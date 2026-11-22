@@ -46,6 +46,9 @@ export type StoredScan = {
   annotated?: boolean; // last saved in annotation mode, so every training box was checked
   tag?: SourceTag | null; // that save's client and writer codes; null when it wasn't one
   testImage?: boolean; // read from the camera's test hook: it never becomes training data
+  // a hash of the edits and checks as last saved (marksOf in lib/saved.ts), never what a box says; '' when it has none:
+  // not saved yet, or saved before the save kept one
+  savedMarks?: string;
 };
 
 /**
@@ -105,6 +108,7 @@ const FRESH = {
   annotated: false,
   tag: null,
   testImage: false,
+  savedMarks: '',
 } as const;
 
 /** A BIR Form 2307 (its form found) is a 2307; any other scan keeps its kind, a sale until the person says otherwise. */
@@ -133,7 +137,10 @@ export function getScan(id: string): StoredScan | undefined {
 export function updateScan(
   id: string,
   change: Partial<
-    Pick<StoredScan, 'edits' | 'confirmed' | 'terms' | 'kind' | 'party' | 'saved' | 'result' | 'annotated' | 'tag'>
+    Pick<
+      StoredScan,
+      'edits' | 'confirmed' | 'terms' | 'kind' | 'party' | 'saved' | 'result' | 'annotated' | 'tag' | 'savedMarks'
+    >
   >,
 ): StoredScan | undefined {
   const old = getScan(id);

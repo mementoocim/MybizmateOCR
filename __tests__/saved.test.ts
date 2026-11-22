@@ -153,12 +153,12 @@ test("an old saved scan loads and isn't training data", async () => {
   const first = load();
   const ids = [cameraScan(first), cameraScan(first, 'file:///docs/scans/124')];
   for (const id of ids) await first.saved.saveScan(id, DETAILS);
-  // their scan.json as milestones 3 and 5 wrote them: no checked boxes, annotation, source tag, test image or
-  // versions, and milestone 3's result had no PDF fields either
+  // their scan.json as milestones 3 and 5 wrote them: no checked boxes, annotation, source tag, test image, versions
+  // or saved marks, and milestone 3's result had no PDF fields either
   ids.forEach((id, i) => {
     const file = `file:///docs/saved/${id}/scan.json`;
     const kept = JSON.parse(memoryFs.files.get(file) as string);
-    for (const field of ['confirmed', 'annotated', 'tag', 'testImage', 'made']) delete kept[field];
+    for (const field of ['confirmed', 'annotated', 'tag', 'testImage', 'made', 'savedMarks']) delete kept[field];
     if (i === 0) {
       delete kept.result.source;
       delete kept.result.pageCount;
@@ -174,7 +174,7 @@ test("an old saved scan loads and isn't training data", async () => {
   expect(again.saved.savedList().map((s) => s.id).sort()).toEqual([...ids].sort());
   for (const id of ids) {
     const scan = await again.saved.openSaved(id);
-    expect(scan).toMatchObject({ confirmed: [], annotated: false, tag: null, testImage: false });
+    expect(scan).toMatchObject({ confirmed: [], annotated: false, tag: null, testImage: false, savedMarks: '' });
     expect(scan!.result.reads.every((b) => b.fromText === false)).toBe(true);
     expect(trainingRecord(scan!, again.lists.lists(), again.settings.settings())).toBeNull(); // it exports nothing
   }

@@ -128,6 +128,24 @@ export function rowsNow(scan: StoredScan): readonly ExportRow[] {
   return summaryRows(summaryOf(scan));
 }
 
+/** FNV-1a, 32 bits, over the text's UTF-8 bytes, as 8 hex digits: a short hash that holds none of the text. */
+function fnv1a(text: string): string {
+  let hash = 0x811c9dc5;
+  for (const byte of new TextEncoder().encode(text)) hash = Math.imul(hash ^ byte, 0x01000193);
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * A scan's edits and checked boxes as a short hash: the same whatever order they were made in. A save keeps it
+ * (savedMarks), so annotation mode can tell a box changed since, one outside the import rows too.
+ */
+export function marksOf(scan: Pick<StoredScan, 'edits' | 'confirmed'>): string {
+  const edits = Object.keys(scan.edits)
+    .sort()
+    .map((box) => [box, scan.edits[box]]);
+  return fnv1a(JSON.stringify([edits, [...(scan.confirmed ?? [])].sort()]));
+}
+
 /** Moves a scan's folder out of the scanner's scans/ to saved/<id>/, and points every file of its result there. */
 async function moveToSaved(scan: StoredScan): Promise<ScanResult> {
   const r = scan.result;
@@ -152,7 +170,8 @@ async function moveToSaved(scan: StoredScan): Promise<ScanResult> {
 /**
  * A saved scan as scan.json keeps it, as it was last saved: changes made since live only in the app's memory (see
  * openSaved). One saved before PDFs gets their fields (a photo's), and one saved before milestone 4 (milestones 3 and
- * 5) has no boxes checked, wasn't saved in annotation mode and isn't a test image.
+ * 5) has no boxes checked, wasn't saved in annotation mode and isn't a test image. One saved before the save kept a
+ * hash of its edits and checks has none (savedMarks ''), so nothing is compared with it.
  */
 export async function readScan(id: string): Promise<StoredScan | null> {
   const saved = await readJson<Omit<StoredScan, 'at' | 'result'> & { at: string; result: KeptResult }>(
@@ -165,6 +184,7 @@ export async function readScan(id: string): Promise<StoredScan | null> {
     annotated: saved.annotated ?? false,
     tag: saved.tag ?? null,
     testImage: saved.testImage ?? false,
+    savedMarks: saved.savedMarks ?? '',
     at: new Date(saved.at),
     result: withPdfFields(saved.result),
   };
@@ -203,8 +223,9 @@ function defaultsFrom(kind: Kind, details: SaveDetails): Partial<Settings> {
  * Saves a scan as its kind's import rows (again, after changes): an invoice with its tax type, account, terms and ATC,
  * a 2307 with its offset account. In annotation mode it's saved annotated, with its source tag, whose codes become the
  * next save's, and the next training export sends it (again) with its labels as now checked; a save outside annotation
- * mode isn't annotated, has no tag, and keeps its marks. Throws a SaveBlock's name when it can't be, and no_tag when
- * annotation mode's two codes aren't both codes.
+ * mode isn't annotated, has no tag, and keeps its marks. Either way the scan keeps a hash of its edits and checks as
+ * saved (savedMarks). Throws a SaveBlock's name when it can't be, and no_tag when annotation mode's two codes aren't
+ * both codes.
  */
 export async function saveScan(id: string, details: SaveDetails, tag: SourceTag | null = null): Promise<void> {
   const before = getScan(id);
@@ -216,7 +237,7 @@ export async function saveScan(id: string, details: SaveDetails, tag: SourceTag 
   if (annotation && codes === null) throw new Error('no_tag');
   const result = await moveToSaved(before);
   const saved = { savedAt: new Date().toISOString(), details };
-  const scan = updateScan(id, { result, saved, annotated: annotation, tag: codes })!;
+  const scan = updateScan(id, { result, saved, annotated: annotation, tag: codes, savedMarks: marksOf(before) })!;
   await writeJson(`saved/${id}/scan.json`, { ...scan, at: scan.at.toISOString() });
   const last = savedSummary(id); // its marks are kept, apart from a training export's after an annotated save
   const summary = summaryOf(scan, last && annotation ? { ...last, trainingExportedAt: null } : last);

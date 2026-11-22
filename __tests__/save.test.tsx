@@ -5,7 +5,8 @@ import Result from '../app/result';
 import { saveBlock } from '../lib/exportRows';
 import { addParty, clearParties, lists } from '../lib/lists';
 import { saleOf } from '../lib/sale';
-import { addScan, confirmBox, getScan, setEdit, type StoredScan } from '../lib/scans';
+import { openSaved } from '../lib/saved';
+import { addScan, confirmBox, forgetScan, getScan, setEdit, type StoredScan } from '../lib/scans';
 import { annotationOn, settings, updateSettings } from '../lib/settings';
 import { uncheckedBoxes } from '../lib/training/boxes';
 import { cleanCode } from '../lib/training/codes';
@@ -66,6 +67,17 @@ const type = (label: string, text: string) => act(async () => fireEvent.changeTe
 const checkEveryBox = (id: string) =>
   act(async () => uncheckedBoxes(getScan(id)!).forEach((box) => confirmBox(id, box)));
 const keptScan = (id: string) => JSON.parse(memoryFs.files.get(`file:///docs/saved/${id}/scan.json`) as string);
+const keptRecent = (id: string) =>
+  JSON.parse(memoryFs.files.get('file:///docs/recent.json') as string).find((s: { id: string }) => s.id === id);
+const CHANGED = 'Changed since it was saved. The export still has the saved version: tap Save changes.';
+const SAVED = 'Saved as a sale on Nov 18, 2026. Not exported yet.';
+/** Saves the sale on screen with the save sheet: the first save of the test, so it asks about VAT. */
+async function saveSale() {
+  await press(screen.getByTestId('save-open'));
+  await press(screen.getByText('Not VAT-registered'));
+  await type('Revenue account', '4010');
+  await press(screen.getByTestId('save-confirm'));
+}
 
 beforeAll(() => pinToday(new Date(2026, 10, 18, 10, 0)));
 afterAll(() => jest.useRealTimers());
@@ -370,6 +382,81 @@ test('without annotation mode nothing changes', async () => {
     await press(screen.getByTestId('save-confirm'));
     expect(getScan(id)).toMatchObject({ annotated: false, tag: null });
     expect(keptScan(id)).toMatchObject({ annotated: false, tag: null });
+    // a box outside the import row changed since: only the import row counts, as before
+    await act(async () => setEdit(id, 'item1_unit', 'kgs'));
+    expect(screen.getByText(SAVED)).toBeTruthy();
+    expect(screen.queryByText(CHANGED)).toBeNull();
   }
   expect(settings()).toMatchObject({ clientCode: 'C014', writerCode: 'W03' });
+});
+
+test('in annotation mode, any box changed since the save says so', async () => {
+  mockTeam = true;
+  await updateSettings({ annotation: true, clientCode: 'C014', writerCode: 'W03' });
+  const id = await show('inv_0007');
+  await act(async () => setEdit(id, 'item1_unit', 'kgs')); // read "kg": corrected before the save
+  await checkEveryBox(id);
+  await saveSale();
+  expect(screen.getByText(SAVED)).toBeTruthy();
+  // the save keeps a short hash of the edits and checks, never what a box says: on the scan, in scan.json and in
+  // recent.json
+  const marks = getScan(id)!.savedMarks;
+  expect(marks).toMatch(/^[0-9a-f]{8}$/);
+  expect([keptScan(id).savedMarks, keptRecent(id).savedMarks]).toEqual([marks, marks]);
+
+  // a box outside the import row: the row's unit
+  await act(async () => setEdit(id, 'item1_unit', 'pcs'));
+  expect(screen.getByText(CHANGED)).toBeTruthy();
+  // taken back to what was saved
+  await act(async () => setEdit(id, 'item1_unit', 'kgs'));
+  expect(screen.getByText(SAVED)).toBeTruthy();
+  expect(screen.queryByText(CHANGED)).toBeNull();
+  // a check alone: "Looks right" on the corrected unit, as it stands
+  await act(async () => confirmBox(id, 'item1_unit'));
+  expect(screen.getByText(CHANGED)).toBeTruthy();
+  await press(screen.getByTestId('save-open'));
+  await press(screen.getByTestId('save-confirm'));
+  expect(screen.getByText(SAVED)).toBeTruthy();
+
+  // a checked box edited and then taken back is no longer checked, so it says so until the box is checked again; the
+  // order the boxes were checked in doesn't count
+  await act(async () => setEdit(id, 'item2_unit', 'pcs')); // read "pc"
+  expect(screen.getByText(CHANGED)).toBeTruthy();
+  await act(async () => setEdit(id, 'item2_unit', 'pc'));
+  expect(screen.getByText(CHANGED)).toBeTruthy();
+  await act(async () => confirmBox(id, 'item2_unit'));
+  expect(screen.getByText(SAVED)).toBeTruthy();
+
+  // with the mode off, only the import row counts, as before
+  await act(async () => setEdit(id, 'item1_unit', 'pcs'));
+  expect(screen.getByText(CHANGED)).toBeTruthy();
+  await act(async () => updateSettings({ annotation: false }));
+  expect(screen.getByText(SAVED)).toBeTruthy();
+  expect(screen.queryByText(CHANGED)).toBeNull();
+});
+
+test('a scan saved before the save kept its marks says only what its import row says', async () => {
+  mockTeam = true;
+  await updateSettings({ annotation: true, clientCode: 'C014', writerCode: 'W03' });
+  const id = await show('inv_0007');
+  await checkEveryBox(id);
+  await saveSale();
+  // its scan.json without the marks, as a save before this change wrote it, opened again from Saved invoices
+  const kept = keptScan(id);
+  delete kept.savedMarks;
+  memoryFs.files.set(`file:///docs/saved/${id}/scan.json`, JSON.stringify(kept));
+  await act(async () => {
+    forgetScan(id);
+    await openSaved(id);
+  });
+  expect(getScan(id)!.savedMarks).toBe('');
+  mockParams = { id, from: 'saved' };
+  await render(<Result />);
+  expect(screen.getByText(SAVED)).toBeTruthy();
+  await act(async () => setEdit(id, 'item1_unit', 'pcs'));
+  expect(screen.getByText(SAVED)).toBeTruthy();
+  expect(screen.queryByText(CHANGED)).toBeNull();
+  // its import row still counts
+  await act(async () => setEdit(id, 'invoice_no', '0007999'));
+  expect(screen.getByText(CHANGED)).toBeTruthy();
 });
