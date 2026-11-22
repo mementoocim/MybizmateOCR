@@ -365,7 +365,7 @@ class ScannerModule : Module() {
     0L
   }
 
-  /** Recent scans live in the app's files: keep the newest few folders (Recent scans shows 6), delete the rest. */
+  /** Recent scans live in the app's files: keep the newest few folders (Recent scans shows 20), delete the rest. */
   private fun keepNewest(dir: File, keep: Int) {
     dir.listFiles()
       ?.filter { it.isDirectory }
@@ -375,6 +375,6 @@ class ScannerModule : Module() {
   }
 
   private companion object {
-    const val KEEP_SCANS = 6
+    const val KEEP_SCANS = 20
   }
 }

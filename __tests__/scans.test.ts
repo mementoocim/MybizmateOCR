@@ -29,15 +29,17 @@ beforeEach(() => {
   jest.resetModules();
 });
 
-test('keeps the newest 6, newest first', () => {
+test('keeps the newest 20, newest first', () => {
   const { addScan, getScan, recentScans } = require('../lib/scans');
-  const ids = [1, 2, 3, 4, 5, 6, 7].map((i) => addScan({ label: `Scan ${i}`, source: 'gallery', result: result(`/s/${i}`) }));
+  const ids = Array.from({ length: 21 }, (_, i) =>
+    addScan({ label: `Scan ${i + 1}`, source: 'gallery', result: result(`/s/${i + 1}`) }),
+  );
   const recent = recentScans();
-  expect(recent).toHaveLength(6);
-  expect(recent[0].label).toBe('Scan 7');
-  expect(recent[5].label).toBe('Scan 2');
+  expect(recent).toHaveLength(20);
+  expect(recent[0].label).toBe('Scan 21');
+  expect(recent[19].label).toBe('Scan 2');
   expect(getScan(ids[0])).toBeUndefined();
-  expect(getScan(ids[6])?.label).toBe('Scan 7');
+  expect(getScan(ids[20])?.label).toBe('Scan 21');
 });
 
 test('edits, checked boxes, terms, kind and party are kept, and come back after a restart', async () => {

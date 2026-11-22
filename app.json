@@ -21,6 +21,9 @@
         "android.permission.CAMERA"
       ],
       "predictiveBackGestureEnabled": false,
+      "blockedPermissions": [
+        "android.permission.VIBRATE"
+      ],
       "package": "com.mybizmate.scan"
     },
     "web": {
@@ -38,13 +41,14 @@
         }
       ],
       "./plugins/with-windows-native-paths",
+      "./plugins/with-config-changes",
       "expo-asset",
       [
         "expo-splash-screen",
         {
           "image": "./assets/brand/splash-logo.png",
           "imageWidth": 104,
-          "backgroundColor": "#FAF7F0"
+          "backgroundColor": "#FCFAF6"
         }
       ],
       [
@@ -54,7 +58,32 @@
           "microphonePermission": false
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-font",
+        {
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "SchibstedGrotesk",
+                "fontDefinitions": [
+                  { "path": "./assets/fonts/SchibstedGrotesk-Regular.ttf", "weight": 400 },
+                  { "path": "./assets/fonts/SchibstedGrotesk-SemiBold.ttf", "weight": 600 },
+                  { "path": "./assets/fonts/SchibstedGrotesk-ExtraBold.ttf", "weight": 800 }
+                ]
+              },
+              {
+                "fontFamily": "IBMPlexMono",
+                "fontDefinitions": [
+                  { "path": "./assets/fonts/IBMPlexMono-Regular.ttf", "weight": 400 },
+                  { "path": "./assets/fonts/IBMPlexMono-Medium.ttf", "weight": 500 },
+                  { "path": "./assets/fonts/IBMPlexMono-SemiBold.ttf", "weight": 600 }
+                ]
+              }
+            ]
+          }
+        }
+      ]
     ],
     "scheme": "mybizmatescan"
   }
