@@ -9,7 +9,8 @@ import { Tap } from './Tap';
 // with an ink label; text a brandText label; destructive a panel fill in a dangerLine border, with a danger label;
 // destructiveText a danger label. Large is at least 56 dp tall and default 48; both grow with the label. Disabled is a
 // sand fill with a mute label, on every variant. Loading keeps the label, shows a spinner before it and blocks presses,
-// and so does a press whose promise hasn't settled: a double tap runs once.
+// and so does a press whose promise hasn't settled: a double tap runs once. A button can report how many lines its
+// label took, so a row of them (ButtonRow) can stack when one wraps.
 
 export type ButtonVariant = 'primary' | 'secondary' | 'text' | 'destructive' | 'destructiveText';
 export type ButtonProps = {
@@ -22,6 +23,7 @@ export type ButtonProps = {
   loading?: boolean;
   testID?: string;
   accessibilityHint?: string;
+  onLabelLines?: (lines: number) => void; // from the label's onTextLayout
 };
 
 const LARGE = 56; // a large button's minimum height (§5.6)
@@ -36,6 +38,7 @@ export function Button({
   loading = false,
   testID,
   accessibilityHint,
+  onLabelLines,
 }: ButtonProps) {
   const [pending, setPending] = useState(false);
   const running = useRef(false); // set at once, so a second tap is refused even before the re-render disables it
@@ -78,7 +81,12 @@ export function Button({
       ) : (
         Icon && <Icon size={touch.iconSmall} color={color} />
       )}
-      <Text style={[size === 'large' ? type.buttonLarge : type.button, styles.label, { color }]}>{label}</Text>
+      <Text
+        // Only when asked: with onTextLayout set, Android measures the label's lines on every layout.
+        onTextLayout={onLabelLines && ((e) => onLabelLines(e.nativeEvent.lines.length))}
+        style={[size === 'large' ? type.buttonLarge : type.button, styles.label, { color }]}>
+        {label}
+      </Text>
     </Tap>
   );
 }
