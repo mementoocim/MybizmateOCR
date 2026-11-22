@@ -22,8 +22,8 @@ const STATE_LINE: Record<BoxState, string> = {
 /**
  * What the camera saw in the given boxes, each one fixable: the person types what the box says (an edit is "the box
  * says this", kept apart from the reading), and the checks run again. In annotation mode each box that can become
- * training data says whether it's checked yet, and its reading can be confirmed as it is ("Looks right"). children:
- * more under the boxes (the customer).
+ * training data says whether it's checked yet, and its value can be confirmed as it stands ("Looks right"), until
+ * something else is picked or typed. children: more under the boxes (the customer).
  */
 export function BoxSheet({
   visible,
@@ -56,6 +56,9 @@ export function BoxSheet({
 
   if (editing !== null) {
     const read = readOf(editing);
+    // "Looks right" checks the box's value as it stands: a backup reading picked or other words typed is a correction,
+    // which only Save keeps
+    const canConfirm = training.has(editing) && draft.trim() === (boxValue(scan, editing) ?? '');
     const others = [...new Set([...(read?.alts ?? []), ...(read && hasOwn(scan.edits, editing) ? [read.text] : [])])].filter(
       (t) => t !== '',
     );
@@ -87,7 +90,7 @@ export function BoxSheet({
           {"Type exactly what is written, even if it looks wrong. The checks then show what doesn't add up."}
         </Text>
         <View style={styles.buttons}>
-          {training.has(editing) && (
+          {canConfirm && (
             <OutlinedButton
               testID="box-confirm"
               label="Looks right"

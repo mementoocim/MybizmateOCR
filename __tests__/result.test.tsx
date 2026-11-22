@@ -189,6 +189,32 @@ test('the editor confirms a box in annotation mode', async () => {
   expect(screen.queryByTestId('box-confirm')).toBeNull();
 });
 
+test("Looks right is only for the box's value as it stands", async () => {
+  mockTeam = true;
+  await act(async () => updateSettings({ annotation: true }));
+  await show('inv_0007');
+  const confirmButton = () => screen.queryByTestId('box-confirm');
+  const type = (text: string) => act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), text));
+  await press(screen.getByText('Total due'));
+  await press(screen.getByTestId('fix-total_due'));
+  expect(confirmButton()).toBeTruthy(); // its reading, “24,377”
+  // a backup reading picked, or other words typed, is a correction: only Save keeps it
+  await press(screen.getByText('24.377'));
+  expect(confirmButton()).toBeNull();
+  await type('24,000');
+  expect(confirmButton()).toBeNull();
+  await type(' 24,377 '); // back to the reading, spaces aside as Save keeps it
+  expect(confirmButton()).toBeTruthy();
+  await type('24,000');
+  await press(screen.getByTestId('box-save'));
+  expect(screen.getByText('Corrected')).toBeTruthy();
+  // on a corrected box, the correction as it stands can be confirmed, but not the reading it replaced
+  await press(screen.getByTestId('fix-total_due'));
+  expect(confirmButton()).toBeTruthy();
+  await press(screen.getByText('24,377'));
+  expect(confirmButton()).toBeNull();
+});
+
 test('terms', async () => {
   await show('inv_0007', {
     edit: (r) => {
