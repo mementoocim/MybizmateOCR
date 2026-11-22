@@ -93,7 +93,7 @@ export const LedgerRow = forwardRef<ViewInstance, LedgerRowProps>(function Ledge
     </>
   );
   const a11y = {
-    accessibilityLabel: spokenLabel({ label, value, sub, amount, reason, flagged, edited }),
+    accessibilityLabel: spokenLabel({ label, value, badge, sub, amount, reason, flagged, edited }),
     testID,
     style: styles.row,
   };
@@ -120,19 +120,20 @@ export const LedgerRow = forwardRef<ViewInstance, LedgerRowProps>(function Ledge
 });
 
 /**
- * What TalkBack says (§7): the key, the value ("blank" when empty), the sub-line and the amount; then the flag and its
- * reason, or that the value was edited.
+ * What TalkBack says (§7): the key, the value ("blank" when empty), the badge beside it (ruling T4-4: a badge is part
+ * of its row's label), the sub-line and the amount; then the flag and its reason, or that the value was edited.
  */
 function spokenLabel({
   label,
   value,
+  badge,
   sub,
   amount,
   reason,
   flagged,
   edited,
-}: Pick<LedgerRowProps, 'label' | 'value' | 'sub' | 'amount' | 'reason' | 'flagged' | 'edited'>): string {
-  const said = [label, value ?? 'blank', sub, amount].filter(Boolean).join(', ');
+}: Pick<LedgerRowProps, 'label' | 'value' | 'badge' | 'sub' | 'amount' | 'reason' | 'flagged' | 'edited'>): string {
+  const said = [label, value ?? 'blank', badge?.label, sub, amount].filter(Boolean).join(', ');
   if (flagged) return reason ? `${said}. Check: ${lowerFirst(reason)}` : `${said}. Check`;
   return edited ? `${said}, edited` : said;
 }

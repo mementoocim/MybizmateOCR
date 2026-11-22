@@ -293,7 +293,8 @@ test('LedgerRow: the value in its style with its badge, the sub-line, and the am
   expect(screen.getByText('Oct 1 – Dec 31, 2026')).toHaveStyle({ ...type.figure, color: colors.ink });
   expect(screen.getByText('Q4')).toHaveStyle({ ...type.badge, color: colors.mute }); // beside the value
   expect(screen.getByText('Q4').parent!.parent).toBe(screen.getByText('Oct 1 – Dec 31, 2026').parent);
-  expect(screen.getByRole('button', { name: 'Period, Oct 1 – Dec 31, 2026' })).toBeOnTheScreen();
+  // Ruling T4-4: the badge is part of the row's label (§5.6, §7), right after the value.
+  expect(screen.getByRole('button', { name: 'Period, Oct 1 – Dec 31, 2026, Q4' })).toBeOnTheScreen();
 
   expect(screen.getByText('Detergent')).toHaveStyle({ ...type.value, color: colors.ink });
   expect(screen.getByText('2 × 110.00')).toHaveStyle({ ...type.figureSmall, color: colors.mute });
@@ -306,6 +307,25 @@ test('LedgerRow: the value in its style with its badge, the sub-line, and the am
 
   expect(screen.getByText('₱5,810.50')).toHaveStyle({ ...type.figureStrong, color: colors.ink });
   expect(screen.getByText('The written totals agree')).toHaveStyle({ ...type.label, color: colors.mute });
+
+  // Every part at once, to pin the order: key, value, badge, sub-line, amount, then the flag.
+  await render(
+    <LedgerRow
+      label="Period"
+      value="Oct 1 – Dec 31, 2026"
+      badge={{ label: 'Q4', tone: 'neutral' }}
+      sub="Printed on the form"
+      amount="₱1,144.03"
+      reason="Not one calendar quarter"
+      flagged
+      onPress={noop}
+    />,
+  );
+  expect(
+    screen.getByRole('button', {
+      name: 'Period, Oct 1 – Dec 31, 2026, Q4, Printed on the form, ₱1,144.03. Check: not one calendar quarter',
+    }),
+  ).toBeOnTheScreen();
 });
 
 test('LedgerRow: the key keeps its width; the value takes the rest, or goes under past half the row', async () => {
