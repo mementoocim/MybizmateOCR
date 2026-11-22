@@ -11,13 +11,14 @@ internal object NativeScanner {
   /** {"opencv": "...", "onnxruntime": "..."}: the libraries the core was built with. */
   external fun coreInfo(): String
 
-  /** Loads the model and both forms once; returns a handle for scanPhoto, detectFrame and destroy. */
+  /** Loads the model and the three forms once; returns a handle for scanPhoto, scanPdf, detectFrame and destroy. */
   external fun create(
     model: ByteArray,
     dict: String,
     fieldMap: String,
     formPng: ByteArray,
     serviceJson: String,
+    bir2307Json: String,
     threads: Int,
   ): Long
 
@@ -28,9 +29,16 @@ internal object NativeScanner {
   external fun scanPhoto(handle: Long, path: String, outDir: String): String
 
   /**
+   * Reads page 1 of a PDF as scanPhoto reads a photo (Scanner::scanPdf), writing the same files into outDir. Returns the
+   * scan result's JSON. Throws java.io.IOException("pdf_<code>"): pdf_too_big, pdf_broken, pdf_password or
+   * pdf_page_too_big when the core refuses the PDF (before anything is written), pdf_unreadable on any other failure.
+   */
+  external fun scanPdf(handle: Long, path: String, outDir: String): String
+
+  /**
    * One camera frame's grey plane (a direct buffer, rows rowStride bytes apart, turned rotation degrees clockwise from
-   * upright). Returns [form (0 sales, 1 service), tl, tr, br, bl as x, y in the upright frame, sharpness, sharpMin], or
-   * null when no form is in view. Never waits for a scan.
+   * upright). Returns [form (0 sales, 1 service, 2 BIR 2307), tl, tr, br, bl as x, y in the upright frame, sharpness,
+   * sharpMin] (see detectionOf), or null when no form is in view. Never waits for a scan.
    */
   external fun detectFrame(handle: Long, y: ByteBuffer, width: Int, height: Int, rowStride: Int, rotation: Int): FloatArray?
 

@@ -10,6 +10,7 @@
 #include <mutex>
 #include <utility>
 
+#include <opencv2/geometry/2d.hpp>  // OpenCV 5: pointPolygonTest
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
@@ -101,7 +102,150 @@ std::optional<std::string> termsOf(double cash, double account) {
   return std::string(cash > account ? "cash" : "account");
 }
 
+// A character of a PDF's text that leaves no ink: a space, a line break or another control character (as renderPdf
+// counts them when it tells a picture page).
+bool isGap(char32_t c) { return c <= 0x20 || (c >= 0x7F && c <= 0xA0); }
+
+// Whether a box of this type keeps a character of the PDF's text, and whether it keeps a space between words (see
+// textInBoxes). Any other type keeps everything, as a text box does. A surrogate or a code past U+10FFFF isn't a
+// character, and no box keeps one.
+bool keeps(const std::string& type, char32_t c) {
+  if ((c >= 0xD800 && c <= 0xDFFF) || c > 0x10FFFF) return false;
+  const bool digit = c >= '0' && c <= '9', capital = c >= 'A' && c <= 'Z', small = c >= 'a' && c <= 'z';
+  if (type == "digits" || type == "tin" || type == "printed_digits") return digit;
+  if (type == "code") return digit || capital;
+  if (type == "amount") return digit || c == ',' || c == '.';
+  if (type == "number") return digit || c == ',' || c == '.' || c == '/';
+  if (type == "date") return digit || capital || small || c == '/' || c == '-' || c == '.' || c == ',';
+  return true;
+}
+
+bool keepsSpaces(const std::string& type) {
+  return type != "digits" && type != "tin" && type != "printed_digits" && type != "code" && type != "amount";
+}
+
+void appendUtf8(std::string& out, char32_t c) {
+  if (c < 0x80) {
+    out += static_cast<char>(c);
+  } else if (c < 0x800) {
+    out += static_cast<char>(0xC0 | (c >> 6));
+    out += static_cast<char>(0x80 | (c & 0x3F));
+  } else if (c < 0x10000) {
+    out += static_cast<char>(0xE0 | (c >> 12));
+    out += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+    out += static_cast<char>(0x80 | (c & 0x3F));
+  } else {
+    out += static_cast<char>(0xF0 | (c >> 18));
+    out += static_cast<char>(0x80 | ((c >> 12) & 0x3F));
+    out += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+    out += static_cast<char>(0x80 | (c & 0x3F));
+  }
+}
+
+// The PDF's own text in each of a form's fields (a Field or a ServiceField), or none for a checkbox; every text empty
+// when there is no PDF text. H: the photo (the PDF's render) -> the form's page as it is read.
+template <typename F>
+std::vector<std::string> pdfTextIn(const std::vector<PdfChar>* pdfText, const cv::Matx33d& H,
+                                   const std::vector<F>& fields) {
+  std::vector<std::string> out(fields.size());
+  if (!pdfText) return out;
+  std::vector<TextBox> boxes;
+  std::vector<size_t> fieldOf;  // each box's field
+  for (size_t i = 0; i < fields.size(); i++) {
+    if (fields[i].type == "checkbox") continue;
+    boxes.push_back({fields[i].box, fields[i].type});
+    fieldOf.push_back(i);
+  }
+  std::vector<std::string> texts = textInBoxes(*pdfText, H, boxes);
+  for (size_t k = 0; k < boxes.size(); k++) out[fieldOf[k]] = std::move(texts[k]);
+  return out;
+}
+
 }  // namespace
+
+std::vector<std::string> textInBoxes(const std::vector<PdfChar>& chars, const cv::Matx33d& renderToPage,
+                                     const std::vector<TextBox>& boxes) {
+  // renderPdf's boxes put the render's pixel i over [i, i + 1), and a box's rect on the page covers its pixels the same
+  // way; OpenCV's homographies put pixel i's centre at i. So the page is mapped back onto the render half a pixel off,
+  // through the inverse, and half a pixel back.
+  const cv::Matx33d toEdges(1, 0, 0.5, 0, 1, 0.5, 0, 0, 1), toCentres(1, 0, -0.5, 0, 1, -0.5, 0, 0, 1);
+  const cv::Mat back(toEdges * renderToPage.inv() * toCentres);  // the page -> the render
+  struct Quad {
+    std::vector<cv::Point2f> corners;  // the box on the render
+    cv::Point2f lo, hi;                // their bounds
+  };
+  std::vector<Quad> quads(boxes.size());
+  for (size_t k = 0; k < boxes.size(); k++) {
+    const cv::Rect& b = boxes[k].box;
+    const auto x0 = static_cast<float>(b.x), y0 = static_cast<float>(b.y);
+    const auto x1 = static_cast<float>(b.x + b.width), y1 = static_cast<float>(b.y + b.height);
+    Quad& q = quads[k];
+    cv::perspectiveTransform(std::vector<cv::Point2f>{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}, q.corners, back);
+    q.lo = q.hi = q.corners[0];
+    for (const auto& p : q.corners) {
+      q.lo = {std::min(q.lo.x, p.x), std::min(q.lo.y, p.y)};
+      q.hi = {std::max(q.hi.x, p.x), std::max(q.hi.y, p.y)};
+    }
+  }
+
+  // Each character goes to the box holding its loose box's centre (its line's middle, not its glyph's: a caption's
+  // comma hangs under its line): the box it is deepest in, should two (boxes that share an edge).
+  std::vector<std::vector<char32_t>> held(boxes.size());
+  for (const auto& c : chars) {
+    const cv::Point2f centre(c.loose.x + c.loose.width / 2, c.loose.y + c.loose.height / 2);
+    int best = -1;
+    double depth = 0;
+    for (size_t k = 0; k < quads.size(); k++) {
+      const Quad& q = quads[k];
+      if (centre.x < q.lo.x || centre.x > q.hi.x || centre.y < q.lo.y || centre.y > q.hi.y) continue;
+      const double d = cv::pointPolygonTest(q.corners, centre, true);  // how far inside: 0 on an edge, < 0 outside
+      if (d >= 0 && (best < 0 || d > depth)) {
+        best = static_cast<int>(k);
+        depth = d;
+      }
+    }
+    if (best >= 0) held[best].push_back(c.ch);
+  }
+
+  // Each box's characters in pdfium's order, as its type keeps them.
+  std::vector<std::string> out;
+  out.reserve(boxes.size());
+  for (size_t k = 0; k < boxes.size(); k++) {
+    const std::string& type = boxes[k].type;
+    std::string text;
+    bool gap = false;  // a space or a line break since the last character kept
+    for (char32_t ch : held[k]) {
+      if (isGap(ch)) {
+        gap = !text.empty();
+        continue;
+      }
+      if (type == "code" && ch >= 'a' && ch <= 'z') ch -= 'a' - 'A';  // an ATC typed in small letters: still the code
+      if (!keeps(type, ch)) continue;
+      if (gap && keepsSpaces(type)) text += ' ';
+      gap = false;
+      appendUtf8(text, ch);
+    }
+    out.push_back(std::move(text));
+  }
+  return out;
+}
+
+std::optional<BoxReading> joinLines(const std::vector<const BoxReading*>& lines) {
+  BoxReading out;
+  out.conf = std::numeric_limits<float>::infinity();
+  out.fromText = true;
+  bool any = false;
+  for (const BoxReading* line : lines) {
+    if (!line) continue;
+    if (any) out.text += " ";
+    out.text += line->text;
+    out.conf = std::min(out.conf, line->conf);
+    out.fromText = out.fromText && line->fromText;
+    any = true;
+  }
+  if (out.text.empty()) return std::nullopt;
+  return out;
+}
 
 std::optional<cv::Size> jpegSize(const std::string& path) {
   std::ifstream in(path, std::ios::binary);
@@ -168,34 +312,66 @@ cv::Mat decodePhoto(const std::string& path) {
 }
 
 struct Scanner::Impl {
+  // A form found by its printed border and cut box by box: the Service Invoice, or BIR Form 2307 (page 1). Each has
+  // its own finder, and its own minimum sharpness for a scan (sharpMin) and for the camera's photo (liveMin).
+  struct FrameForm {
+    ServiceTemplate tmpl;
+    FrameAligner aligner;
+    double sharpMin, liveMin;
+
+    FrameForm(const std::string& json, double sharp, double live)
+        : tmpl(ServiceTemplate::parse(json)), aligner(tmpl), sharpMin(sharp), liveMin(live) {}
+  };
+
+  // A frame form found in a photo: which one, and where.
+  struct FrameMatch {
+    const FrameForm* form;
+    FrameFound found;
+  };
+
   FormTemplate form;
-  ServiceTemplate service;
-  FrameAligner aligner;
+  std::vector<FrameForm> frames;  // tried when there are no corner squares; a tie goes to the first
   Recognizer recognizer;
   cv::Mat formInk;  // the blank form's printed ink, to tell an upside-down page
   std::mutex mutex;
 
-  explicit Impl(const Assets& a)
-      : form(FormTemplate::parse(a.fieldMap)),
-        service(ServiceTemplate::parse(a.serviceJson)),
-        aligner(service),
-        recognizer(a.model, a.dict, a.threads) {
+  explicit Impl(const Assets& a) : form(FormTemplate::parse(a.fieldMap)), recognizer(a.model, a.dict, a.threads) {
+    frames.reserve(2);
+    frames.emplace_back(a.serviceJson, quality::SERVICE_SHARP_MIN, quality::SERVICE_LIVE_MIN);
+    frames.emplace_back(a.bir2307Json, quality::BIR2307_SHARP_MIN, quality::BIR2307_LIVE_MIN);
     cv::Mat blank = cv::imdecode(a.formPng, cv::IMREAD_GRAYSCALE);
     if (blank.empty()) throw std::invalid_argument("form_small.png can't be decoded");
     formInk = quality::inkMap(blank);
   }
 
-  // The MyBizMate Sales Invoice: straightened by its corner squares (H: photo -> page).
-  void readSales(const cv::Mat& bgr, const cv::Mat& H, const std::string& outDir,
-                 std::chrono::steady_clock::time_point t0, ScanResult& r) {
+  // The frame form whose border is found with the highest score (a finder finds nothing scoring under 0.75), or none.
+  // The photo's lines are searched once, for every form. refit: refine the found corners at full resolution (scans);
+  // the live camera skips that, though a template that refits its finalists (the 2307's) still does, as its score needs.
+  std::optional<FrameMatch> findFrame(const cv::Mat& gray, bool refit) const {
+    const auto lines = findFrameLines(gray);
+    if (!lines) return std::nullopt;
+    std::optional<FrameMatch> best;
+    for (const auto& f : frames) {
+      auto found = f.aligner.find(*lines, gray, refit);
+      if (found && (!best || found->score > best->found.score)) best = FrameMatch{&f, *found};
+    }
+    return best;
+  }
+
+  // The MyBizMate Sales Invoice: straightened by its corner squares (H: photo -> page). pdfText: a PDF page's
+  // characters for its boxes to take (scanPdf), or none.
+  void readSales(const cv::Mat& bgr, const cv::Mat& H, const std::vector<PdfChar>* pdfText,
+                 const std::string& outDir, std::chrono::steady_clock::time_point t0, ScanResult& r) {
     cv::Mat page;
     cv::warpPerspective(bgr, page, H, cv::Size(PAGE_W, PAGE_H), cv::INTER_LINEAR);
     cv::Mat pageGray;
     cv::cvtColor(page, pageGray, cv::COLOR_BGR2GRAY);
+    cv::Matx33d toPage = H;  // the photo -> the page as it is read
     if (quality::upsideDown(pageGray, formInk)) {  // the 4 corner squares look the same from every side
       cv::rotate(page, page, cv::ROTATE_180);
       cv::cvtColor(page, pageGray, cv::COLOR_BGR2GRAY);
       r.turned = true;
+      toPage = cv::Matx33d(-1, 0, PAGE_W - 1, 0, -1, PAGE_H - 1, 0, 0, 1) * toPage;  // the turn ROTATE_180 makes
     }
     r.aligned = true;
     r.form = "sales_invoice";
@@ -206,16 +382,20 @@ struct Scanner::Impl {
     r.corners = photoCorners(H, form);
     r.timing.alignMs = msSince(t0);
 
-    // Cut the boxes; group the crops by type in the order each type first appears.
+    // Cut the boxes; group the crops by type in the order each type first appears. A box with writing that holds the
+    // PDF's text takes that text, and the model doesn't read it.
     const auto t1 = std::chrono::steady_clock::now();
+    const std::vector<std::string> texts = pdfTextIn(pdfText, toPage, form.fields);
     struct Cut {
       const Field* field;
       cv::Mat crop;
+      const std::string* text;  // the PDF's text in the box, or empty
     };
     std::vector<Cut> cuts;
     std::vector<std::string> types;
     double cash = 0, account = 0;
-    for (const auto& f : form.fields) {
+    for (size_t i = 0; i < form.fields.size(); i++) {
+      const Field& f = form.fields[i];
       if (f.type == "checkbox") {
         const double ratio = inkRatio(page, f.box, 3);
         if (f.name == "terms_cash") cash = ratio;
@@ -227,8 +407,8 @@ struct Scanner::Impl {
         r.blanks++;
         continue;
       }
-      cuts.push_back({&f, *crop});
-      if (std::find(types.begin(), types.end(), f.type) == types.end()) types.push_back(f.type);
+      cuts.push_back({&f, *crop, &texts[i]});
+      if (texts[i].empty() && std::find(types.begin(), types.end(), f.type) == types.end()) types.push_back(f.type);
     }
     r.terms = termsOf(cash, account);
     r.timing.cropMs = msSince(t1);
@@ -240,7 +420,7 @@ struct Scanner::Impl {
       std::vector<const Field*> fields;
       std::vector<cv::Mat> crops;
       for (const auto& c : cuts) {
-        if (c.field->type != type) continue;
+        if (c.field->type != type || !c.text->empty()) continue;
         fields.push_back(c.field);
         crops.push_back(c.crop);
       }
@@ -253,10 +433,16 @@ struct Scanner::Impl {
       BoxRead b;
       b.name = c.field->name;
       b.type = c.field->type;
-      const Reading& rd = readings[c.field];
-      b.text = rd.text;
-      b.conf = rd.conf;
-      b.alts = rd.alts;
+      if (!c.text->empty()) {  // the PDF's own text: exact
+        b.text = *c.text;
+        b.conf = 1;
+        b.fromText = true;
+      } else {
+        const Reading& rd = readings[c.field];
+        b.text = rd.text;
+        b.conf = rd.conf;
+        b.alts = rd.alts;
+      }
       b.cropSize = c.crop.size();
       if (!outDir.empty()) {
         b.cropFile = outDir + "/" + b.name + ".png";
@@ -267,35 +453,46 @@ struct Scanner::Impl {
     if (!outDir.empty()) r.pageFile = writePage(page, outDir);  // the whole page is the sheet here
   }
 
-  // The Service Invoice: straightened by its table border, read as frame_template.FrameReader.read_page reads it.
-  void readService(const cv::Mat& bgr, const FrameFound& found, const std::string& outDir,
-                   std::chrono::steady_clock::time_point t0, ScanResult& r) {
+  // A frame form (the Service Invoice, the BIR 2307): straightened by its border, read as
+  // frame_template.FrameReader.read_page reads the Service Invoice. A box with no writing isn't read. pdfText: a PDF
+  // page's characters for its boxes to take (scanPdf), or none.
+  void readFrameForm(const FrameForm& frame, const cv::Mat& bgr, const FrameFound& found,
+                     const std::vector<PdfChar>* pdfText, const std::string& outDir,
+                     std::chrono::steady_clock::time_point t0, ScanResult& r) {
+    const ServiceTemplate& t = frame.tmpl;
     cv::Mat page;
-    cv::warpPerspective(bgr, page, cv::Mat(found.H), service.page, cv::INTER_LINEAR, cv::BORDER_CONSTANT,
+    cv::warpPerspective(bgr, page, cv::Mat(found.H), t.page, cv::INTER_LINEAR, cv::BORDER_CONSTANT,
                         cv::Scalar(255, 255, 255));
     cv::Mat pageGray;
     cv::cvtColor(page, pageGray, cv::COLOR_BGR2GRAY);
     r.aligned = true;
-    r.form = "service_invoice";
+    r.form = t.name;
     r.sharpness = quality::sharpness(pageGray);  // the whole page, white border included, as the Python measures it
     r.light = quality::paperLight(pageGray);
-    r.sharpMin = quality::SERVICE_SHARP_MIN;
+    r.sharpMin = frame.sharpMin;
     r.darkMax = quality::DARK_MAX;
     r.corners = found.corners;
     r.timing.alignMs = msSince(t0);
 
     // Cut each box into its parts (its lines); header boxes may reach further past their box than table boxes.
     const auto t1 = std::chrono::steady_clock::now();
+    std::map<std::string, std::string> pdfTexts;  // the PDF's text in a box, by the box's name
+    {
+      std::vector<std::string> texts = pdfTextIn(pdfText, found.H, t.fields);
+      for (size_t i = 0; i < t.fields.size(); i++) {
+        if (!texts[i].empty()) pdfTexts[t.fields[i].name] = std::move(texts[i]);
+      }
+    }
     std::map<std::string, std::vector<cv::Mat>> parts;
     double cash = 0, account = 0;
-    for (const auto& f : service.fields) {
+    for (const auto& f : t.fields) {
       if (f.type == "checkbox") {
         const double ratio = inkRatio(page, f.box, 3);
         if (f.name == "terms_cash") cash = ratio;
         if (f.name == "terms_account") account = ratio;
         continue;
       }
-      const cv::Vec2i slack = f.box.y < service.frame[0].y ? service.slackHeader : service.slackTable;
+      const cv::Vec2i slack = f.box.y < t.frame[0].y ? t.slackHeader : t.slackTable;
       auto cut = cropBox(page, f, slack);
       if (cut.empty()) {
         r.blanks++;
@@ -306,26 +503,27 @@ struct Scanner::Impl {
     r.terms = termsOf(cash, account);
     r.timing.cropMs = msSince(t1);
 
-    // Read each type's parts together, in field order (the types in the order they first appear).
+    // Read each type's parts together, in field order (the types in the order they first appear). A box with writing
+    // that holds the PDF's text takes that text, and the model doesn't read it.
     const auto t2 = std::chrono::steady_clock::now();
     struct Piece {
       const ServiceField* field;
       const cv::Mat* crop;
     };
+    std::map<std::string, BoxReading> raw;
     std::vector<std::string> types;
     std::map<std::string, std::vector<Piece>> byType;
-    for (const auto& f : service.fields) {
+    for (const auto& f : t.fields) {
       const auto it = parts.find(f.name);
       if (it == parts.end()) continue;
+      const auto pdf = pdfTexts.find(f.name);
+      if (pdf != pdfTexts.end()) {  // the PDF's own text: exact
+        raw[f.name] = {pdf->second, 1.0f, {}, true};
+        continue;
+      }
       if (byType.find(f.type) == byType.end()) types.push_back(f.type);
       for (const auto& crop : it->second) byType[f.type].push_back({&f, &crop});
     }
-    struct Raw {
-      std::string text;
-      float conf = 0;
-      std::vector<std::string> alts;
-    };
-    std::map<std::string, Raw> raw;
     for (const auto& type : types) {
       const auto& pieces = byType[type];
       std::vector<cv::Mat> crops;
@@ -361,26 +559,21 @@ struct Scanner::Impl {
         }
       }
     }
-    // The amount in words takes 2 lines on this form: one reading, joined by a space, dropped when empty.
+    // The Service Invoice's amount in words takes 2 lines: one reading (joinLines), dropped when empty.
     {
-      std::string text;
-      float conf = std::numeric_limits<float>::infinity();
-      bool any = false;
+      std::vector<const BoxReading*> lines;
       for (const char* name : {"amount_words", "amount_words2"}) {
         const auto it = raw.find(name);
-        if (it == raw.end()) continue;
-        if (any) text += " ";
-        text += it->second.text;
-        conf = std::min(conf, it->second.conf);
-        any = true;
+        lines.push_back(it == raw.end() ? nullptr : &it->second);
       }
+      std::optional<BoxReading> words = joinLines(lines);
       raw.erase("amount_words");
       raw.erase("amount_words2");
-      if (!text.empty()) raw["amount_words"] = {text, conf, {}};
+      if (words) raw["amount_words"] = std::move(*words);
     }
     r.timing.readMs = msSince(t2);
 
-    for (const auto& f : service.fields) {
+    for (const auto& f : t.fields) {
       if (f.type == "checkbox" || f.name == "amount_words2") continue;
       const auto it = raw.find(f.name);
       if (it == raw.end()) continue;
@@ -397,6 +590,7 @@ struct Scanner::Impl {
       b.text = it->second.text;
       b.conf = it->second.conf;
       b.alts = it->second.alts;
+      b.fromText = it->second.fromText;
       b.cropSize = crop.size();
       if (!outDir.empty()) {
         b.cropFile = outDir + "/" + b.name + ".png";
@@ -404,7 +598,32 @@ struct Scanner::Impl {
       }
       r.reads.push_back(std::move(b));
     }
-    if (!outDir.empty()) r.pageFile = writePage(page(service.paper), outDir);
+    if (!outDir.empty()) r.pageFile = writePage(page(t.paper), outDir);
+  }
+
+  // A photo, or a PDF's render, scanned: the Sales Invoice by its corner squares, else a frame form by its border, each
+  // read through the homography it was found by. pdfText: the PDF page's characters for the boxes to take, or none.
+  ScanResult scan(const cv::Mat& bgr, const std::string& outDir, const std::vector<PdfChar>* pdfText) {
+    std::lock_guard<std::mutex> lock(mutex);
+    const auto t0 = std::chrono::steady_clock::now();
+    ScanResult r;
+    r.photoSize = bgr.size();
+    if (!outDir.empty()) {
+      std::filesystem::create_directories(outDir);
+      r.scanDir = outDir;
+    }
+    cv::Mat gray;
+    cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
+    if (auto H = findMarkers(gray, form)) {
+      readSales(bgr, *H, pdfText, outDir, t0, r);
+    } else if (auto match = findFrame(gray, true)) {  // no corner squares: maybe a frame form
+      readFrameForm(*match->form, bgr, match->found, pdfText, outDir, t0, r);
+    } else {
+      r.timing.alignMs = msSince(t0);
+    }
+    if (!outDir.empty()) r.originalFile = writeOriginal(bgr, r, outDir);
+    r.timing.totalMs = msSince(t0);
+    return r;
   }
 };
 
@@ -416,26 +635,15 @@ ScanResult Scanner::scanPhoto(const std::string& photoPath, const std::string& o
   return scanImage(decodePhoto(photoPath), outDir);
 }
 
-ScanResult Scanner::scanImage(const cv::Mat& bgr, const std::string& outDir) {
-  std::lock_guard<std::mutex> lock(impl_->mutex);
-  const auto t0 = std::chrono::steady_clock::now();
-  ScanResult r;
-  r.photoSize = bgr.size();
-  if (!outDir.empty()) {
-    std::filesystem::create_directories(outDir);
-    r.scanDir = outDir;
-  }
-  cv::Mat gray;
-  cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
-  if (auto H = findMarkers(gray, impl_->form)) {
-    impl_->readSales(bgr, *H, outDir, t0, r);
-  } else if (auto found = impl_->aligner.find(gray, true)) {  // no corner squares: maybe the Service Invoice
-    impl_->readService(bgr, *found, outDir, t0, r);
-  } else {
-    r.timing.alignMs = msSince(t0);
-  }
-  if (!outDir.empty()) r.originalFile = writeOriginal(bgr, r, outDir);
-  r.timing.totalMs = msSince(t0);
+ScanResult Scanner::scanImage(const cv::Mat& bgr, const std::string& outDir) { return impl_->scan(bgr, outDir, nullptr); }
+
+ScanResult Scanner::scanPdf(const std::string& pdfPath, const std::string& outDir) {
+  const PdfPage pdf = renderPdf(pdfPath);  // a refusal comes before anything is written
+  // A picture page skips the text step: it shows no text of its own (a scanner app's hidden OCR layer isn't in chars).
+  ScanResult r = impl_->scan(pdf.bgr, outDir, pdf.picture ? nullptr : &pdf.chars);
+  r.source = "pdf";
+  r.pageCount = pdf.pageCount;
+  r.picture = pdf.picture;
   return r;
 }
 
@@ -460,12 +668,13 @@ std::optional<FrameDetection> Scanner::detectFrame(const cv::Mat& gray) const {
     return detection("sales_invoice", *H, {{0, 0}, {w, 0}, {w, h}, {0, h}}, cv::Size(PAGE_W, PAGE_H),
                      quality::SALES_LIVE_MIN);
   }
-  if (auto found = im.aligner.find(gray, false)) {  // the live outline skips the corner refit
-    const cv::Rect& p = im.service.paper;
+  if (auto match = im.findFrame(gray, false)) {  // the live outline skips the final corner refit (see findFrame)
+    const ServiceTemplate& t = match->form->tmpl;
+    const cv::Rect& p = t.paper;
     const auto x0 = static_cast<float>(p.x), y0 = static_cast<float>(p.y);
     const auto x1 = static_cast<float>(p.x + p.width), y1 = static_cast<float>(p.y + p.height);
-    return detection("service_invoice", cv::Mat(found->H), {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}, im.service.page,
-                     quality::SERVICE_LIVE_MIN);
+    return detection(t.name, cv::Mat(match->found.H), {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}, t.page,
+                     match->form->liveMin);
   }
   return std::nullopt;
 }

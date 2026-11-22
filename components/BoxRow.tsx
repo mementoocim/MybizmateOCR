@@ -3,7 +3,13 @@ import { Image, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../lib/theme';
 import type { BoxRead } from '../modules/scanner';
 
-/** One box as the camera saw it: its name, its cut-out, and its reading with how sure the model was. */
+/** How a box was read: from a PDF's own text, or the model's reading and how sure it was. */
+export function readingText(read: BoxRead): string {
+  if (read.fromText) return "From the PDF's text";
+  return read.text === '' ? "Couldn't make out any writing" : `Read as “${read.text}” · ${Math.round(read.conf * 100)}% sure`;
+}
+
+/** One box as the camera saw it: its name, its cut-out, and how it was read. */
 export function BoxRow({ label, read }: { label: string; read: BoxRead | null }) {
   if (!read) {
     return (
@@ -13,14 +19,11 @@ export function BoxRow({ label, read }: { label: string; read: BoxRead | null })
       </View>
     );
   }
-  const sure = Math.round(read.conf * 100);
   return (
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
       {read.cropUri && <Image source={{ uri: read.cropUri }} style={styles.crop} resizeMode="contain" />}
-      <Text style={[styles.reading, read.conf < 0.9 && styles.unsure]}>
-        {read.text === '' ? "Couldn't make out any writing" : `Read as “${read.text}” · ${sure}% sure`}
-      </Text>
+      <Text style={[styles.reading, read.conf < 0.9 && styles.unsure]}>{readingText(read)}</Text>
     </View>
   );
 }

@@ -37,7 +37,13 @@ export function boxValue(scan: StoredScan, box: string): string | null {
   return scan.result.reads.find((r) => r.name === box)?.text ?? null;
 }
 
-/** What the checks read: each box's reading and backups, an edited box as the person typed it (with no backups). */
+/**
+ * What the checks read: each box's reading and backups, an edited box as the person typed it (with no backups), and
+ * the photo's measures. The core measures every page it straightens, a PDF's rendered page too, but a box read from
+ * the PDF's own text is exact whatever the page looks like: a PDF gets no photo checks when every box read came from
+ * its text. A box the model read from the page is only as good as the page, so a photo, a picture PDF, and a PDF whose
+ * visible text (a page number, a stamp on a scan) left some box to the model get them.
+ */
 export function rawFromScan(scan: StoredScan): Raw {
   const r = scan.result;
   const boxes: Record<string, Box> = {};
@@ -46,8 +52,9 @@ export function rawFromScan(scan: StoredScan): Raw {
     if (text === '') delete boxes[name];
     else boxes[name] = { text, alts: [] };
   }
+  const typed = r.source === 'pdf' && r.reads.length > 0 && r.reads.every((read) => read.fromText);
   const photo =
-    r.aligned && r.sharpness != null && r.sharpMin != null && r.light != null && r.darkMax != null
+    !typed && r.aligned && r.sharpness != null && r.sharpMin != null && r.light != null && r.darkMax != null
       ? { sharpness: pyRound(r.sharpness, 4), sharp_min: r.sharpMin, light: pyRound(r.light, 1), dark_max: r.darkMax }
       : null;
   return { boxes, terms: scan.terms ?? r.terms, photo };
@@ -104,12 +111,20 @@ export function problemWords(final: Final, kind: Kind, supplierMissing: boolean)
   return out;
 }
 
-const listColumn = (p: Party) => p.code || exportName(p);
+/** A list party as MyBizMate's imports name it: its code, else its name as MyBizMate has it. */
+export const listColumn = (p: Party) => p.code || exportName(p);
+
+/** A scan with a sale: one of the two invoices, its form found. A BIR 2307 has its own checks (lib/cert.ts). */
+export function isInvoice(scan: StoredScan): boolean {
+  const { aligned, form } = scan.result;
+  return aligned && (form === 'sales_invoice' || form === 'service_invoice');
+}
 
 // One run of the checks per scan as it stands: Home's row, the scan's screen and Saved invoices share it. The
 // stores replace a scan, the lists or the settings when they change, so the same objects give the same answer.
 const views = new WeakMap<StoredScan, { lists: Lists; settings: Settings; view: SaleView }>();
 
+/** The sale of an invoice's scan (isInvoice): a 2307 never goes through a sale's checks. */
 export function saleOf(scan: StoredScan, lists: Lists, settings: Settings): SaleView {
   const hit = views.get(scan);
   if (hit && hit.lists === lists && hit.settings === settings) return hit.view;

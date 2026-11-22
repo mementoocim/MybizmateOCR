@@ -16,6 +16,13 @@ function scanOf(stem: string, change: Parameters<typeof updateScan>[1] = {}): St
   return getScan(id)!;
 }
 
+/** A made-up 2307 (fixtures/core/expected2307) imported as a PDF, with the person's changes. */
+function pdfOf(stem: string, change: Parameters<typeof updateScan>[1] = {}): StoredScan {
+  const id = addScan({ label: `PDF: ${stem}.pdf`, source: 'pdf', result: parseScanResult(coreJson(stem)) });
+  updateScan(id, change);
+  return getScan(id)!;
+}
+
 const showRow = (scan: StoredScan) => render(<RecentRow scan={scan} onPress={() => {}} />);
 const SAVED = { savedAt: '2026-11-20T01:00:00.000Z', details: { taxType: 'VAT', account: 'Sales', terms: 'cash', atc: '' } } as const;
 
@@ -47,6 +54,28 @@ test('the things to check', async () => {
 test('ready to post', async () => {
   await showRow(scanOf('inv_0007'));
   expect(screen.getByText(/^Ready to post · 0 ms · /)).toBeTruthy();
+});
+
+test("a 2307's status", async () => {
+  // checked as a 2307, never as an invoice (it has no date, terms or total due)
+  await showRow(pdfOf('bir2307_text_0'));
+  expect(screen.getByText(/^Ready to save · 0 ms · \d{1,2}:\d{2} (AM|PM)$/)).toBeTruthy();
+  // row 1's months, and the total row's 1st month, no longer add up
+  await showRow(pdfOf('bir2307_text_0', { edits: { ewt1_m1: '100,674.00' } }));
+  expect(screen.getByText(/^2 to check · 0 ms · /)).toBeTruthy();
+  await showRow(pdfOf('bir2307_text_0', { saved: SAVED }));
+  expect(screen.getByText(/^Saved as a 2307 · 0 ms · /)).toBeTruthy();
+});
+
+test("a 2307 that can't be saved yet says why, as its card does", async () => {
+  // nothing to check, but no income payments were read: never "Ready to save"
+  const read = parseScanResult(coreJson('bir2307_text_0'));
+  const noPayments = { ...read, reads: read.reads.filter((b) => !b.name.startsWith('ewt')) };
+  await showRow(pdfOf('bir2307_text_0', { result: noPayments }));
+  expect(screen.getByText(/^No income payments were read · 0 ms · \d{1,2}:\d{2} (AM|PM)$/)).toBeTruthy();
+  // no payor's name, and its TIN matches no customer (there are none yet)
+  await showRow(pdfOf('bir2307_text_0', { edits: { payor_name: '' } }));
+  expect(screen.getByText(/^Add the payor first: tap Payor · 0 ms · /)).toBeTruthy();
 });
 
 test('the status follows the lists', async () => {

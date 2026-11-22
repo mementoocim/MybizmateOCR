@@ -12,17 +12,23 @@ const ITEMS: string = fs.readFileSync('fixtures/lists/items.csv', 'utf8');
 
 const mockToast = jest.fn();
 const mockPick = jest.fn();
+const mockRelease = jest.fn(async (_uri: string) => undefined);
 
 jest.mock('../lib/toast', () => ({ toast: (m: string) => mockToast(m) }));
+jest.mock('../modules/scanner', () => ({ releaseAccess: (uri: string) => mockRelease(uri) }));
 jest.mock('expo-file-system', () => {
   const memory = require('../test-utils/memoryFs').memoryFs.module;
   return { ...memory, File: Object.assign(memory.File, { pickFileAsync: (options: object) => mockPick(options) }) };
 });
 
+/** Android's picker hands over the person's own file: a content:// link, here Downloads' (without the file's name). */
+const LINK = 'content://com.android.providers.downloads.documents/document/msf%3A31';
+
 /** What the file picker gives: a file with that name, type and text (its bytes UTF-8, as Google Sheets writes). */
 const picked = (name: string, text: string | Error, type = 'text/csv') => ({
   canceled: false,
   result: {
+    uri: LINK,
     name,
     type,
     text: async () => (text instanceof Error ? Promise.reject(text) : text),
@@ -105,6 +111,26 @@ test('a cancelled pick does nothing', async () => {
   await press(screen.getByText('Import CSV'));
   expect(mockToast).not.toHaveBeenCalled();
   expect(screen.getByText('No customers yet.')).toBeTruthy();
+  expect(mockRelease).not.toHaveBeenCalled(); // no file, no access to give up
+});
+
+test("the picker's lasting access to the file is given up once it has been read, or isn't a CSV", async () => {
+  // Android's picker keeps a grant on every file it hands over: the app needs none once the file is read
+  await render(<ListsScreen />);
+  const file = picked('parties.csv', PARTIES);
+  const bytes = jest.fn(file.result.bytes);
+  mockPick.mockResolvedValueOnce({ ...file, result: { ...file.result, bytes } });
+  await press(screen.getByText('Import CSV'));
+  expect(mockRelease.mock.calls).toEqual([[LINK]]);
+  expect(bytes.mock.invocationCallOrder[0]).toBeLessThan(mockRelease.mock.invocationCallOrder[0]);
+  expect(screen.getByText('Customers (21)')).toBeTruthy();
+  await importFile('notes.txt', 'hello', 'text/plain');
+  await importFile('broken.csv', new Error('unreadable'));
+  expect(mockRelease.mock.calls).toEqual([[LINK], [LINK], [LINK]]);
+  // a failure to give it up changes nothing for the person
+  mockRelease.mockRejectedValueOnce(new Error('gone'));
+  await importFile('one.csv', 'Code,Registered name\r\nC9,One Customer\r\n');
+  expect(mockToast.mock.calls.at(-1)).toEqual(['Imported 1 customer and 0 suppliers.']);
 });
 
 test('not a CSV', async () => {

@@ -21,21 +21,22 @@ namespace {
 
 constexpr int WORK_SIDE = 1400;       // lines are searched on a copy this big (longest side)
 constexpr double MIN_SCORE = 0.75;    // printed grid on ink, minus ink just beside it
-constexpr size_t MAX_LINES = 40;      // longest candidate lines kept per direction
 constexpr double SIDE_INK = 0.7;      // share of a border side that must be inked between its corners
 constexpr double OFF = 12;            // template px beside a rule where there should be paper
 constexpr double PARALLEL = 0.26;     // sin of the widest angle between opposite sides (15 degrees)
 constexpr size_t FINALISTS = 8;       // candidates that get the full check after the quick one
 constexpr double END_GAP = 0.015, END_REACH = 0.06, END_INK = 0.6;  // a border's lines stop at its corners
 constexpr double RAD_TO_DEG = 180.0 / CV_PI;  // math.degrees
+// A template with besideClear leaves out the points beside a rule that lie this close (template px) to another of its
+// rules: half the way from their own rule, so on that rule's ink once its width and a little misalignment count.
+constexpr double BESIDE_CLEAR = OFF / 2;
+// A template with refitFinalists refits only the finalists whose quick score is this close to MIN_SCORE. The most a
+// refit added was 0.103 (the 2307's photo_0 at the camera's size), and the other forms' fixtures score under 0.30
+// against the 2307, so their photos and frames pay for no refit.
+constexpr double REFIT_REACH = 0.15;
 
 using Quad = std::array<cv::Point2f, 4>;
-
-// A straight line: its weighted centre, unit direction, and how much of it the merged segments cover.
-struct Line {
-  cv::Vec2d c, d;
-  double covered = 0;
-};
+using Line = FrameLine;
 
 cv::Mat binarize(const cv::Mat& gray) {
   const int mn = std::min(gray.rows, gray.cols);
@@ -243,24 +244,53 @@ std::vector<double> arange(double start, double stop, double step) {  // numpy.a
   return v;
 }
 
+// How far (x, y) is from a printed rule: [y, x0, x1] when horizontal, [x, y0, y1] when vertical.
+double toRule(const cv::Vec3f& r, bool horizontal, double x, double y) {
+  const double along = horizontal ? x : y, across = horizontal ? y : x;
+  return std::hypot(std::max({r[1] - along, 0.0, along - r[2]}), across - r[0]);
+}
+
 }  // namespace
 
-FrameAligner::FrameAligner(const ServiceTemplate& t) : dst_(t.frame) {
+// The photo's ink at full size, binarized like the work copy (its points row by row, as np.nonzero lists them), and how
+// far either side of a corner's side its ink is looked for.
+struct FrameAligner::FullInk {
+  std::vector<cv::Point> points;
+  double band = 0;
+};
+
+FrameAligner::FrameAligner(const ServiceTemplate& t)
+    : dst_(t.frame), maxLines_(t.maxLines), refitFinalists_(t.refitFinalists) {
   aspect_ = (dst_[1].x - dst_[0].x) / (dst_[3].y - dst_[0].y);
-  for (const auto& r : t.gridH) {  // [y, x0, x1]
+  // A point beside rule `own` is kept, unless the template leaves out those lying on another of its rules.
+  auto keep = [&](bool horizontal, size_t own, double x, double y) {
+    if (!t.besideClear) return true;
+    for (size_t k = 0; k < t.gridH.size(); k++) {
+      if (!(horizontal && k == own) && toRule(t.gridH[k], true, x, y) <= BESIDE_CLEAR) return false;
+    }
+    for (size_t k = 0; k < t.gridV.size(); k++) {
+      if (!(!horizontal && k == own) && toRule(t.gridV[k], false, x, y) <= BESIDE_CLEAR) return false;
+    }
+    return true;
+  };
+  for (size_t k = 0; k < t.gridH.size(); k++) {  // [y, x0, x1]
+    const auto& r = t.gridH[k];
     const double y = r[0];
     for (double x : arange(r[1] + 8.0, r[2] - 8.0, 10)) {
       on_.emplace_back(static_cast<float>(x), static_cast<float>(y));
-      beside_.emplace_back(static_cast<float>(x), static_cast<float>(y - OFF));
-      beside_.emplace_back(static_cast<float>(x), static_cast<float>(y + OFF));
+      for (const double by : {y - OFF, y + OFF}) {
+        if (keep(true, k, x, by)) beside_.emplace_back(static_cast<float>(x), static_cast<float>(by));
+      }
     }
   }
-  for (const auto& r : t.gridV) {  // [x, y0, y1]
+  for (size_t k = 0; k < t.gridV.size(); k++) {  // [x, y0, y1]
+    const auto& r = t.gridV[k];
     const double x = r[0];
     for (double y : arange(r[1] + 8.0, r[2] - 8.0, 10)) {
       on_.emplace_back(static_cast<float>(x), static_cast<float>(y));
-      beside_.emplace_back(static_cast<float>(x - OFF), static_cast<float>(y));
-      beside_.emplace_back(static_cast<float>(x + OFF), static_cast<float>(y));
+      for (const double bx : {x - OFF, x + OFF}) {
+        if (keep(false, k, bx, y)) beside_.emplace_back(static_cast<float>(bx), static_cast<float>(y));
+      }
     }
   }
 }
@@ -283,11 +313,9 @@ double FrameAligner::score(const Quad& q, const cv::Mat& near, const cv::Mat& in
   return hits(on_, near) - hits(beside_, ink);
 }
 
-FrameAligner::Quad FrameAligner::refine(const cv::Mat& gray, const Quad& q) const {
-  const cv::Mat th = binarize(gray);
-  std::vector<cv::Point> ink;
-  cv::findNonZero(th, ink);  // row by row, like np.nonzero
-  const double band = std::max(3.0, std::min(gray.rows, gray.cols) * 0.003);
+FrameAligner::Quad FrameAligner::refine(const FullInk& full, const Quad& q) const {
+  const std::vector<cv::Point>& ink = full.points;
+  const double band = full.band;
   struct Side {
     cv::Point2f p, v;
   };
@@ -321,7 +349,7 @@ FrameAligner::Quad FrameAligner::refine(const cv::Mat& gray, const Quad& q) cons
   return out;
 }
 
-std::optional<FrameFound> FrameAligner::find(const cv::Mat& gray, bool refit) const {
+std::optional<FrameLines> findFrameLines(const cv::Mat& gray) {
   const int h0 = gray.rows, w0 = gray.cols;
   const double s = std::min(1.0, WORK_SIDE / static_cast<double>(std::max(h0, w0)));
   cv::Mat small = gray;
@@ -334,25 +362,40 @@ std::optional<FrameFound> FrameAligner::find(const cv::Mat& gray, bool refit) co
   // Too small to hold a form: the threshold's block would be under 3 px, which OpenCV refuses (the Python would raise;
   // the app says it found no form instead, as align.cpp does for the corner squares).
   if ((static_cast<int>(mn * 0.04) | 1) < 3) return std::nullopt;
-  const cv::Mat th = binarize(small);
+  FrameLines lines;
+  lines.scale = s;
+  lines.ink = binarize(small);
   std::vector<cv::Vec4i> found;
-  cv::HoughLinesP(th, found, 1, CV_PI / 180, static_cast<int>(mn * 0.08), static_cast<int>(mn * 0.12),
+  cv::HoughLinesP(lines.ink, found, 1, CV_PI / 180, static_cast<int>(mn * 0.08), static_cast<int>(mn * 0.12),
                   static_cast<int>(mn * 0.012));
   if (found.empty()) return std::nullopt;
-  std::vector<cv::Vec4d> segs(found.begin(), found.end());
+  const std::vector<cv::Vec4d> segs(found.begin(), found.end());
   const double tol = std::max(2.0, mn * 0.003);
-  auto keep = [&](bool horizontal) {
-    std::vector<Line> out;
+  // Each template keeps the first maxLines of these: the Python's first maxLines lines that cover enough.
+  for (const bool horizontal : {true, false}) {
     for (const auto& l : merge(segs, horizontal, cv::Size(w, h), tol)) {
-      if (out.size() == MAX_LINES) break;
-      if (l.covered >= mn * 0.15) out.push_back(l);
+      if (l.covered >= mn * 0.15) (horizontal ? lines.horizontal : lines.vertical).push_back(l);
     }
-    return out;
+  }
+  cv::dilate(lines.ink, lines.near, cv::Mat::ones(5, 5, CV_8U));
+  return lines;
+}
+
+std::optional<FrameFound> FrameAligner::find(const cv::Mat& gray, bool refit) const {
+  const auto lines = findFrameLines(gray);
+  if (!lines) return std::nullopt;
+  return find(*lines, gray, refit);
+}
+
+std::optional<FrameFound> FrameAligner::find(const FrameLines& lines, const cv::Mat& gray, bool refit) const {
+  const cv::Mat& th = lines.ink;
+  const cv::Mat& near = lines.near;
+  const int h = th.rows, w = th.cols, mn = std::min(h, w);
+  auto top = [&](const std::vector<Line>& all) {  // the template's longest lines
+    return std::vector<Line>(all.begin(), all.begin() + static_cast<std::ptrdiff_t>(std::min(all.size(), maxLines_)));
   };
-  std::vector<Line> hs = keep(true), vs = keep(false);
+  std::vector<Line> hs = top(lines.horizontal), vs = top(lines.vertical);
   if (hs.size() < 2 || vs.size() < 2) return std::nullopt;
-  cv::Mat near;
-  cv::dilate(th, near, cv::Mat::ones(5, 5, CV_8U));
   std::stable_sort(hs.begin(), hs.end(), [](const Line& a, const Line& b) { return a.c[1] < b.c[1]; });
   std::stable_sort(vs.begin(), vs.end(), [](const Line& a, const Line& b) { return a.c[0] < b.c[0]; });
   std::vector<std::vector<int64_t>> hprof, vprof, hthin, vthin;  // thin ink: a rule is solid, text has gaps
@@ -421,21 +464,45 @@ std::optional<FrameFound> FrameAligner::find(const cv::Mat& gray, bool refit) co
   std::vector<std::pair<double, Quad>> quick;
   for (const auto& q : cands) quick.emplace_back(score(q, near, th, 3), q);
   std::stable_sort(quick.begin(), quick.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+  const float sf = static_cast<float>(lines.scale);
+  std::optional<FullInk> full;  // made the first time a corner is refitted
+  auto fullInk = [&]() -> const FullInk& {
+    if (!full) {
+      full.emplace();
+      // the work copy is the photo itself when it wasn't shrunk: its ink is already there
+      cv::findNonZero(lines.scale < 1 ? binarize(gray) : th, full->points);  // row by row, like np.nonzero
+      full->band = std::max(3.0, std::min(gray.rows, gray.cols) * 0.003);
+    }
+    return *full;
+  };
   double best = 0;
-  Quad bestQuad{};
+  Quad bestQuad{};               // on the work copy
+  std::optional<Quad> bestFull;  // in the photo, when refitted as a finalist
   for (size_t k = 0; k < std::min(FINALISTS, quick.size()); k++) {
-    const double sc = score(quick[k].second, near, th, 1);
+    Quad q = quick[k].second;
+    std::optional<Quad> atFull;
+    if (refitFinalists_ && quick[k].first >= MIN_SCORE - REFIT_REACH) {
+      Quad c;
+      for (int i = 0; i < 4; i++) c[i] = cv::Point2f(q[i].x / sf, q[i].y / sf);
+      atFull = refine(fullInk(), c);
+      for (int i = 0; i < 4; i++) q[i] = cv::Point2f((*atFull)[i].x * sf, (*atFull)[i].y * sf);
+    }
+    const double sc = score(q, near, th, 1);
     if (k == 0 || sc > best) {
       best = sc;
-      bestQuad = quick[k].second;
+      bestQuad = q;
+      bestFull = atFull;
     }
   }
   if (best < MIN_SCORE) return std::nullopt;
 
   Quad corners;
-  const float sf = static_cast<float>(s);
-  for (int k = 0; k < 4; k++) corners[k] = cv::Point2f(bestQuad[k].x / sf, bestQuad[k].y / sf);
-  if (refit) corners = refine(gray, corners);
+  if (bestFull) {
+    corners = *bestFull;
+  } else {
+    for (int k = 0; k < 4; k++) corners[k] = cv::Point2f(bestQuad[k].x / sf, bestQuad[k].y / sf);
+    if (refit) corners = refine(fullInk(), corners);
+  }
   const cv::Mat H = cv::getPerspectiveTransform(corners.data(), dst_.data());
   return FrameFound{cv::Matx33d(H), best, corners};
 }

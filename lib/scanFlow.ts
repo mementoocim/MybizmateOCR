@@ -1,17 +1,63 @@
+import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
-import { scanPhoto } from '../modules/scanner';
+import { displayName, readPdf, releaseAccess, scanPhoto, type ScanResult } from '../modules/scanner';
 import { SAMPLES, sampleUri } from './samples';
 import { addScan, type ScanSource, type StoredScan } from './scans';
 import { toast } from './toast';
 
 type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean };
 
+const codeOf = (e: unknown) => (e as { code?: string } | null)?.code ?? '';
+
+/** The scanner's own failure (closed, or its model didn't load), naming what it was reading, with its message. */
+function scannerFailed(what: 'photo' | 'PDF', e: unknown): string {
+  return `Couldn't read that ${what}: ${(e as { message?: string } | null)?.message ?? String(e)}`;
+}
+
+function photoFailed(e: unknown): string {
+  return codeOf(e) === 'ERR_UNREADABLE_IMAGE'
+    ? "Couldn't read that photo: This file isn't a photo the scanner can open."
+    : scannerFailed('photo', e);
+}
+
+// readPdf's refusals (its pdf_* codes), in plain words.
+const PDF_REFUSED: Record<string, string> = {
+  pdf_too_big: 'That PDF is over 20 MB. Choose a smaller file.',
+  pdf_password: 'That PDF has a password. Save a copy without one, then import it.',
+  pdf_broken: "Couldn't read that PDF.",
+  pdf_unreadable: "Couldn't read that PDF.",
+  pdf_page_too_big: "That PDF's page is too big to read.",
+};
+
+/** A refused PDF in plain words. Any other failure is the scanner's own, so it isn't put on the PDF. */
+function pdfFailed(e: unknown): string {
+  const code = codeOf(e);
+  return code.startsWith('pdf_') ? (PDF_REFUSED[code] ?? PDF_REFUSED.pdf_unreadable) : scannerFailed('PDF', e);
+}
+
+const PDF_TYPE = 'application/pdf';
+
+/** A PDF by its name (as its app gives it; there may be none) or by the type the phone gives it. */
+function isPdf(name: string | null, type: string | null): boolean {
+  const mime = (type ?? '').split(';')[0].trim().toLowerCase();
+  return (name ?? '').toLowerCase().endsWith('.pdf') || mime === PDF_TYPE;
+}
+
+/** The picker's own copy of a file, once it has been read. */
+function deleteCopy(file: File): void {
+  try {
+    file.delete();
+  } catch {
+    // already gone
+  }
+}
+
 /**
- * Getting a photo read: from the camera, the phone's camera app, the gallery or a sample, then on to its result. One
- * at a time: while one is being picked or read (busy), another does nothing.
+ * Getting a photo or a PDF read: from the camera, the phone's camera app, the gallery, a sample or the file picker,
+ * then on to its result. One at a time: while one is being picked or read (busy), another does nothing.
  */
 export function useScanFlow() {
   const router = useRouter();
@@ -31,43 +77,61 @@ export function useScanFlow() {
     [],
   );
 
-  /** False when another photo was being picked or read, so this one wasn't taken. */
-  async function run(getUri: () => Promise<string | null>, label: string, source: ScanSource, opts: ReadOptions,
-                     openError: string): Promise<boolean> {
+  /** One pick and read; false when another was under way, so this one wasn't started. */
+  async function oneAtATime(task: () => Promise<void>): Promise<boolean> {
     if (busyRef.current) return false;
     busyRef.current = true;
     setBusy(true);
     try {
-      let uri: string | null;
-      try {
-        uri = await getUri();
-      } catch {
-        toast(openError);
-        return true;
-      }
-      if (!uri) return true;
-      setReading(true);
-      try {
-        const result = await scanPhoto(uri, { deletePhoto: opts.deletePhoto ?? false });
-        const id = addScan({ label, source, sampleId: opts.sampleId, result });
-        if (!here.current) return true;
-        const target = { pathname: '/result', params: { id } } as const;
-        if (opts.replace) router.replace(target);
-        else router.push(target);
-      } catch (e: unknown) {
-        const err = e as { code?: string; message?: string };
-        toast(
-          err?.code === 'ERR_UNREADABLE_IMAGE'
-            ? "Couldn't read that photo: This file isn't a photo the scanner can open."
-            : `Couldn't read that photo: ${err?.message ?? String(e)}`,
-        );
-      }
+      await task();
     } finally {
       setReading(false);
       setBusy(false);
       busyRef.current = false;
     }
     return true;
+  }
+
+  /** Reads it, keeps it in Recent scans and opens its result. A failure is told in its own words. */
+  async function readAndOpen(
+    read: () => Promise<ScanResult>,
+    scan: Pick<StoredScan, 'label' | 'source' | 'sampleId'>,
+    replace: boolean | undefined,
+    failed: (e: unknown) => string,
+  ): Promise<void> {
+    setReading(true);
+    try {
+      const result = await read();
+      const id = addScan({ ...scan, result });
+      if (!here.current) return;
+      const target = { pathname: '/result', params: { id } } as const;
+      if (replace) router.replace(target);
+      else router.push(target);
+    } catch (e: unknown) {
+      toast(failed(e));
+    }
+  }
+
+  /** False when another photo was being picked or read, so this one wasn't taken. */
+  function run(getUri: () => Promise<string | null>, label: string, source: ScanSource, opts: ReadOptions,
+               openError: string): Promise<boolean> {
+    return oneAtATime(async () => {
+      let uri: string | null;
+      try {
+        uri = await getUri();
+      } catch {
+        toast(openError);
+        return;
+      }
+      if (!uri) return;
+      const photo = uri;
+      await readAndOpen(
+        () => scanPhoto(photo, { deletePhoto: opts.deletePhoto ?? false }),
+        { label, source, sampleId: opts.sampleId },
+        opts.replace,
+        photoFailed,
+      );
+    });
   }
 
   /** Reads a photo the app already has; false when another one was being picked or read, so this one wasn't. */
@@ -111,7 +175,38 @@ export function useScanFlow() {
     await run(() => sampleUri(id), label, 'sample', { sampleId: id }, "Couldn't open that sample.");
   }
 
-  /** Retake: the same source again; back Home after a sample or a scan opened from Recent scans. */
+  /**
+   * A PDF from the system's file picker, its page 1 read, labelled with the file's name. Android's picker hands over
+   * the person's own file: a content:// link, which the scanner reads through a copy of its own and never changes; the
+   * picker's lasting access to it is given up afterwards (readPdf does it too, once it has read it). iOS's picker opens
+   * a copy in the app's temporary folder (a file://), deleted once it has been read.
+   */
+  async function fromPdf(opts: { replace?: boolean } = {}): Promise<void> {
+    await oneAtATime(async () => {
+      const picked = await File.pickFileAsync({ mimeTypes: [PDF_TYPE] });
+      if (picked.canceled) return;
+      const file = picked.result;
+      try {
+        // the name its app gives: a link's own last segment can be an id (Android's Downloads: …/document/msf%3A54)
+        const name = await displayName(file.uri).catch(() => null);
+        if (!isPdf(name, file.type)) {
+          toast('Choose a PDF file.');
+          return;
+        }
+        const scan = { label: name ? `PDF: ${name}` : 'PDF', source: 'pdf' } as const;
+        await readAndOpen(() => readPdf(file.uri), scan, opts.replace, pdfFailed);
+      } finally {
+        // giving up the access is no part of the read: nothing waits for it, and its failure changes nothing
+        if (file.uri.startsWith('file://')) deleteCopy(file);
+        else void releaseAccess(file.uri).catch(() => undefined);
+      }
+    });
+  }
+
+  /**
+   * Retake: the same source again (for a PDF, the picker again); back Home after a sample or a scan opened from Recent
+   * scans.
+   */
   async function retake(scan: StoredScan, openedFromRecent: boolean): Promise<void> {
     if (openedFromRecent || scan.source === 'sample') {
       router.back();
@@ -122,8 +217,9 @@ export function useScanFlow() {
       return;
     }
     if (scan.source === 'camera_app') return fromCameraApp({ replace: true });
+    if (scan.source === 'pdf') return fromPdf({ replace: true });
     return fromGallery({ replace: true });
   }
 
-  return { busy, reading, scanUri, fromGallery, fromCameraApp, fromSample, retake };
+  return { busy, reading, scanUri, fromGallery, fromCameraApp, fromSample, fromPdf, retake };
 }

@@ -25,6 +25,33 @@ export async function scanPhoto(uri: string, options?: ScanOptions): Promise<Sca
   return parseScanResult(await ScannerModule.scanPhoto(uri, options ?? {}));
 }
 
+/**
+ * Reads page 1 of a PDF (a content:// URI from the file picker, or a file://) like a photo, each box taking the PDF's
+ * own text where it has some. Its files are kept like a photo's; the PDF itself is only read. Rejects with code
+ * pdf_too_big (over 20 MB, refused before it is copied), pdf_broken (damaged, or not a PDF), pdf_password,
+ * pdf_page_too_big, or pdf_unreadable for any other failure.
+ */
+export async function readPdf(uri: string): Promise<ScanResult> {
+  return parseScanResult(await ScannerModule.readPdf(uri));
+}
+
+/**
+ * The name a picked file shows the person: a content:// link's name as its app gives it, or a file://'s last path
+ * segment; null when there's none (never a link's own id, like Downloads' msf:54). The file itself is never opened.
+ */
+export function displayName(uri: string): Promise<string | null> {
+  return ScannerModule.displayName(uri);
+}
+
+/**
+ * Gives up the lasting access the system's file picker takes to every file it hands over (a content:// URI), once the
+ * app has read the file: readPdf does it itself, and Import PDF and the CSV import call this. Nothing else of the
+ * person's file is touched. A file:// has no such access.
+ */
+export function releaseAccess(uri: string): Promise<void> {
+  return ScannerModule.releaseAccess(uri);
+}
+
 /** The scan view's Enhanced or B&W image of a scan's page (made once, then reused): its file:// URI. */
 export function enhance(pageUri: string, mode: 'enhanced' | 'bw'): Promise<string> {
   return ScannerModule.enhance(pageUri, mode);

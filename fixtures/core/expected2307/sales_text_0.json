@@ -1,0 +1,16 @@
+{
+ "stem": "sales_text_0",
+ "kind": "text",
+ "form": "sales_invoice",
+ "pageCount": 1,
+ "values": {
+  "invoice_no": "0000888",
+  "date": "27 Sep 2026",
+  "customer_name": "Cruz Trading",
+  "item1_qty": "24",
+  "item1_unit": "tray",
+  "item1_description": "Eggs",
+  "item1_unit_price": "260.00",
+  "item1_amount": "6,240.00"
+ }
+}

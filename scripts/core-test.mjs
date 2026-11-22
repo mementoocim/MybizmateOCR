@@ -1,12 +1,15 @@
 // Builds the scanner core's C++ tests for the x86_64 emulator and runs them there.
 // Usage: npm run test:core -- [doctest arguments, e.g. -tc="*parity*"]
 // Needs: the Android SDK (NDK 28.2.13676358, CMake 3.22.1), a running emulator, and the OpenCV 5.1.0 and
-// ONNX Runtime 1.32.0 AARs in Gradle's cache (the first `npx expo run:android` downloads them).
+// ONNX Runtime 1.32.0 AARs in Gradle's cache (the first `npx expo run:android` downloads them). pdfium is fetched into
+// its cache folder by scripts/fetch-pdfium.mjs the first time.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { fetchPdfium } from './fetch-pdfium.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CPP = path.join(ROOT, 'modules', 'scanner', 'cpp');
@@ -71,6 +74,9 @@ for (const [name, aar] of Object.entries(deps)) {
   writeFileSync(done, aar);
 }
 
+// pdfium (chromium/8125), each ABI's build checked against its pinned SHA-256
+const pdfium = await fetchPdfium().catch((e) => fail(`pdfium: ${e.message}`));
+
 // 4. Configure and build
 const buildDir = path.join(BUILD, ABI);
 mustRun(cmake, [
@@ -81,6 +87,7 @@ mustRun(cmake, [
   '-DCMAKE_BUILD_TYPE=Release',
   `-DOPENCV_DIR=${path.join(BUILD, 'deps', 'opencv')}`,
   `-DORT_DIR=${path.join(BUILD, 'deps', 'ort')}`,
+  `-DPDFIUM_DIR=${pdfium}`,
 ]);
 mustRun(cmake, ['--build', buildDir]);
 
@@ -98,6 +105,7 @@ const pushes = [
   [path.join(buildDir, 'scanner_tests'), `${REMOTE}/scanner_tests`],
   [path.join(BUILD, 'deps', 'opencv', 'prefab', 'modules', 'opencv_java5', 'libs', `android.${ABI}`, 'libopencv_java5.so'), `${REMOTE}/libopencv_java5.so`],
   [path.join(BUILD, 'deps', 'ort', 'jni', ABI, 'libonnxruntime.so'), `${REMOTE}/libonnxruntime.so`],
+  [path.join(pdfium, ABI, 'lib', 'libpdfium.so'), `${REMOTE}/libpdfium.so`],
   [libcxx, `${REMOTE}/libc++_shared.so`],
   [path.join(ROOT, 'modules', 'scanner', 'assets', 'scanner'), `${REMOTE}/assets`],
   [path.join(ROOT, 'fixtures', 'core'), `${REMOTE}/fixtures`],

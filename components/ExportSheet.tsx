@@ -35,6 +35,13 @@ const PARTY_RANGES = [
 
 type Wording = { one: string; many: string; next: string };
 
+/** Each kind's export: its sheet's title, the import it's in, and how its saved ones are counted. */
+const EXPORTS: Record<Kind, Wording & { title: string; format: string }> = {
+  sale: { title: 'Export sales', format: 'Sales', one: 'sale', many: 'sales', next: 'next export' },
+  purchase: { title: 'Export purchases', format: 'Purchases', one: 'purchase', many: 'purchases', next: 'next export' },
+  '2307': { title: 'Export 2307s', format: '2307-CWT', one: '2307', many: '2307s', next: 'next export' },
+};
+
 /**
  * Writes the file and opens the share sheet. The share sheet can't tell whether the file was sent, so the person says
  * so before what went in it is marked as exported.
@@ -74,7 +81,7 @@ function exportedBefore(k: number): string {
     : `${k} of them were exported before. Importing them again adds them to MyBizMate twice.`;
 }
 
-/** Exporting saved invoices (sales or purchases), or the customers and suppliers added from scans. */
+/** Exporting saved invoices (sales or purchases) or 2307s, or the customers and suppliers added from scans. */
 export function ExportSheet({ visible, kind, onClose }: { visible: boolean; kind: Kind | 'parties'; onClose: () => void }) {
   return kind === 'parties' ? (
     <PartiesExport visible={visible} onClose={onClose} />
@@ -90,13 +97,12 @@ function InvoicesExport({ visible, kind, onClose }: { visible: boolean; kind: Ki
   const [busy, setBusy] = useState(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `all` is the store's version: a change re-chooses
   const rows = useMemo(() => exportChoice(kind, range, new Date()), [kind, range, all]);
-  const isSale = kind === 'sale';
-  const words: Wording = isSale
-    ? { one: 'sale', many: 'sales', next: 'next export' }
-    : { one: 'purchase', many: 'purchases', next: 'next export' };
+  const words = EXPORTS[kind];
   const before = rows.filter((r) => r.exportedAt !== null).length;
   const names = partiesToCheck(rows, theLists);
-  const total = rows.reduce((sum, r) => sum + r.gross, 0);
+  // the invoices' gross; the 2307s' tax withheld
+  const total = rows.reduce((sum, r) => sum + (r.kind === '2307' ? r.tax : r.gross), 0);
+  const amount = kind === '2307' ? `tax ${peso(total)}` : peso(total);
   const share = async () => {
     setBusy(true);
     await shareThenAsk(
@@ -110,14 +116,14 @@ function InvoicesExport({ visible, kind, onClose }: { visible: boolean; kind: Ki
   return (
     <Sheet
       visible={visible}
-      title={isSale ? 'Export sales' : 'Export purchases'}
-      subtitle={`A file in MyBizMate's ${isSale ? 'Sales' : 'Purchases'} import format, to import at mybizmate.io.`}
+      title={words.title}
+      subtitle={`A file in MyBizMate's ${words.format} import format, to import at mybizmate.io.`}
       onClose={onClose}>
       <Chips label="Which ones" options={RANGES} value={range} onChange={setRange} />
       <Text style={styles.summary}>
         {rows.length === 0
           ? 'Nothing to export for this choice.'
-          : `${rows.length} ${rows.length === 1 ? words.one : words.many} · ${peso(total)}`}
+          : `${rows.length} ${rows.length === 1 ? words.one : words.many} · ${amount}`}
       </Text>
       {before > 0 && <Text style={styles.warning}>{exportedBefore(before)}</Text>}
       {names.length > 0 && (

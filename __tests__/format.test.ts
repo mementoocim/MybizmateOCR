@@ -1,4 +1,4 @@
-import { formatClock, formatMs, peso, prettyDate, qty } from '../lib/format';
+import { formatClock, formatMs, monthSpan, peso, prettyDate, qty } from '../lib/format';
 
 test('pesos, quantities and dates as the test app writes them', () => {
   expect(peso(1575)).toBe('₱1,575.00');
@@ -13,6 +13,12 @@ test('pesos, quantities and dates as the test app writes them', () => {
   expect(prettyDate('2026-10-21')).toBe('Oct 21, 2026');
   expect(prettyDate('2026-01-05')).toBe('Jan 5, 2026');
   expect(prettyDate(null)).toBeNull();
+});
+
+test('the months a period spans', () => {
+  expect(monthSpan('2026-10-01', '2026-12-31')).toBe('Oct–Dec 2026');
+  expect(monthSpan('2026-10-01', '2026-10-31')).toBe('Oct 2026');
+  expect(monthSpan('2025-12-01', '2026-02-28')).toBe('Dec 2025–Feb 2026');
 });
 
 test('times under a second in ms, longer ones in seconds', () => {

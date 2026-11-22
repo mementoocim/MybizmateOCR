@@ -23,7 +23,8 @@ const std::vector<std::string> kSamples = {"inv_0001", "inv_0007", "inv_0011", "
 mbm::Scanner& scanner() {
   static mbm::Scanner s(mbm::Assets{readBytes(assetsDir() + "/inference_latin.onnx"), readText(assetsDir() + "/dict.txt"),
                                     readText(assetsDir() + "/field_map.json"), readBytes(assetsDir() + "/form_small.png"),
-                                    readText(assetsDir() + "/service_invoice.json"), 4});
+                                    readText(assetsDir() + "/service_invoice.json"),
+                                    readText(assetsDir() + "/bir_2307.json"), 4});
   return s;
 }
 
@@ -262,20 +263,24 @@ TEST_CASE("writes the page and the crops") {
 
 TEST_CASE("json follows the contract") {
   auto read = nlohmann::json::parse(mbm::toJson(scanFixture("inv_0007")));
-  for (const char* key : {"aligned", "form", "photoSize", "turned", "corners", "sharpness", "sharpMin", "light", "terms",
-                          "blanks", "reads", "pageFile", "timing"}) {
+  for (const char* key : {"aligned", "form", "source", "pageCount", "picture", "photoSize", "turned", "corners",
+                          "sharpness", "sharpMin", "light", "terms", "blanks", "reads", "pageFile", "timing"}) {
     CAPTURE(key);
     CHECK(read.contains(key));
   }
   CHECK(read["form"] == "sales_invoice");
+  CHECK(read["source"] == "photo");
+  CHECK(read["pageCount"].is_null());  // a PDF's only
+  CHECK(read["picture"].is_null());
   CHECK(read["corners"].size() == 4);
   REQUIRE(read["reads"].size() == 45);
-  for (const char* key : {"name", "type", "text", "conf", "alts", "cropSize", "cropFile"}) {
+  for (const char* key : {"name", "type", "text", "conf", "alts", "fromText", "cropSize", "cropFile"}) {
     CAPTURE(key);
     CHECK(read["reads"][0].contains(key));
   }
   CHECK(read["reads"][0]["name"] == "invoice_no");
   CHECK(read["reads"][0]["text"] == "0007655");
+  for (const auto& b : read["reads"]) CHECK(b.at("fromText") == false);
   for (const char* key : {"alignMs", "cropMs", "readMs", "totalMs"}) CHECK(read["timing"].contains(key));
 
   auto none = nlohmann::json::parse(mbm::toJson(scanFixture("blank_page")));

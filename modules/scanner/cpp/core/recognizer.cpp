@@ -17,8 +17,15 @@ namespace {
 constexpr int kBatch = 8;
 constexpr int kHeight = 48;
 
+// ONNX Runtime's own telemetry is switched off for the process: nothing about the model or the phone is sent (the app
+// promises that nothing leaves the phone). The telemetry provider its Android library adds is removed from the app's
+// manifest (the scanner module's AndroidManifest.xml).
 Ort::Env& env() {
-  static Ort::Env e(ORT_LOGGING_LEVEL_ERROR, "mbm-scanner");
+  static Ort::Env e = [] {
+    Ort::Env made(ORT_LOGGING_LEVEL_ERROR, "mbm-scanner");
+    made.DisableTelemetryEvents();
+    return made;
+  }();
   return e;
 }
 
@@ -34,6 +41,7 @@ std::map<std::string, std::vector<std::string>> charsets() {
     return a;
   };
   const auto digits = chars("0123456789");
+  const auto capitals = chars("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
   const auto letters = chars("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
   std::vector<std::string> ascii;
   for (int c = 32; c < 127; c++) ascii.emplace_back(1, static_cast<char>(c));
@@ -46,6 +54,8 @@ std::map<std::string, std::vector<std::string>> charsets() {
       {"amount", join(digits, chars(",.P"))},  // P: the peso sign people write before amounts ("P1,500.00")
       {"number", join(digits, chars(",./ "))},  // / and space: quantities like 1/2 and 1 1/2
       {"text", ascii},
+      {"digits", digits},             // the BIR 2307's period and ZIP codes (no Python reference: the 2307 is new)
+      {"code", join(capitals, digits)},  // its ATC codes: WC158, WI010
   };
 }
 

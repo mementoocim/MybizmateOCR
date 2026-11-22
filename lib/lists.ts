@@ -1,5 +1,6 @@
 import type { Pack, Terms } from './checks/finalize';
 import { parseAmount } from './checks/num';
+import { tinLengthOk } from './checks/tin';
 import { parseCsv } from './csv';
 import { readJson, writeJson } from './jsonFile';
 
@@ -109,10 +110,10 @@ export function packFor(l: Lists): Pack {
   };
 }
 
-/** A TIN's digits as 123-456-789, with its branch as -000 or -00000; anything else as given. */
+/** A TIN's digits as 123-456-789, with its branch as -000, -0000 or -00000; anything else as given. */
 export function formatTin(digits: string): string {
   const d = digits.replace(/\D/g, '');
-  if (d.length !== 9 && d.length !== 12 && d.length !== 14) return digits;
+  if (!tinLengthOk(d)) return digits;
   const head = `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6, 9)}`;
   return d.length === 9 ? head : `${head}-${d.slice(9)}`;
 }

@@ -17,6 +17,28 @@ test("each form's words", () => {
   expect(FORMS.service_invoice).toEqual({ title: 'Service Invoice', cash: 'Cash sales', account: 'Charge sales', number: 'Invoice no.' });
 });
 
+test("the BIR 2307's title and boxes, in the template's order", () => {
+  expect(FORMS.bir_2307.title).toBe('BIR Form 2307');
+  const bir = formFields('bir_2307');
+  expect(bir).toHaveLength(160);
+  expect(bir.slice(0, 3)).toEqual(['period_from', 'period_to', 'payee_tin']);
+  expect(bir).toContain('ewt10_atc');
+  expect(bir[bir.length - 1]).toBe('bt_total_tax');
+});
+
+test("the BIR 2307's labels are its template's, the official form's words", () => {
+  expect(fieldLabel('bir_2307', 'period_from')).toBe('Period from');
+  expect(fieldLabel('bir_2307', 'payee_tin')).toBe("Payee's TIN");
+  expect(fieldLabel('bir_2307', 'payor_zip')).toBe("Payor's ZIP code");
+  expect(fieldLabel('bir_2307', 'ewt10_atc')).toBe('Row 10 · ATC');
+  expect(fieldLabel('bir_2307', 'ewt_total_tax')).toBe('Total row · Tax withheld');
+  expect(fieldLabel('bir_2307', 'bt3_payment')).toBe('Business tax row 3 · Money payment');
+  const template: { name: string; label: string }[] = require('../modules/scanner/assets/scanner/bir_2307.json').fields;
+  for (const box of formFields('bir_2307')) {
+    expect([box, fieldLabel('bir_2307', box)]).toEqual([box, template.find((f) => f.name === box)!.label]);
+  }
+});
+
 test('field labels', () => {
   expect(fieldLabel('sales_invoice', 'invoice_no')).toBe('SI no.');
   expect(fieldLabel('service_invoice', 'invoice_no')).toBe('Invoice no.');

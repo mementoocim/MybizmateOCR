@@ -1,13 +1,20 @@
 import { readJson, writeJson } from './jsonFile';
 
-// The export defaults, kept on the phone: whether the business is VAT-registered, the accounts the import needs (as
-// a code or a name from the business's chart of accounts, which isn't on the phone), and the last withholding tax ATC.
+// The export defaults, kept on the phone: whether the business is VAT-registered, the accounts the imports need (as
+// a code or a name from the business's chart of accounts, which isn't on the phone: an invoice's revenue or expense
+// account, and the offset account a 2307's withheld tax goes to), and the last withholding tax ATC.
 
 export type TaxType = 'VAT' | 'NONVAT' | 'ZERO' | 'EXEMPT' | 'NA';
-export type Settings = { vatRegistered: boolean | null; revenueAccount: string; expenseAccount: string; atc: string };
+export type Settings = {
+  vatRegistered: boolean | null;
+  revenueAccount: string;
+  expenseAccount: string;
+  atc: string;
+  offsetAccount: string;
+};
 
 const FILE = 'settings.json';
-const DEFAULTS: Settings = { vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '' };
+const DEFAULTS: Settings = { vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '', offsetAccount: '' };
 
 let current: Settings = DEFAULTS; // replaced, never changed in place: screens subscribe to it
 const listeners = new Set<() => void>();

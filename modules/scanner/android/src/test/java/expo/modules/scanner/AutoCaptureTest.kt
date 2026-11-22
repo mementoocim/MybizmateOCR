@@ -102,6 +102,18 @@ class AutoCaptureTest {
   }
 
   @Test
+  fun `the core's frame result names each form`() {
+    fun found(code: Float) = detectionOf(floatArrayOf(code, 1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 0.9f, 0.7f))
+    assertEquals("sales_invoice", found(0f).form)
+    assertEquals("service_invoice", found(1f).form)
+    val bir2307 = found(2f)
+    assertEquals("bir_2307", bir2307.form)
+    assertEquals(listOf(1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f), bir2307.outline.toList())
+    assertEquals(0.9, bir2307.sharpness, 1e-6)
+    assertEquals(0.7, bir2307.sharpMin, 1e-6)
+  }
+
+  @Test
   fun `nothing more after a capture until reset`() {
     val a = AutoCapture()
     a.onFrame(sales(), width, 0, auto = true)

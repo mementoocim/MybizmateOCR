@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The scanner module's manifest, merged into the app's (expo prebuild leaves the module's folder as it is). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+  <application>
+    <!-- onnxruntime-android's AAR adds this provider, which starts ONNX Runtime's telemetry client (Microsoft's, which
+         reads the phone's android_id) by itself when the app starts. The scanner runs ONNX Runtime from its C++ core
+         only, with ONNX Runtime's telemetry off, and the app promises that nothing leaves the phone, so the provider is
+         removed from the merged manifest. scripts/check-apk.mjs checks a built APK for it. -->
+    <provider
+        android:name="ai.onnxruntime.TelemetryInitializer"
+        tools:node="remove" />
+  </application>
+</manifest>

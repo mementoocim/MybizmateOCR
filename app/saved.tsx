@@ -6,12 +6,12 @@ import { OutlinedButton, TextButton } from '../components/Buttons';
 import { ExportSheet } from '../components/ExportSheet';
 import { peso, prettyDate } from '../lib/format';
 import { lists, newParties, subscribeLists } from '../lib/lists';
-import { deleteSaved, openSaved, savedList, subscribeSaved } from '../lib/saved';
+import { deleteSaved, openSaved, type SavedSummary, savedList, subscribeSaved } from '../lib/saved';
 import type { Kind } from '../lib/scans';
 import { bold, colors } from '../lib/theme';
 import { toast } from '../lib/toast';
 
-// Saved invoices: the scans saved as sales or purchases, newest first, each ready to export to MyBizMate.
+// Saved invoices: the scans saved as sales, purchases or 2307s, newest first, each ready to export to MyBizMate.
 export default function SavedScreen() {
   const router = useRouter();
   const all = useSyncExternalStore(subscribeSaved, savedList);
@@ -54,9 +54,7 @@ export default function SavedScreen() {
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
                 <View style={styles.words}>
                   <Text style={styles.name}>{s.partyName}</Text>
-                  <Text style={styles.line}>
-                    {`${s.kind === 'sale' ? 'Sale' : 'Purchase'} · ${prettyDate(s.date) ?? '—'} · ${peso(s.gross)}`}
-                  </Text>
+                  <Text style={styles.line}>{lineOf(s)}</Text>
                 </View>
                 <Text style={s.exportedAt ? styles.done : styles.todo}>{s.exportedAt ? 'Exported' : 'To export'}</Text>
               </Pressable>
@@ -71,17 +69,26 @@ export default function SavedScreen() {
       )}
       {all.length > 0 && (
         <View style={styles.bottom}>
-          <View style={styles.button}>
-            <OutlinedButton label="Export sales" onPress={() => setExporting('sale')} />
+          <View style={styles.pair}>
+            <View style={styles.button}>
+              <OutlinedButton label="Export sales" onPress={() => setExporting('sale')} />
+            </View>
+            <View style={styles.button}>
+              <OutlinedButton label="Export purchases" onPress={() => setExporting('purchase')} />
+            </View>
           </View>
-          <View style={styles.button}>
-            <OutlinedButton label="Export purchases" onPress={() => setExporting('purchase')} />
-          </View>
+          <OutlinedButton label="Export 2307s" onPress={() => setExporting('2307')} />
         </View>
       )}
       {exporting && <ExportSheet visible kind={exporting} onClose={() => setExporting(null)} />}
     </View>
   );
+}
+
+/** A saved one's line under its party: a sale's or a purchase's date and gross; a 2307's period and tax withheld. */
+function lineOf(s: SavedSummary): string {
+  if (s.kind === '2307') return `2307 · ${s.period} · Tax ${peso(s.tax)}`;
+  return `${s.kind === 'sale' ? 'Sale' : 'Purchase'} · ${prettyDate(s.date) ?? '—'} · ${peso(s.gross)}`;
 }
 
 const styles = StyleSheet.create({
@@ -104,13 +111,14 @@ const styles = StyleSheet.create({
   todo: { ...bold, fontSize: 13, color: colors.coralText },
   done: { fontSize: 13, color: colors.mute },
   bottom: {
-    flexDirection: 'row',
     gap: 12,
     padding: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.line,
     backgroundColor: colors.panel,
   },
+  // the invoices' two exports side by side, the 2307s' under them: three across don't fit a phone with one-line words
+  pair: { flexDirection: 'row', gap: 12 },
   button: { flex: 1 },
   parties: { alignItems: 'center', paddingVertical: 4, backgroundColor: colors.panel },
 });

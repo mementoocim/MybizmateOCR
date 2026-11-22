@@ -9,6 +9,9 @@ std::string toJson(const ScanResult& r) {
   json j;
   j["aligned"] = r.aligned;
   j["form"] = r.aligned ? json(r.form) : json(nullptr);
+  j["source"] = r.source;
+  j["pageCount"] = r.pageCount ? json(*r.pageCount) : json(nullptr);
+  j["picture"] = r.picture ? json(*r.picture) : json(nullptr);
   j["photoSize"] = {r.photoSize.width, r.photoSize.height};
   j["turned"] = r.turned;
   if (r.aligned) {
@@ -35,6 +38,7 @@ std::string toJson(const ScanResult& r) {
                      {"text", b.text},
                      {"conf", b.conf},
                      {"alts", b.alts},
+                     {"fromText", b.fromText},
                      {"cropSize", {b.cropSize.width, b.cropSize.height}},
                      {"cropFile", b.cropFile}});
   }

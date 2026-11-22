@@ -30,6 +30,10 @@ export const ChevronRight = icon('M10,6L8.59,7.41 13.17,12l-4.58,4.59L10,18l6,-6
 export const Close = icon(
   'M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z',
 );
+/** Material's "description": a page with lines (Import PDF). */
+export const DocumentIcon = icon(
+  'M14,2H6c-1.1,0 -1.99,0.9 -1.99,2L4,20c0,1.1 0.89,2 1.99,2H18c1.1,0 2,-0.9 2,-2V8l-6,-6zM16,18H8v-2h8v2zM16,14H8v-2h8v2zM13,9V3.5L18.5,9H13z',
+);
 export const Download = icon('M19,9h-4V3H9v6H5l7,7 7,-7zM5,18v2h14v-2H5z');
 export const ErrorCircle = icon(
   'M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM13,17h-2v-2h2v2zM13,13h-2L11,7h2v6z',

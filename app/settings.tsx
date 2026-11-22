@@ -15,6 +15,7 @@ export default function SettingsScreen() {
   const [revenue, setRevenue] = useState(s.revenueAccount);
   const [expense, setExpense] = useState(s.expenseAccount);
   const [atc, setAtc] = useState(s.atc);
+  const [offset, setOffset] = useState(s.offsetAccount);
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Text style={sectionLabel}>EXPORTS TO MYBIZMATE</Text>
@@ -51,6 +52,15 @@ export default function SettingsScreen() {
           void updateSettings({ atc: t.toUpperCase().trim() });
         }}
         autoCapitalize="characters"
+      />
+      <TextField
+        label="Offset account for 2307s"
+        placeholder="Code or name, as in MyBizMate"
+        value={offset}
+        onChangeText={(t) => {
+          setOffset(t);
+          void updateSettings({ offsetAccount: t.trim() });
+        }}
       />
       <Text style={styles.note}>
         {"These fill in what MyBizMate's import needs that isn't on the paper. You can change them on each invoice when you save it."}

@@ -44,3 +44,6 @@ yarn-error.*
 modules/scanner/cpp/tests/build/
 modules/scanner/android/build/
 modules/scanner/android/.cxx/
+# pdfium's downloads stay in their cache folder outside the repo (scripts/fetch-pdfium.mjs): never committed
+pdfium-android-*.tgz
+libpdfium.so
