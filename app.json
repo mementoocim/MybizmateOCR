@@ -41,7 +41,6 @@
         }
       ],
       "./plugins/with-windows-native-paths",
-      "./plugins/with-config-changes",
       "expo-asset",
       [
         "expo-splash-screen",
