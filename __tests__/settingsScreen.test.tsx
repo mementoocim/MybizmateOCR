@@ -1,14 +1,35 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import SettingsScreen from '../app/settings';
-import { settings, updateSettings } from '../lib/settings';
+import * as store from '../lib/settings';
+import { loadSettings, settings, updateSettings } from '../lib/settings';
 import { memoryFs } from '../test-utils/memoryFs';
 
+let mockTeam = false;
+const mockPush = jest.fn();
+
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }) }));
+jest.mock('../lib/build', () => ({
+  get TEAM_BUILD() {
+    return mockTeam;
+  },
+}));
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 
 beforeEach(async () => {
+  mockTeam = false;
+  mockPush.mockClear();
   memoryFs.reset();
-  await updateSettings({ vatRegistered: true, revenueAccount: '4010', expenseAccount: '', atc: '', offsetAccount: '' });
+  await updateSettings({
+    vatRegistered: true,
+    revenueAccount: '4010',
+    expenseAccount: '',
+    atc: '',
+    offsetAccount: '',
+    annotation: false,
+    clientCode: '',
+    writerCode: '',
+  });
 });
 
 test('the settings show what the phone keeps', async () => {
@@ -51,4 +72,42 @@ test('what was typed is kept when the screen is left from the field', async () =
   await act(async () => fireEvent.changeText(screen.getByLabelText('Revenue account for sales'), '4000 Sales Revenue'));
   await screen.unmount(); // going back while the field still has the cursor: React Native doesn't blur it
   expect(settings().revenueAccount).toBe('4000 Sales Revenue');
+});
+
+const NOTE = 'Every box must be checked before a scan saves, and each scan gets a client and writer code.';
+
+test('team tools show only in team builds', async () => {
+  await render(<SettingsScreen />);
+  expect(screen.queryByText('TEAM TOOLS')).toBeNull();
+  expect(screen.queryByRole('switch', { name: 'Annotation mode' })).toBeNull();
+  expect(screen.queryByText(NOTE)).toBeNull();
+  expect(screen.queryByText('Training data')).toBeNull();
+  expect(screen.queryByText('Speed test')).toBeNull();
+  await screen.unmount();
+
+  mockTeam = true;
+  await render(<SettingsScreen />);
+  expect(screen.getByText('TEAM TOOLS')).toBeTruthy();
+  expect(screen.getByRole('switch', { name: 'Annotation mode', checked: false })).toBeTruthy();
+  expect(screen.getByText(NOTE)).toBeTruthy();
+  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Training data' })));
+  expect(mockPush).toHaveBeenLastCalledWith('/training');
+  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Speed test' })));
+  expect(mockPush).toHaveBeenLastCalledWith('/speed');
+});
+
+test('the annotation switch is kept', async () => {
+  mockTeam = true;
+  const update = jest.spyOn(store, 'updateSettings'); // it still saves
+  await render(<SettingsScreen />);
+  await act(async () => fireEvent(screen.getByRole('switch', { name: 'Annotation mode' }), 'valueChange', true));
+  expect(update).toHaveBeenCalledWith({ annotation: true });
+  expect(screen.getByRole('switch', { name: 'Annotation mode', checked: true })).toBeTruthy();
+  await update.mock.results[0].value; // its write to the phone
+  update.mockRestore();
+  await screen.unmount();
+  await act(async () => loadSettings()); // read again from the phone, as at the next start
+  expect(settings().annotation).toBe(true);
+  await render(<SettingsScreen />);
+  expect(screen.getByRole('switch', { name: 'Annotation mode', checked: true })).toBeTruthy();
 });

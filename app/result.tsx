@@ -25,12 +25,13 @@ import { FORMS, formFields } from '../lib/forms';
 import { addItem, lists, subscribeLists } from '../lib/lists';
 import { boxValue, isInvoice, rawFromScan, saleOf, type SaleView } from '../lib/sale';
 import { compareWithSample, sampleInfo } from '../lib/samples';
-import { rowsNow, savedSummary, subscribeSaved, summaryRows } from '../lib/saved';
+import { marksOf, rowsNow, savedSummary, subscribeSaved, summaryRows } from '../lib/saved';
 import { useScanFlow } from '../lib/scanFlow';
 import { getScan, type InvoiceKind, type StoredScan, subscribeRecent, updateScan } from '../lib/scans';
-import { settings, subscribeSettings } from '../lib/settings';
+import { annotationOn, settings, subscribeSettings } from '../lib/settings';
 import { bold, colors, sectionLabel } from '../lib/theme';
 import { toast } from '../lib/toast';
+import { uncheckedBoxes } from '../lib/training/boxes';
 import type { ScanResult } from '../modules/scanner';
 
 const CUSTOMER_BOXES = ['customer_name', 'customer_tin', 'customer_address'];
@@ -84,6 +85,7 @@ export default function Result() {
   const scan = useSyncExternalStore(subscribeRecent, () => (id ? getScan(id) : undefined));
   const theLists = useSyncExternalStore(subscribeLists, lists);
   const theSettings = useSyncExternalStore(subscribeSettings, settings);
+  const annotation = useSyncExternalStore(subscribeSettings, annotationOn);
   const sale = useMemo(
     () => (scan && isInvoice(scan) ? saleOf(scan, theLists, theSettings) : null),
     [scan, theLists, theSettings],
@@ -122,10 +124,15 @@ export default function Result() {
   const canSave = r.aligned && !isSample && (sale !== null || cert !== null);
   const saveLabel = summary ? 'Save changes' : cert ? 'Save 2307' : scan.kind === 'sale' ? 'Save sale' : 'Save purchase';
   // what it still needs before it can be saved: Save says it, and so does the card (never "ready")
-  const block = saveBlock(scan, sale ?? cert);
-  const blocked = blockWords(block);
-  // A saved one changed here (a box, sale or purchase, its party) goes out as saved until Save changes.
-  const changed = summary !== undefined && scan.saved !== null && !sameRows(rowsNow(scan), summaryRows(summary));
+  const block = saveBlock(scan, sale ?? cert, { annotation });
+  const blocked = blockWords(block, scan);
+  // in annotation mode, Save opens every box not checked yet: those no section shows too
+  const unchecked = block === 'unchecked' ? uncheckedBoxes(scan) : null;
+  // A saved one changed here (a box, sale or purchase, its party) goes out as saved until Save changes. In annotation
+  // mode, so does any box's edit or check, one outside the import rows too: the training export has the saved labels.
+  const marksChanged = annotation && !!scan.savedMarks && marksOf(scan) !== scan.savedMarks;
+  const changed =
+    summary !== undefined && scan.saved !== null && (marksChanged || !sameRows(rowsNow(scan), summaryRows(summary)));
   const savedLine = !summary
     ? null
     : changed
@@ -134,7 +141,8 @@ export default function Result() {
   const back = from === 'recent' || from === 'saved';
 
   function openSave() {
-    if (block === null) setSheet({ kind: 'save' });
+    if (unchecked) setSheet({ kind: 'boxes', title: 'Check every box first', boxes: unchecked });
+    else if (block === null) setSheet({ kind: 'save' });
     else if (blocked) toast(blocked);
   }
 

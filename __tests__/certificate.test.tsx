@@ -43,7 +43,16 @@ jest.mock('expo-image-picker', () => ({
 jest.mock('expo-asset', () => ({ Asset: { fromModule: () => ({ downloadAsync: async () => ({ localUri: 'file:///s' }) }) } }));
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 
-const SETTINGS: Settings = { vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '', offsetAccount: '' };
+const SETTINGS: Settings = {
+  vatRegistered: null,
+  revenueAccount: '',
+  expenseAccount: '',
+  atc: '',
+  offsetAccount: '',
+  annotation: false,
+  clientCode: '',
+  writerCode: '',
+};
 
 /** A made-up 2307's scan screen, with some of its boxes saying something else (an edit of '' clears a box). */
 async function show(

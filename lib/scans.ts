@@ -4,12 +4,13 @@ import type { BoxRead, ScanResult } from '../modules/scanner';
 import type { Terms } from './checks/finalize';
 import { readJson, writeJson } from './jsonFile';
 import type { TaxType } from './settings';
+import { APP_VERSION, modelVersion } from './versions';
 
 // Recent scans: the newest 6, kept on the phone so they survive closing the app, with what the person did to each:
-// the boxes they fixed (kept apart from the readings), the terms they picked, sale or purchase (a BIR 2307 is always
-// a 2307), the customer or supplier they chose, and whether they saved it. Each scan's files live in its own folder
-// (the scanner keeps the newest 6 folders too); the list is a JSON file in the app's documents. A saved scan opened
-// from Saved invoices is kept here too while the app runs.
+// the boxes they fixed (kept apart from the readings) or checked, the terms they picked, sale or purchase (a BIR 2307
+// is always a 2307), the customer or supplier they chose, and whether they saved it (in annotation mode, with its
+// source tag). Each scan's files live in its own folder (the scanner keeps the newest 6 folders too); the list is a
+// JSON file in the app's documents. A saved scan opened from Saved invoices is kept here too while the app runs.
 
 /** How the scan came in. Not the result's own source, which is what the scanner read: a photo or a PDF. */
 export type ScanSource = 'camera' | 'camera_app' | 'gallery' | 'sample' | 'pdf';
@@ -24,6 +25,8 @@ export type InvoiceDetails = { taxType: TaxType; account: string; terms: Terms; 
 /** What a 2307's import rows need that isn't on the paper: the offset account its withheld tax goes to. */
 export type CertDetails = { account: string };
 export type SaveDetails = InvoiceDetails | CertDetails;
+/** Where an annotated scan's writing came from, as the team's codes for the client and the writer: never names. */
+export type SourceTag = { client: string; writer: string };
 
 export type StoredScan = {
   id: string;
@@ -33,10 +36,19 @@ export type StoredScan = {
   at: Date;
   result: ScanResult;
   edits: Readonly<Record<string, string>>; // box name -> what the person says the box says
+  confirmed?: readonly string[]; // the boxes the person said were read right; none if kept before milestone 4
   terms: Terms | null; // the person's pick; null: the ticks on the paper
   kind: Kind;
   party: PartyChoice | null;
   saved: { savedAt: string; details: SaveDetails } | null;
+  made?: { app: string; model: string }; // the app and model versions it was read with; none if kept before milestone 4
+  // none of these three on a scan kept before milestone 4:
+  annotated?: boolean; // last saved in annotation mode, so every training box was checked
+  tag?: SourceTag | null; // that save's client and writer codes; null when it wasn't one
+  testImage?: boolean; // read from the camera's test hook: it never becomes training data
+  // a hash of the edits and checks as last saved (marksOf in lib/saved.ts), never what a box says; '' when it has none:
+  // not saved yet, or saved before the save kept one
+  savedMarks?: string;
 };
 
 /**
@@ -86,13 +98,32 @@ async function save(): Promise<void> {
   }
 }
 
-const FRESH = { edits: {}, terms: null, kind: 'sale', party: null, saved: null } as const;
+const FRESH = {
+  edits: {},
+  confirmed: [],
+  terms: null,
+  kind: 'sale',
+  party: null,
+  saved: null,
+  annotated: false,
+  tag: null,
+  testImage: false,
+  savedMarks: '',
+} as const;
 
 /** A BIR Form 2307 (its form found) is a 2307; any other scan keeps its kind, a sale until the person says otherwise. */
 const kindOf = (r: ScanResult, kept: Kind = 'sale'): Kind => (r.aligned && r.form === 'bir_2307' ? '2307' : kept);
 
-export function addScan(s: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'result'>): string {
-  const scan: StoredScan = { ...FRESH, ...s, kind: kindOf(s.result), id: `${Date.now()}-${++counter}`, at: new Date() };
+export function addScan(s: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'result' | 'testImage'>): string {
+  const scan: StoredScan = {
+    ...FRESH,
+    ...s,
+    testImage: s.testImage ?? false,
+    kind: kindOf(s.result),
+    made: { app: APP_VERSION, model: modelVersion() },
+    id: `${Date.now()}-${++counter}`,
+    at: new Date(),
+  };
   recent = [scan, ...recent].slice(0, KEEP);
   changed();
   void save();
@@ -105,7 +136,12 @@ export function getScan(id: string): StoredScan | undefined {
 
 export function updateScan(
   id: string,
-  change: Partial<Pick<StoredScan, 'edits' | 'terms' | 'kind' | 'party' | 'saved' | 'result'>>,
+  change: Partial<
+    Pick<
+      StoredScan,
+      'edits' | 'confirmed' | 'terms' | 'kind' | 'party' | 'saved' | 'result' | 'annotated' | 'tag' | 'savedMarks'
+    >
+  >,
 ): StoredScan | undefined {
   const old = getScan(id);
   if (!old) return undefined;
@@ -119,7 +155,15 @@ export function updateScan(
   return scan;
 }
 
-/** "The box says this". The box's own reading (or nothing typed, on a box that wasn't read) removes the edit. */
+/** A box's edit; null when it has none ('' is an edit: the person cleared the box). */
+const editOf = (edits: Readonly<Record<string, string>>, box: string): string | null =>
+  Object.prototype.hasOwnProperty.call(edits, box) ? edits[box] : null;
+
+/**
+ * "The box says this". The box's own reading (or nothing typed, on a box that wasn't read) removes the edit. An edit
+ * stored, changed or taken back also drops the box's confirm, so the last change decides whether it's checked. The
+ * reading saved untouched, where there was no edit, changes nothing: a confirm stays.
+ */
 export function setEdit(id: string, box: string, text: string): void {
   const scan = getScan(id);
   if (!scan) return;
@@ -128,7 +172,16 @@ export function setEdit(id: string, box: string, text: string): void {
   const edits = { ...scan.edits };
   if (read ? said === read.text : said === '') delete edits[box];
   else edits[box] = said;
-  updateScan(id, { edits });
+  const unchanged = editOf(scan.edits, box) === editOf(edits, box);
+  updateScan(id, unchanged ? { edits } : { edits, confirmed: (scan.confirmed ?? []).filter((b) => b !== box) });
+}
+
+/** "The box was read right" ("Looks right" in annotation mode). An edit made later takes it back. */
+export function confirmBox(id: string, box: string): void {
+  const scan = getScan(id);
+  if (!scan) return;
+  const confirmed = scan.confirmed ?? [];
+  if (!confirmed.includes(box)) updateScan(id, { confirmed: [...confirmed, box] });
 }
 
 /** Keeps a saved scan opened from Saved invoices, so its screen can find and change it. */

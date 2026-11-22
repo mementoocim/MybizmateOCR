@@ -33,7 +33,16 @@ function bigPack(customers: number, items: number): Pack {
   };
 }
 
-const SETTINGS: Settings = { vatRegistered: true, revenueAccount: '', expenseAccount: '', atc: '', offsetAccount: '' };
+const SETTINGS: Settings = {
+  vatRegistered: true,
+  revenueAccount: '',
+  expenseAccount: '',
+  atc: '',
+  offsetAccount: '',
+  annotation: false,
+  clientCode: '',
+  writerCode: '',
+};
 const scanOf = (stem: string) =>
   getScan(addScan({ label: stem, source: 'sample', sampleId: stem, result: parseScanResult(coreJson(stem)) }))!;
 

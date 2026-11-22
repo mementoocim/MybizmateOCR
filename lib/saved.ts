@@ -15,16 +15,18 @@ import {
   type KeptResult,
   type Kind,
   type SaveDetails,
+  type SourceTag,
   type StoredScan,
   updateScan,
   withPdfFields,
 } from './scans';
-import { type Settings, settings, updateSettings } from './settings';
+import { annotationOn, type Settings, settings, updateSettings } from './settings';
+import { cleanTag } from './training/codes';
 
 // Saved invoices: the scans the person saved as a sale, a purchase or a 2307, each as import rows (an invoice's one
 // row, a 2307's one per payment). A saved scan's folder moves from the scanner's scans/ (which keeps only its newest 6)
 // to saved/<id>/, with the whole scan in scan.json; saved.json holds one summary per saved scan, with its rows and when
-// it was exported.
+// it was exported: in an import file, and apart from that in the team's training export.
 
 type SummaryBase = {
   id: string;
@@ -34,7 +36,9 @@ type SummaryBase = {
   date: string; // the invoice's date; a 2307's period's last day
   listed: boolean; // the party column is a list party's code, or a VARIOUS-* party
   savedAt: string;
-  exportedAt: string | null;
+  exportedAt: string | null; // when it went out in an import file
+  // when it went out in a training export (team builds); a summary kept before milestone 4 has none, and loads as null
+  trainingExportedAt?: string | null;
 };
 /** A saved sale or purchase: its row of the Sales or Purchases import. */
 export type InvoiceSummary = SummaryBase & { kind: InvoiceKind; gross: number; row: ExportRow };
@@ -80,9 +84,14 @@ function checksOf(scan: StoredScan): SaleView | CertView | null {
   return isInvoice(scan) ? saleOf(scan, lists(), settings()) : null;
 }
 
-function summaryOf(scan: StoredScan, exportedAt: string | null): SavedSummary {
+/**
+ * A saved scan's summary, with the marks of the one it replaces: when it went out in an import file, and in a training
+ * export.
+ */
+function summaryOf(scan: StoredScan, before?: SavedSummary): SavedSummary {
   const { savedAt, details } = scan.saved!;
-  const base = { id: scan.id, label: scan.label, savedAt, exportedAt };
+  const marks = { exportedAt: before?.exportedAt ?? null, trainingExportedAt: before?.trainingExportedAt ?? null };
+  const base = { id: scan.id, label: scan.label, savedAt, ...marks };
   if (is2307(scan)) {
     const view = certOf(scan, lists(), settings());
     const { cert, payor } = view;
@@ -116,7 +125,25 @@ function summaryOf(scan: StoredScan, exportedAt: string | null): SavedSummary {
 
 /** A saved scan's import rows as it stands now: its boxes, its party or its kind may have changed since it was saved. */
 export function rowsNow(scan: StoredScan): readonly ExportRow[] {
-  return summaryRows(summaryOf(scan, null));
+  return summaryRows(summaryOf(scan));
+}
+
+/** FNV-1a, 32 bits, over the text's UTF-8 bytes, as 8 hex digits: a short hash that holds none of the text. */
+function fnv1a(text: string): string {
+  let hash = 0x811c9dc5;
+  for (const byte of new TextEncoder().encode(text)) hash = Math.imul(hash ^ byte, 0x01000193);
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * A scan's edits and checked boxes as a short hash: the same whatever order they were made in. A save keeps it
+ * (savedMarks), so annotation mode can tell a box changed since, one outside the import rows too.
+ */
+export function marksOf(scan: Pick<StoredScan, 'edits' | 'confirmed'>): string {
+  const edits = Object.keys(scan.edits)
+    .sort()
+    .map((box) => [box, scan.edits[box]]);
+  return fnv1a(JSON.stringify([edits, [...(scan.confirmed ?? [])].sort()]));
 }
 
 /** Moves a scan's folder out of the scanner's scans/ to saved/<id>/, and points every file of its result there. */
@@ -140,17 +167,36 @@ async function moveToSaved(scan: StoredScan): Promise<ScanResult> {
   };
 }
 
-/** A saved scan as scan.json keeps it; one saved before PDFs gets their fields (a photo's). */
-async function readScan(id: string): Promise<StoredScan | null> {
+/**
+ * A saved scan as scan.json keeps it, as it was last saved: changes made since live only in the app's memory (see
+ * openSaved). One saved before PDFs gets their fields (a photo's), and one saved before milestone 4 (milestones 3 and
+ * 5) has no boxes checked, wasn't saved in annotation mode and isn't a test image. One saved before the save kept a
+ * hash of its edits and checks has none (savedMarks ''), so nothing is compared with it.
+ */
+export async function readScan(id: string): Promise<StoredScan | null> {
   const saved = await readJson<Omit<StoredScan, 'at' | 'result'> & { at: string; result: KeptResult }>(
     `saved/${id}/scan.json`,
   );
-  return saved ? { ...saved, at: new Date(saved.at), result: withPdfFields(saved.result) } : null;
+  if (!saved) return null;
+  return {
+    ...saved,
+    confirmed: saved.confirmed ?? [],
+    annotated: saved.annotated ?? false,
+    tag: saved.tag ?? null,
+    testImage: saved.testImage ?? false,
+    savedMarks: saved.savedMarks ?? '',
+    at: new Date(saved.at),
+    result: withPdfFields(saved.result),
+  };
 }
 
-/** At start: the summaries, plus any saved scan whose summary a kill cut short. */
+/**
+ * At start: the summaries (one kept before milestone 4 hasn't gone out in a training export), plus any saved scan whose
+ * summary a kill cut short.
+ */
 export async function loadSaved(): Promise<void> {
-  const index = (await readJson<SavedSummary[]>(INDEX)) ?? [];
+  const kept = (await readJson<SavedSummary[]>(INDEX)) ?? [];
+  const index = kept.map((s) => ({ ...s, trainingExportedAt: s.trainingExportedAt ?? null }));
   const known = new Set(index.map((s) => s.id));
   const found: SavedSummary[] = [];
   const root = new Directory(Paths.document, 'saved');
@@ -158,7 +204,7 @@ export async function loadSaved(): Promise<void> {
     for (const entry of root.list()) {
       if (!(entry instanceof Directory) || known.has(entry.name)) continue;
       const scan = await readScan(entry.name);
-      if (scan?.saved) found.push(summaryOf(scan, null));
+      if (scan?.saved) found.push(summaryOf(scan));
     }
   }
   summaries = newestFirst([...index, ...found]);
@@ -175,21 +221,31 @@ function defaultsFrom(kind: Kind, details: SaveDetails): Partial<Settings> {
 
 /**
  * Saves a scan as its kind's import rows (again, after changes): an invoice with its tax type, account, terms and ATC,
- * a 2307 with its offset account. Throws a SaveBlock's name when it can't be.
+ * a 2307 with its offset account. In annotation mode it's saved annotated, with its source tag, whose codes become the
+ * next save's, and the next training export sends it (again) with its labels as now checked; a save outside annotation
+ * mode isn't annotated, has no tag, and keeps its marks. Either way the scan keeps a hash of its edits and checks as
+ * saved (savedMarks). Throws a SaveBlock's name when it can't be, and no_tag when annotation mode's two codes aren't
+ * both codes.
  */
-export async function saveScan(id: string, details: SaveDetails): Promise<void> {
+export async function saveScan(id: string, details: SaveDetails, tag: SourceTag | null = null): Promise<void> {
   const before = getScan(id);
   if (!before) throw new Error('no_scan');
-  const block = saveBlock(before, checksOf(before));
+  const annotation = annotationOn();
+  const block = saveBlock(before, checksOf(before), { annotation });
   if (block) throw new Error(block);
+  const codes = annotation && tag ? cleanTag(tag) : null; // codes only: a name never reaches the scan or Settings
+  if (annotation && codes === null) throw new Error('no_tag');
   const result = await moveToSaved(before);
-  const scan = updateScan(id, { result, saved: { savedAt: new Date().toISOString(), details } })!;
+  const saved = { savedAt: new Date().toISOString(), details };
+  const scan = updateScan(id, { result, saved, annotated: annotation, tag: codes, savedMarks: marksOf(before) })!;
   await writeJson(`saved/${id}/scan.json`, { ...scan, at: scan.at.toISOString() });
-  const summary = summaryOf(scan, savedSummary(id)?.exportedAt ?? null);
+  const last = savedSummary(id); // its marks are kept, apart from a training export's after an annotated save
+  const summary = summaryOf(scan, last && annotation ? { ...last, trainingExportedAt: null } : last);
   summaries = newestFirst([summary, ...summaries.filter((s) => s.id !== id)]);
   changed();
   await writeJson(INDEX, summaries);
-  await updateSettings(defaultsFrom(summary.kind, details));
+  const kept = codes ? { clientCode: codes.client, writerCode: codes.writer } : {};
+  await updateSettings({ ...defaultsFrom(summary.kind, details), ...kept });
 }
 
 /** A saved scan, read back so its screen can show it; null when it's gone. */
@@ -211,6 +267,14 @@ export async function deleteSaved(id: string): Promise<void> {
 export async function markExported(ids: readonly string[], at: Date): Promise<void> {
   const when = at.toISOString();
   summaries = summaries.map((s) => (ids.includes(s.id) ? { ...s, exportedAt: when } : s));
+  changed();
+  await writeJson(INDEX, summaries);
+}
+
+/** Marks saved scans as sent in a training export, so the next one leaves them out; the import files' mark stays. */
+export async function markTrainingExported(ids: readonly string[], at: Date): Promise<void> {
+  const when = at.toISOString();
+  summaries = summaries.map((s) => (ids.includes(s.id) ? { ...s, trainingExportedAt: when } : s));
   changed();
   await writeJson(INDEX, summaries);
 }

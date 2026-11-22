@@ -5,6 +5,7 @@ import { monthSpan, qty } from './format';
 import type { Party } from './lists';
 import type { SaleView } from './sale';
 import type { CertDetails, InvoiceDetails, StoredScan } from './scans';
+import { uncheckedBoxes } from './training/boxes';
 
 // A saved scan as a row of MyBizMate's Sales import or Purchases import (docs/mybizmate-templates), and a saved 2307 as
 // rows of its 2307-CWT (received) import: the templates' header rows word for word, and each value where its column
@@ -161,7 +162,8 @@ export type SaveBlock =
   | 'no_supplier'
   | 'no_period'
   | 'no_payor'
-  | 'no_rows';
+  | 'no_rows'
+  | 'unchecked';
 
 /** What a block asks of the person. A sample's screen and a form not found say why on their own. */
 const BLOCK_WORDS: Partial<Record<SaveBlock, string>> = {
@@ -173,28 +175,38 @@ const BLOCK_WORDS: Partial<Record<SaveBlock, string>> = {
   no_rows: 'No income payments were read.',
 };
 
-/** A block's words for the person, or null when there are none (no block, a sample, a form not found). */
-export function blockWords(block: SaveBlock | null): string | null {
+/**
+ * A block's words for the person, or null when there are none (no block, a sample, a form not found). Boxes not
+ * checked yet are counted on the scan.
+ */
+export function blockWords(block: SaveBlock | null, scan: StoredScan): string | null {
+  if (block === 'unchecked') return `Check every box first: ${uncheckedBoxes(scan).length} left.`;
   return block === null ? null : (BLOCK_WORDS[block] ?? null);
 }
 
 /**
  * Why a scan can't be saved yet, or null: an invoice checked as a sale (SaleView), a 2307 as a certificate
- * (CertView). Samples are made up, so they never are.
+ * (CertView). Samples are made up, so they never are. In annotation mode (opts.annotation: annotationOn()), a scan
+ * the paper lets through also waits until every box that can become training data is checked.
  */
-export function saveBlock(scan: StoredScan, checked: SaleView | CertView | null): SaveBlock | null {
+export function saveBlock(
+  scan: StoredScan,
+  checked: SaleView | CertView | null,
+  opts?: { annotation?: boolean },
+): SaveBlock | null {
   if (scan.source === 'sample') return 'sample';
   if (!scan.result.aligned || !checked) return 'no_form';
   if ('cert' in checked) {
     const { cert, payor } = checked;
     if (cert.from === null || cert.to === null) return 'no_period';
     if (payor.column === '') return 'no_payor'; // no name, and no customer matched
-    return cert.rows.length === 0 ? 'no_rows' : null;
+    if (cert.rows.length === 0) return 'no_rows';
+  } else {
+    if (checked.final.date === null) return 'no_date';
+    if (checked.gross === null) return 'no_total';
+    if (scan.kind === 'purchase' && checked.party.status === 'missing') return 'no_supplier';
   }
-  if (checked.final.date === null) return 'no_date';
-  if (checked.gross === null) return 'no_total';
-  if (scan.kind === 'purchase' && checked.party.status === 'missing') return 'no_supplier';
-  return null;
+  return opts?.annotation && uncheckedBoxes(scan).length > 0 ? 'unchecked' : null;
 }
 
 /** The items for the Description column: "10 × Detergent 1kg; 5 × Nails 2in". */

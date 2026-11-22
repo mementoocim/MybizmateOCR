@@ -8,7 +8,6 @@ import { ReadingOverlay } from '../components/ReadingOverlay';
 import { RecentRow } from '../components/RecentRow';
 import { ScanIllustration } from '../components/ScanIllustration';
 import { Sheet } from '../components/Sheet';
-import { TEAM_BUILD } from '../lib/build';
 import { savedList, subscribeSaved } from '../lib/saved';
 import { SAMPLES } from '../lib/samples';
 import { useScanFlow } from '../lib/scanFlow';
@@ -34,8 +33,7 @@ export default function Home() {
   const menu: { label: string; to: Href }[] = [
     { label: 'Saved invoices', to: '/saved' },
     { label: 'Your lists', to: '/lists' },
-    { label: 'Settings', to: '/settings' },
-    ...(TEAM_BUILD ? [{ label: 'Speed test', to: '/speed' as Href }] : []), // the team's own tool
+    { label: 'Settings', to: '/settings' }, // a team build's own tools are in Settings › Team tools
   ];
   const [samplesOpen, setSamplesOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);

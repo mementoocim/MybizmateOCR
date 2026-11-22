@@ -1,8 +1,11 @@
+import { TEAM_BUILD } from './build';
 import { readJson, writeJson } from './jsonFile';
 
 // The export defaults, kept on the phone: whether the business is VAT-registered, the accounts the imports need (as
 // a code or a name from the business's chart of accounts, which isn't on the phone: an invoice's revenue or expense
-// account, and the offset account a 2307's withheld tax goes to), and the last withholding tax ATC.
+// account, and the offset account a 2307's withheld tax goes to), and the last withholding tax ATC. And the team's
+// own: whether annotation mode is on (Settings › Team tools, team builds only), and the client and writer codes the
+// last annotated save used, which the next one starts from.
 
 export type TaxType = 'VAT' | 'NONVAT' | 'ZERO' | 'EXEMPT' | 'NA';
 export type Settings = {
@@ -11,10 +14,23 @@ export type Settings = {
   expenseAccount: string;
   atc: string;
   offsetAccount: string;
+  annotation: boolean;
+  clientCode: string;
+  writerCode: string;
 };
 
 const FILE = 'settings.json';
-const DEFAULTS: Settings = { vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '', offsetAccount: '' };
+// Settings kept by an older version lack the newer fields: these fill them in when they load.
+const DEFAULTS: Settings = {
+  vatRegistered: null,
+  revenueAccount: '',
+  expenseAccount: '',
+  atc: '',
+  offsetAccount: '',
+  annotation: false,
+  clientCode: '',
+  writerCode: '',
+};
 
 let current: Settings = DEFAULTS; // replaced, never changed in place: screens subscribe to it
 const listeners = new Set<() => void>();
@@ -23,6 +39,15 @@ const changed = () => listeners.forEach((listener) => listener());
 
 export function settings(): Settings {
   return current;
+}
+
+/**
+ * Whether annotation mode is on: the setting, in a team build. A phone moved from a team build to a client build keeps
+ * the setting in settings.json, where its switch is hidden, so the build decides too. Everything annotation mode
+ * changes asks this.
+ */
+export function annotationOn(): boolean {
+  return TEAM_BUILD && current.annotation;
 }
 
 export function subscribeSettings(listener: () => void): () => void {

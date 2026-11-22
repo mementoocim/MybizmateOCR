@@ -7,9 +7,10 @@ import { peso, prettyDate } from '../lib/format';
 import type { SaleView } from '../lib/sale';
 import { saveScan } from '../lib/saved';
 import type { StoredScan } from '../lib/scans';
-import { settings, subscribeSettings, type TaxType, updateSettings } from '../lib/settings';
+import { annotationOn, settings, subscribeSettings, type TaxType, updateSettings } from '../lib/settings';
 import { bold, colors } from '../lib/theme';
 import { toast } from '../lib/toast';
+import { cleanTag } from '../lib/training/codes';
 import { PrimaryButton, TextButton } from './Buttons';
 import { Chips } from './Chips';
 import { Sheet } from './Sheet';
@@ -60,22 +61,24 @@ export function SaveSheet({
   const [account, setAccount] = useState(before?.account ?? (isSale ? s.revenueAccount : s.expenseAccount));
   const [terms, setTerms] = useState<Terms | null>(before?.terms ?? sale.terms ?? (sale.party.listParty?.terms || null));
   const [atc, setAtc] = useState(before?.atc ?? s.atc);
+  const codes = useCodes(scan);
   const [saving, setSaving] = useState(false);
   const taxType = chosenType ?? sale.taxType; // the suggestion follows the VAT answer until the person picks one
   const askVat = isSale && s.vatRegistered === null;
-  const ready = account.trim() !== '' && terms !== null && !askVat && !saving;
+  const ready = account.trim() !== '' && terms !== null && !askVat && codes.ready && !saving;
   const problems = sale.problems.length;
 
   async function save() {
     if (!ready || terms === null) return;
     setSaving(true);
     try {
-      await saveScan(scan.id, {
+      const details = {
         taxType,
         account: account.trim(),
         terms,
         atc: sale.withholding !== null ? atc.trim().toUpperCase() : '',
-      });
+      };
+      await saveScan(scan.id, details, codes.tag);
       onClose();
       toast('Saved. Export it from Saved invoices.');
     } catch {
@@ -126,6 +129,7 @@ export function SaveSheet({
           </Text>
         </>
       )}
+      <CodeFields codes={codes} />
       <StillToCheck problems={problems} />
       <View style={styles.buttons}>
         <PrimaryButton
@@ -157,15 +161,16 @@ export function CertSaveSheet({
 }) {
   const s = useSyncExternalStore(subscribeSettings, settings);
   const [account, setAccount] = useState(scan.saved?.details.account ?? s.offsetAccount);
+  const codes = useCodes(scan);
   const [saving, setSaving] = useState(false);
-  const ready = account.trim() !== '' && !saving;
+  const ready = account.trim() !== '' && codes.ready && !saving;
   const { cert, payor, problems } = view;
 
   async function save() {
     if (!ready) return;
     setSaving(true);
     try {
-      await saveScan(scan.id, { account: account.trim() });
+      await saveScan(scan.id, { account: account.trim() }, codes.tag);
       onClose();
       toast('Saved. Export it from Saved invoices.');
     } catch {
@@ -191,12 +196,49 @@ export function CertSaveSheet({
         value={account}
         onChangeText={setAccount}
       />
+      <CodeFields codes={codes} />
       <StillToCheck problems={problems.length} />
       <View style={styles.buttons}>
         <PrimaryButton testID="save-confirm" label="Save 2307" disabled={!ready} onPress={() => void save()} />
         <TextButton label="Cancel" onPress={onClose} />
       </View>
     </Sheet>
+  );
+}
+
+/**
+ * In annotation mode, the scan's source tag as the person types it: a scan saved before keeps its own codes, a new one
+ * starts from the last annotated save's (Settings). tag: the two codes once both are codes; ready: whether the save can
+ * go ahead. Outside annotation mode nothing is asked.
+ */
+function useCodes(scan: StoredScan) {
+  const asked = useSyncExternalStore(subscribeSettings, annotationOn);
+  const [client, setClient] = useState(() => scan.tag?.client ?? settings().clientCode);
+  const [writer, setWriter] = useState(() => scan.tag?.writer ?? settings().writerCode);
+  const tag = asked ? cleanTag({ client, writer }) : null;
+  return { asked, client, setClient, writer, setWriter, tag, ready: !asked || tag !== null };
+}
+
+/** The source tag's two codes, in annotation mode. */
+function CodeFields({ codes }: { codes: ReturnType<typeof useCodes> }) {
+  if (!codes.asked) return null;
+  return (
+    <>
+      <TextField
+        label="Client code"
+        value={codes.client}
+        onChangeText={(t) => codes.setClient(t.toUpperCase())}
+        autoCapitalize="characters"
+      />
+      <TextField
+        label="Writer code"
+        value={codes.writer}
+        onChangeText={(t) => codes.setWriter(t.toUpperCase())}
+        autoCapitalize="characters"
+      />
+      <Text style={styles.note}>Codes only, like C014 and W03. Never a name.</Text>
+      <Text style={styles.note}>Start with a letter. Use letters, digits and -, with 1 to 6 digits.</Text>
+    </>
   );
 }
 

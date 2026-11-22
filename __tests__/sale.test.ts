@@ -14,7 +14,16 @@ jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.m
 const FZ = require('../fixtures/checks/finalize.json');
 const PACK = require('../fixtures/checks/scan_pack.json');
 
-const SETTINGS: Settings = { vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '', offsetAccount: '' };
+const SETTINGS: Settings = {
+  vatRegistered: null,
+  revenueAccount: '',
+  expenseAccount: '',
+  atc: '',
+  offsetAccount: '',
+  annotation: false,
+  clientCode: '',
+  writerCode: '',
+};
 const EMPTY: Lists = { parties: [], items: [], version: 0 };
 
 function party(fields: Partial<Party> & Pick<Party, 'id' | 'registeredName'>): Party {

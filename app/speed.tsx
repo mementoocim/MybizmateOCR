@@ -2,12 +2,13 @@ import { Fragment, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton } from '../components/Buttons';
+import { TeamOnly } from '../components/TeamOnly';
 import { formatMs } from '../lib/format';
 import { runSpeedTest, type SpeedResult } from '../lib/speedTest';
 import { bold, colors } from '../lib/theme';
 
-// The team's speed test (the test app's activity_speed.xml and SpeedTestActivity.java), from the team menu or
-// mybizmatescan://speed.
+// The team's speed test (the test app's activity_speed.xml and SpeedTestActivity.java), from Settings › Team tools or
+// mybizmatescan://speed, in team builds only.
 
 function deviceLine(): string {
   if (Platform.OS !== 'android') return `${Platform.OS} ${String(Platform.Version)}`;
@@ -28,6 +29,14 @@ function rows(r: SpeedResult): [string, string][] {
 }
 
 export default function SpeedScreen() {
+  return (
+    <TeamOnly>
+      <SpeedTest />
+    </TeamOnly>
+  );
+}
+
+function SpeedTest() {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0); // 0–1 while it runs
   const [line, setLine] = useState('');

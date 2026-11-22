@@ -3,7 +3,14 @@ import { coreJson } from '../test-utils/coreJson';
 import { memoryFs } from '../test-utils/memoryFs';
 import { pinToday } from '../test-utils/today';
 
+let mockTeam = false;
+
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
+jest.mock('../lib/build', () => ({
+  get TEAM_BUILD() {
+    return mockTeam;
+  },
+}));
 
 // The made-up lists (fixtures/lists): Sample 0007's customer, Torres Construction Supply, is C012 there.
 const PARTIES: string = require('fs').readFileSync('fixtures/lists/parties.csv', 'utf8');
@@ -24,8 +31,8 @@ const load = (): Modules => ({
 });
 
 /** A camera scan of Sample 0007 whose files are in the scanner's folder, as the core writes them. */
-function cameraScan(m: Modules): string {
-  const result = parseScanResult(coreJson('inv_0007', SCAN_DIR));
+function cameraScan(m: Modules, dir = SCAN_DIR): string {
+  const result = parseScanResult(coreJson('inv_0007', dir));
   for (const uri of [result.pageUri, result.originalUri, ...result.reads.map((r) => r.cropUri)]) {
     memoryFs.files.set(uri!, 'image');
   }
@@ -38,6 +45,7 @@ afterAll(() => jest.useRealTimers());
 beforeEach(() => {
   memoryFs.reset();
   jest.resetModules();
+  mockTeam = false;
 });
 
 test("saving moves the scan's folder out of scans/ and rewrites its files' URIs", async () => {
@@ -139,6 +147,69 @@ test('a scan saved before PDFs opens as a photo', async () => {
   expect(scan!.result).toMatchObject({ source: 'photo', pageCount: null, picture: null });
   expect(scan!.result.reads).toHaveLength(45);
   expect(scan!.result.reads.every((b) => b.fromText === false)).toBe(true);
+});
+
+test("an old saved scan loads and isn't training data", async () => {
+  const first = load();
+  const ids = [cameraScan(first), cameraScan(first, 'file:///docs/scans/124')];
+  for (const id of ids) await first.saved.saveScan(id, DETAILS);
+  // their scan.json as milestones 3 and 5 wrote them: no checked boxes, annotation, source tag, test image, versions
+  // or saved marks, and milestone 3's result had no PDF fields either
+  ids.forEach((id, i) => {
+    const file = `file:///docs/saved/${id}/scan.json`;
+    const kept = JSON.parse(memoryFs.files.get(file) as string);
+    for (const field of ['confirmed', 'annotated', 'tag', 'testImage', 'made', 'savedMarks']) delete kept[field];
+    if (i === 0) {
+      delete kept.result.source;
+      delete kept.result.pageCount;
+      delete kept.result.picture;
+      for (const b of kept.result.reads) delete b.fromText;
+    }
+    memoryFs.files.set(file, JSON.stringify(kept));
+  });
+  jest.resetModules();
+  const again = load();
+  const { trainingRecord } = require('../lib/training/record') as typeof import('../lib/training/record');
+  await again.saved.loadSaved();
+  expect(again.saved.savedList().map((s) => s.id).sort()).toEqual([...ids].sort());
+  for (const id of ids) {
+    const scan = await again.saved.openSaved(id);
+    expect(scan).toMatchObject({ confirmed: [], annotated: false, tag: null, testImage: false, savedMarks: '' });
+    expect(scan!.result.reads.every((b) => b.fromText === false)).toBe(true);
+    expect(trainingRecord(scan!, again.lists.lists(), again.settings.settings())).toBeNull(); // it exports nothing
+  }
+});
+
+test('in annotation mode a scan saves once its boxes are checked, with its codes and only codes', async () => {
+  mockTeam = true;
+  const m = load();
+  const { uncheckedBoxes } = require('../lib/training/boxes') as typeof import('../lib/training/boxes');
+  await m.settings.updateSettings({ annotation: true });
+  const id = cameraScan(m);
+  const tag = { client: 'c014', writer: 'w03' };
+  await expect(m.saved.saveScan(id, DETAILS, tag)).rejects.toThrow('unchecked');
+  uncheckedBoxes(m.scans.getScan(id)!).forEach((box) => m.scans.confirmBox(id, box));
+  // a source tag is two codes: none, or a name, and nothing is saved
+  await expect(m.saved.saveScan(id, DETAILS)).rejects.toThrow('no_tag');
+  await expect(m.saved.saveScan(id, DETAILS, { client: 'Juan Cruz', writer: 'W03' })).rejects.toThrow('no_tag');
+  expect(m.saved.savedList()).toHaveLength(0);
+  expect(m.scans.getScan(id)!.saved).toBeNull();
+  await m.saved.saveScan(id, DETAILS, tag);
+  const kept = { annotated: true, tag: { client: 'C014', writer: 'W03' } };
+  expect(m.scans.getScan(id)).toMatchObject(kept);
+  expect(m.settings.settings()).toMatchObject({ clientCode: 'C014', writerCode: 'W03', revenueAccount: '4010' });
+  // kept in scan.json: after a restart it opens annotated, with its tag
+  jest.resetModules();
+  const again = load();
+  await again.settings.loadSettings();
+  await again.saved.loadSaved();
+  expect(await again.saved.openSaved(id)).toMatchObject({ ...kept, testImage: false });
+
+  // saved again with the mode off: no longer annotated, and its tag goes
+  await again.settings.updateSettings({ annotation: false });
+  await again.saved.saveScan(id, DETAILS, { client: 'C020', writer: 'W09' });
+  expect(again.scans.getScan(id)).toMatchObject({ annotated: false, tag: null });
+  expect(again.settings.settings()).toMatchObject({ clientCode: 'C014', writerCode: 'W03' });
 });
 
 test('the account used becomes the default', async () => {

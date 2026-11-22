@@ -47,7 +47,8 @@ export default function CameraScreen() {
     focusedRef.current = focused;
   }, [focused]);
 
-  // Development builds: /camera?test=<sample id or file:// URI> shows that photo in place of the camera.
+  // Development builds: /camera?test=<sample id or file:// URI> shows that photo in place of the camera. Its scans are
+  // test images: they can be saved, but never become training data.
   const { test } = useLocalSearchParams<{ test?: string }>();
   const testParam = __DEV__ && typeof test === 'string' && test.length > 0 ? test : null;
   const [testImage, setTestImage] = useState<string | null>(null);
@@ -153,7 +154,7 @@ export default function CameraScreen() {
     }
     // taken just as the gallery opened: the scan flow is busy and doesn't take it
     void flow
-      .scanUri(uri, 'Camera photo', 'camera', { deletePhoto: true, replace: true })
+      .scanUri(uri, 'Camera photo', 'camera', { deletePhoto: true, replace: true, testImage: testParam !== null })
       .then((taken) => taken || discard(uri));
   }
 

@@ -6,6 +6,19 @@ import { memoryFs } from '../test-utils/memoryFs';
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 
 const flush = () => new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
+/** A scan as it starts, before the person does anything to it. */
+const UNTOUCHED = {
+  edits: {},
+  confirmed: [],
+  terms: null,
+  kind: 'sale',
+  party: null,
+  saved: null,
+  annotated: false,
+  tag: null,
+  testImage: false,
+  savedMarks: '',
+};
 
 function result(dir: string): ScanResult {
   return parseScanResult(coreJson('inv_0007', dir));
@@ -27,15 +40,17 @@ test('keeps the newest 6, newest first', () => {
   expect(getScan(ids[6])?.label).toBe('Scan 7');
 });
 
-test('edits, terms, kind and party are kept, and come back after a restart', async () => {
+test('edits, checked boxes, terms, kind and party are kept, and come back after a restart', async () => {
   const first = require('../lib/scans');
   const listener = jest.fn();
   first.subscribeRecent(listener);
   const id = first.addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a') });
-  expect(first.getScan(id)).toMatchObject({ edits: {}, terms: null, kind: 'sale', party: null, saved: null });
+  expect(first.getScan(id)).toMatchObject(UNTOUCHED);
   first.setEdit(id, 'date', ' 10/21/2026 ');
+  first.confirmBox(id, 'invoice_no');
+  first.confirmBox(id, 'invoice_no'); // already checked: no change
   first.updateScan(id, { terms: 'cash', kind: 'purchase', party: { name: 'Isabela Wholesale Trading' } });
-  expect(listener).toHaveBeenCalledTimes(3);
+  expect(listener).toHaveBeenCalledTimes(4);
   await flush();
   memoryFs.dirs.add('file:///s/a');
   jest.resetModules();
@@ -43,6 +58,7 @@ test('edits, terms, kind and party are kept, and come back after a restart', asy
   await second.loadRecent();
   expect(second.getScan(id)).toMatchObject({
     edits: { date: '10/21/2026' },
+    confirmed: ['invoice_no'],
     terms: 'cash',
     kind: 'purchase',
     party: { name: 'Isabela Wholesale Trading' },
@@ -50,13 +66,33 @@ test('edits, terms, kind and party are kept, and come back after a restart', asy
   });
 });
 
-test('a scan saved by milestone 2 loads with no edits, as a sale', async () => {
+test('a change to its edit takes a box out of the checked ones', () => {
+  const { addScan, confirmBox, getScan, setEdit } = require('../lib/scans');
+  const id = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a') });
+  const checked = () => getScan(id).confirmed;
+  confirmBox(id, 'date');
+  confirmBox(id, 'invoice_no');
+  setEdit(id, 'date', 'Sep 20, 2026'); // its own reading saved untouched: no edit before or after
+  expect(checked()).toEqual(['date', 'invoice_no']);
+  setEdit(id, 'date', '10/21/2026'); // an edit stored
+  expect(checked()).toEqual(['invoice_no']);
+  confirmBox(id, 'date');
+  setEdit(id, 'date', ' 10/21/2026 '); // the same edit again: nothing changed
+  expect(checked()).toEqual(['invoice_no', 'date']);
+  setEdit(id, 'date', '10/22/2026'); // the edit changed
+  expect(checked()).toEqual(['invoice_no']);
+  confirmBox(id, 'date');
+  setEdit(id, 'date', 'Sep 20, 2026'); // the edit taken back
+  expect(getScan(id)).toMatchObject({ edits: {}, confirmed: ['invoice_no'] });
+});
+
+test('a scan saved by milestone 2 loads with no edits or checked boxes, as a sale', async () => {
   const old = { id: 'old-1', label: 'Photo from gallery', source: 'gallery', at: '2026-11-20T01:00:00.000Z', result: result('/s/old') };
   memoryFs.files.set('file:///docs/recent.json', JSON.stringify([old]));
   memoryFs.dirs.add('file:///s/old');
   const { loadRecent, getScan } = require('../lib/scans');
   await loadRecent();
-  expect(getScan('old-1')).toMatchObject({ edits: {}, terms: null, kind: 'sale', party: null, saved: null });
+  expect(getScan('old-1')).toMatchObject(UNTOUCHED);
 });
 
 test('a scan kept before PDFs loads as a photo', async () => {
@@ -108,6 +144,26 @@ test('a 2307 comes in as a 2307; one kept as a sale before 2307s could be saved 
   await second.loadRecent();
   expect(second.getScan(id).kind).toBe('2307');
   expect(second.getScan(invoice).kind).toBe('sale');
+});
+
+test('a new scan keeps the versions it was made with', async () => {
+  const { APP_VERSION, modelVersion } = require('../lib/versions');
+  const first = require('../lib/scans');
+  const id = first.addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a') });
+  const made = { app: APP_VERSION, model: modelVersion() };
+  expect(first.getScan(id).made).toEqual(made);
+  // recent.json with a scan kept before scans kept their versions (milestones 2, 3 and 5)
+  await flush();
+  const old = { id: 'old-3', label: 'Photo from gallery', source: 'gallery', at: '2026-11-20T01:00:00.000Z', result: result('/s/old') };
+  const kept = JSON.parse(memoryFs.files.get('file:///docs/recent.json') as string);
+  memoryFs.files.set('file:///docs/recent.json', JSON.stringify([...kept, old]));
+  memoryFs.dirs.add('file:///s/a');
+  memoryFs.dirs.add('file:///s/old');
+  jest.resetModules();
+  const second = require('../lib/scans');
+  await second.loadRecent();
+  expect(second.getScan(id).made).toEqual(made);
+  expect(second.getScan('old-3').made).toBeUndefined();
 });
 
 test('the reading itself removes the edit', () => {

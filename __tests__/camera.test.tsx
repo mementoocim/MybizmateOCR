@@ -3,6 +3,8 @@ import { AppState, Linking } from 'react-native';
 
 import CameraScreen from '../app/camera';
 import { CAMERA_ERRORS, statusText } from '../lib/cameraCopy';
+import { saveScan } from '../lib/saved';
+import { getScan } from '../lib/scans';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 
@@ -58,6 +60,7 @@ jest.mock('expo-file-system', () => ({
       return false;
     }
     async write() {}
+    async move() {}
     async text() {
       return '';
     }
@@ -299,4 +302,22 @@ test('the development test hook: a sample stands in for the camera, with no perm
   mockParams = { test: 'file:///data/user/0/x/files/svc.jpg' };
   await open();
   expect(camera().props.testImage).toBe('file:///data/user/0/x/files/svc.jpg');
+});
+
+test('a camera test image is marked', async () => {
+  const opened = () => getScan(mockRouter.replace.mock.calls.at(-1)![0].params.id)!;
+  // a photo the camera took is no test image
+  await open();
+  await send('photo', { uri: 'file:///cache/camera/capture_3.jpg' });
+  expect(opened()).toMatchObject({ source: 'camera', testImage: false });
+
+  // one from the test hook is: it can still be saved, but never becomes training data
+  mockParams = { test: 'inv_0007' };
+  await open();
+  await send('photo', { uri: 'file:///cache/camera/capture_4.jpg' });
+  const scan = opened();
+  expect(scan).toMatchObject({ source: 'camera', testImage: true });
+  const details = { taxType: 'VAT', account: '4010', terms: 'account', atc: '' } as const;
+  await act(async () => saveScan(scan.id, details));
+  expect(getScan(scan.id)).toMatchObject({ testImage: true, saved: { details } });
 });

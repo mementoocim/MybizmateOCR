@@ -2,9 +2,14 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
 
 import Result from '../app/result';
-import { addParty, clearParties } from '../lib/lists';
-import { addScan, setEdit, type StoredScan } from '../lib/scans';
-import { settings, updateSettings } from '../lib/settings';
+import { saveBlock } from '../lib/exportRows';
+import { addParty, clearParties, lists } from '../lib/lists';
+import { saleOf } from '../lib/sale';
+import { openSaved } from '../lib/saved';
+import { addScan, confirmBox, forgetScan, getScan, setEdit, type StoredScan } from '../lib/scans';
+import { annotationOn, settings, updateSettings } from '../lib/settings';
+import { uncheckedBoxes } from '../lib/training/boxes';
+import { cleanCode } from '../lib/training/codes';
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
@@ -13,6 +18,7 @@ import { PACK_LISTS } from '../test-utils/packLists';
 import { pinToday } from '../test-utils/today';
 
 let mockParams: { id?: string; from?: string } = {};
+let mockTeam = false;
 const mockToast = jest.fn();
 
 jest.mock('expo-router', () => ({
@@ -30,6 +36,11 @@ jest.mock('../modules/scanner', () => ({
   scanPhoto: jest.fn(),
 }));
 jest.mock('../lib/toast', () => ({ toast: (m: string) => mockToast(m) }));
+jest.mock('../lib/build', () => ({
+  get TEAM_BUILD() {
+    return mockTeam;
+  },
+}));
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
   requestCameraPermissionsAsync: jest.fn(),
@@ -52,6 +63,21 @@ async function show(
 
 const press = (el: Parameters<typeof fireEvent.press>[0]) => act(async () => fireEvent.press(el));
 const type = (label: string, text: string) => act(async () => fireEvent.changeText(screen.getByLabelText(label), text));
+/** Checks every box that can become training data, as "Looks right" does. */
+const checkEveryBox = (id: string) =>
+  act(async () => uncheckedBoxes(getScan(id)!).forEach((box) => confirmBox(id, box)));
+const keptScan = (id: string) => JSON.parse(memoryFs.files.get(`file:///docs/saved/${id}/scan.json`) as string);
+const keptRecent = (id: string) =>
+  JSON.parse(memoryFs.files.get('file:///docs/recent.json') as string).find((s: { id: string }) => s.id === id);
+const CHANGED = 'Changed since it was saved. The export still has the saved version: tap Save changes.';
+const SAVED = 'Saved as a sale on Nov 18, 2026. Not exported yet.';
+/** Saves the sale on screen with the save sheet: the first save of the test, so it asks about VAT. */
+async function saveSale() {
+  await press(screen.getByTestId('save-open'));
+  await press(screen.getByText('Not VAT-registered'));
+  await type('Revenue account', '4010');
+  await press(screen.getByTestId('save-confirm'));
+}
 
 beforeAll(() => pinToday(new Date(2026, 10, 18, 10, 0)));
 afterAll(() => jest.useRealTimers());
@@ -59,7 +85,17 @@ afterAll(() => jest.useRealTimers());
 beforeEach(async () => {
   jest.clearAllMocks();
   memoryFs.reset();
-  await updateSettings({ vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '', offsetAccount: '' });
+  mockTeam = false;
+  await updateSettings({
+    vatRegistered: null,
+    revenueAccount: '',
+    expenseAccount: '',
+    atc: '',
+    offsetAccount: '',
+    annotation: false,
+    clientCode: '',
+    writerCode: '',
+  });
 });
 
 test('the first sale asks whether the business is VAT-registered', async () => {
@@ -243,4 +279,186 @@ test('a 2307 needs its payments first, and its card says so', async () => {
   await press(screen.getByTestId('save-open'));
   expect(mockToast).toHaveBeenCalledWith('No income payments were read.');
   expect(screen.queryByLabelText('Offset account')).toBeNull();
+});
+
+// Annotation mode (Settings › Team tools, team builds only): each scan is saved with a source tag, a client's and a
+// writer's code.
+
+test('codes are codes', () => {
+  expect(cleanCode('c014')).toBe('C014');
+  expect(cleanCode('W03')).toBe('W03');
+  expect(cleanCode('W-03')).toBe('W-03');
+  expect(cleanCode(' w03 ')).toBe('W03');
+  expect(cleanCode('CLIENT-00014')).toBe('CLIENT-00014'); // 12 characters
+  expect(cleanCode('C123456')).toBe('C123456'); // 6 digits
+  // a name, nothing, a space inside, 13 characters, a letter outside A-Z, no digit at all; what doesn't start with a
+  // letter: a phone number, a TIN, a dash; and more than 6 digits, as a phone number or a TIN after a letter has
+  const refused = ['Juan', '', 'C 014', 'CLIENT-000014', 'ñ1', 'WC-', '09171234567', '123-456-789', '-03'];
+  refused.push('C1234567', 'P09171234567', 'T123-456-789');
+  expect(refused.map(cleanCode)).toEqual(refused.map(() => null));
+});
+
+test('the save sheet asks for the codes', async () => {
+  mockTeam = true;
+  await updateSettings({ annotation: true });
+  const first = await show('inv_0007');
+  await checkEveryBox(first);
+  await press(screen.getByTestId('save-open'));
+  await press(screen.getByText('Not VAT-registered'));
+  await type('Revenue account', '4010');
+  expect(screen.getByLabelText('Client code').props.value).toBe(''); // none kept yet
+  expect(screen.getByLabelText('Writer code').props.value).toBe('');
+  expect(screen.getByText('Codes only, like C014 and W03. Never a name.')).toBeTruthy();
+  expect(screen.getByText('Start with a letter. Use letters, digits and -, with 1 to 6 digits.')).toBeTruthy();
+  expect(screen.getByTestId('save-confirm')).toBeDisabled();
+  await type('Client code', 'Juan');
+  expect(screen.getByTestId('save-confirm')).toBeDisabled();
+  await type('Client code', 'c014');
+  expect(screen.getByLabelText('Client code').props.value).toBe('C014');
+  expect(screen.getByTestId('save-confirm')).toBeDisabled(); // the writer's is still missing
+  await type('Writer code', 'W 03');
+  expect(screen.getByTestId('save-confirm')).toBeDisabled();
+  await type('Writer code', 'w-03');
+  expect(screen.getByTestId('save-confirm')).toBeEnabled();
+  await press(screen.getByTestId('save-confirm'));
+  expect(mockToast).toHaveBeenCalledWith('Saved. Export it from Saved invoices.');
+  const tag = { client: 'C014', writer: 'W-03' };
+  expect(getScan(first)).toMatchObject({ annotated: true, tag });
+  expect(keptScan(first)).toMatchObject({ annotated: true, tag });
+  expect(settings()).toMatchObject({ clientCode: 'C014', writerCode: 'W-03' });
+
+  // the next scan starts from the codes kept in Settings
+  const next = await show('inv_0007');
+  await checkEveryBox(next);
+  await press(screen.getByTestId('save-open'));
+  expect(screen.getByLabelText('Client code').props.value).toBe('C014');
+  expect(screen.getByLabelText('Writer code').props.value).toBe('W-03');
+  expect(screen.getByTestId('save-confirm')).toBeEnabled();
+  await type('Client code', 'C015');
+  await press(screen.getByTestId('save-confirm'));
+  expect(getScan(next)).toMatchObject({ annotated: true, tag: { client: 'C015', writer: 'W-03' } });
+  expect(settings()).toMatchObject({ clientCode: 'C015', writerCode: 'W-03' });
+
+  // a saved scan's own codes stay its own when it's saved again
+  mockParams = { id: first };
+  await render(<Result />);
+  await press(screen.getByTestId('save-open'));
+  expect(screen.getByLabelText('Client code').props.value).toBe('C014');
+  await press(screen.getByTestId('save-confirm'));
+  expect(getScan(first)).toMatchObject({ annotated: true, tag });
+
+  // a 2307 is asked for them too (a text PDF's boxes are its text's, so none waits to be checked)
+  const cert = await show('bir2307_text_1', { source: 'pdf' });
+  await press(screen.getByTestId('save-open'));
+  expect(screen.getByLabelText('Client code').props.value).toBe('C014');
+  await type('Offset account', '1205');
+  await type('Client code', 'Maria');
+  expect(screen.getByTestId('save-confirm')).toBeDisabled();
+  await type('Client code', 'C016');
+  await press(screen.getByTestId('save-confirm'));
+  expect(getScan(cert)).toMatchObject({ annotated: true, tag: { client: 'C016', writer: 'W-03' } });
+  expect(keptScan(cert)).toMatchObject({ annotated: true, tag: { client: 'C016', writer: 'W-03' } });
+});
+
+test('without annotation mode nothing changes', async () => {
+  await updateSettings({ clientCode: 'C014', writerCode: 'W03' });
+  // annotation mode is the setting in a team build: a phone moved to a client build keeps the setting, and only that
+  for (const [team, annotation] of [
+    [true, false],
+    [false, true],
+  ] as const) {
+    mockTeam = team;
+    await act(async () => updateSettings({ annotation }));
+    const id = await show('inv_0007'); // none of its boxes checked
+    const scan = getScan(id)!;
+    expect(uncheckedBoxes(scan).length).toBeGreaterThan(0);
+    expect(saveBlock(scan, saleOf(scan, lists(), settings()), { annotation: annotationOn() })).toBeNull();
+    expect(screen.getByText('Ready to post')).toBeTruthy();
+    await press(screen.getByTestId('save-open'));
+    expect(screen.getByText('Save as a sale')).toBeTruthy();
+    expect(screen.queryByLabelText('Client code')).toBeNull();
+    expect(screen.queryByLabelText('Writer code')).toBeNull();
+    expect(screen.queryByText('Codes only, like C014 and W03. Never a name.')).toBeNull();
+    if (settings().vatRegistered === null) await press(screen.getByText('Not VAT-registered'));
+    await type('Revenue account', '4010');
+    await press(screen.getByTestId('save-confirm'));
+    expect(getScan(id)).toMatchObject({ annotated: false, tag: null });
+    expect(keptScan(id)).toMatchObject({ annotated: false, tag: null });
+    // a box outside the import row changed since: only the import row counts, as before
+    await act(async () => setEdit(id, 'item1_unit', 'kgs'));
+    expect(screen.getByText(SAVED)).toBeTruthy();
+    expect(screen.queryByText(CHANGED)).toBeNull();
+  }
+  expect(settings()).toMatchObject({ clientCode: 'C014', writerCode: 'W03' });
+});
+
+test('in annotation mode, any box changed since the save says so', async () => {
+  mockTeam = true;
+  await updateSettings({ annotation: true, clientCode: 'C014', writerCode: 'W03' });
+  const id = await show('inv_0007');
+  await act(async () => setEdit(id, 'item1_unit', 'kgs')); // read "kg": corrected before the save
+  await checkEveryBox(id);
+  await saveSale();
+  expect(screen.getByText(SAVED)).toBeTruthy();
+  // the save keeps a short hash of the edits and checks, never what a box says: on the scan, in scan.json and in
+  // recent.json
+  const marks = getScan(id)!.savedMarks;
+  expect(marks).toMatch(/^[0-9a-f]{8}$/);
+  expect([keptScan(id).savedMarks, keptRecent(id).savedMarks]).toEqual([marks, marks]);
+
+  // a box outside the import row: the row's unit
+  await act(async () => setEdit(id, 'item1_unit', 'pcs'));
+  expect(screen.getByText(CHANGED)).toBeTruthy();
+  // taken back to what was saved
+  await act(async () => setEdit(id, 'item1_unit', 'kgs'));
+  expect(screen.getByText(SAVED)).toBeTruthy();
+  expect(screen.queryByText(CHANGED)).toBeNull();
+  // a check alone: "Looks right" on the corrected unit, as it stands
+  await act(async () => confirmBox(id, 'item1_unit'));
+  expect(screen.getByText(CHANGED)).toBeTruthy();
+  await press(screen.getByTestId('save-open'));
+  await press(screen.getByTestId('save-confirm'));
+  expect(screen.getByText(SAVED)).toBeTruthy();
+
+  // a checked box edited and then taken back is no longer checked, so it says so until the box is checked again; the
+  // order the boxes were checked in doesn't count
+  await act(async () => setEdit(id, 'item2_unit', 'pcs')); // read "pc"
+  expect(screen.getByText(CHANGED)).toBeTruthy();
+  await act(async () => setEdit(id, 'item2_unit', 'pc'));
+  expect(screen.getByText(CHANGED)).toBeTruthy();
+  await act(async () => confirmBox(id, 'item2_unit'));
+  expect(screen.getByText(SAVED)).toBeTruthy();
+
+  // with the mode off, only the import row counts, as before
+  await act(async () => setEdit(id, 'item1_unit', 'pcs'));
+  expect(screen.getByText(CHANGED)).toBeTruthy();
+  await act(async () => updateSettings({ annotation: false }));
+  expect(screen.getByText(SAVED)).toBeTruthy();
+  expect(screen.queryByText(CHANGED)).toBeNull();
+});
+
+test('a scan saved before the save kept its marks says only what its import row says', async () => {
+  mockTeam = true;
+  await updateSettings({ annotation: true, clientCode: 'C014', writerCode: 'W03' });
+  const id = await show('inv_0007');
+  await checkEveryBox(id);
+  await saveSale();
+  // its scan.json without the marks, as a save before this change wrote it, opened again from Saved invoices
+  const kept = keptScan(id);
+  delete kept.savedMarks;
+  memoryFs.files.set(`file:///docs/saved/${id}/scan.json`, JSON.stringify(kept));
+  await act(async () => {
+    forgetScan(id);
+    await openSaved(id);
+  });
+  expect(getScan(id)!.savedMarks).toBe('');
+  mockParams = { id, from: 'saved' };
+  await render(<Result />);
+  expect(screen.getByText(SAVED)).toBeTruthy();
+  await act(async () => setEdit(id, 'item1_unit', 'pcs'));
+  expect(screen.getByText(SAVED)).toBeTruthy();
+  expect(screen.queryByText(CHANGED)).toBeNull();
+  // its import row still counts
+  await act(async () => setEdit(id, 'invoice_no', '0007999'));
+  expect(screen.getByText(CHANGED)).toBeTruthy();
 });
