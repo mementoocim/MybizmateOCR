@@ -8,13 +8,49 @@ import { coreJson } from '../test-utils/coreJson';
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 
 // Each form's template, as the scanner reads it.
-const TEMPLATES: Record<FormName, { fields: { name: string }[] }> = {
+type Template = { fields: { name: string; type: string }[] };
+const TEMPLATES: Record<FormName, Template> = {
   sales_invoice: require('../modules/scanner/assets/scanner/field_map.json'),
   service_invoice: require('../modules/scanner/assets/scanner/service_invoice.json'),
   bir_2307: require('../modules/scanner/assets/scanner/bir_2307.json'),
 };
 const FORMS = Object.keys(TEMPLATES) as FormName[];
 const CUSTOMER = ['customer_name', 'customer_tin', 'customer_address'];
+
+// The training fields, by name: the boxes the export may hold. A field that is neither personal, multi-line nor here
+// (a new one, or one renamed) fails the test below until someone puts it in one group, so it never goes out by default.
+const TRAINING: Record<FormName, readonly RegExp[]> = {
+  sales_invoice: [
+    /^(invoice_no|date|amount_words)$/,
+    /^item\d+_(qty|unit|description|unit_price|amount)$/,
+    /^(vatable_sales|vat|zero_rated|vat_exempt|total_sales|less_vat|net_of_vat|add_vat|total_due)$/,
+  ],
+  service_invoice: [
+    // amount_words2 has no read of its own (the scanner reads it into amount_words), but trainingBoxes would keep one
+    /^(invoice_no|date|amount_figure|amount_words2)$/,
+    /^item\d+_(description|qty|unit_price|amount)$/,
+    /^(vatable_sales|vat|zero_rated|vat_exempt|total_sales|less_vat|net_of_vat|discount|add_vat|withholding)$/,
+    /^total_due(_2)?$/,
+  ],
+  bir_2307: [/^period_(from|to)$/, /^(ewt|bt)\d+_(payment|atc)$/, /^(ewt|bt)(\d+|_total)_(m1|m2|m3|total|tax)$/],
+};
+
+/**
+ * Each non-checkbox field of a template that isn't in exactly one group, with the groups it's in: personal (a personal
+ * box whatever its lines), multi-line, or training.
+ */
+function unclassified(form: FormName, template: Template): [string, string[]][] {
+  return template.fields
+    .filter((f) => f.type !== 'checkbox')
+    .map(({ name }): [string, string[]] => [
+      name,
+      [
+        ...(PERSONAL[form].has(name) ? ['personal'] : isMultiLine(form, name) ? ['multi-line'] : []),
+        ...(TRAINING[form].some((pattern) => pattern.test(name)) ? ['training'] : []),
+      ],
+    ])
+    .filter(([, groups]) => groups.length !== 1);
+}
 
 /** A fixture's scan as the app keeps it, its result changed first when edit is given. */
 function scanOf(stem: string, edit?: (r: ScanResult) => void): StoredScan {
@@ -47,6 +83,13 @@ test("the personal boxes are the templates' own", () => {
     // and every name, TIN, address or ZIP box of the form is in it
     expect(fields.filter((n) => /_(name|tin|address|zip)$/.test(n) && !PERSONAL[form].has(n))).toEqual([]);
   }
+});
+
+test('every field is personal, multi-line or a training field', () => {
+  for (const form of FORMS) expect([form, unclassified(form, TEMPLATES[form])]).toEqual([form, []]);
+  // a field added to a template is in no group until someone puts it in one
+  const added = { fields: [...TEMPLATES.sales_invoice.fields, { name: 'customer_business_style', type: 'text' }] };
+  expect(unclassified('sales_invoice', added)).toEqual([['customer_business_style', []]]);
 });
 
 test('multi-line boxes are left out', () => {
