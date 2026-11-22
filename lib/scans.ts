@@ -4,6 +4,7 @@ import type { BoxRead, ScanResult } from '../modules/scanner';
 import type { Terms } from './checks/finalize';
 import { readJson, writeJson } from './jsonFile';
 import type { TaxType } from './settings';
+import { APP_VERSION, modelVersion } from './versions';
 
 // Recent scans: the newest 6, kept on the phone so they survive closing the app, with what the person did to each:
 // the boxes they fixed (kept apart from the readings), the terms they picked, sale or purchase (a BIR 2307 is always
@@ -37,6 +38,7 @@ export type StoredScan = {
   kind: Kind;
   party: PartyChoice | null;
   saved: { savedAt: string; details: SaveDetails } | null;
+  made?: { app: string; model: string }; // the app and model versions it was read with; none if kept before milestone 4
 };
 
 /**
@@ -92,7 +94,14 @@ const FRESH = { edits: {}, terms: null, kind: 'sale', party: null, saved: null }
 const kindOf = (r: ScanResult, kept: Kind = 'sale'): Kind => (r.aligned && r.form === 'bir_2307' ? '2307' : kept);
 
 export function addScan(s: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'result'>): string {
-  const scan: StoredScan = { ...FRESH, ...s, kind: kindOf(s.result), id: `${Date.now()}-${++counter}`, at: new Date() };
+  const scan: StoredScan = {
+    ...FRESH,
+    ...s,
+    kind: kindOf(s.result),
+    made: { app: APP_VERSION, model: modelVersion() },
+    id: `${Date.now()}-${++counter}`,
+    at: new Date(),
+  };
   recent = [scan, ...recent].slice(0, KEEP);
   changed();
   void save();

@@ -110,6 +110,26 @@ test('a 2307 comes in as a 2307; one kept as a sale before 2307s could be saved 
   expect(second.getScan(invoice).kind).toBe('sale');
 });
 
+test('a new scan keeps the versions it was made with', async () => {
+  const { APP_VERSION, modelVersion } = require('../lib/versions');
+  const first = require('../lib/scans');
+  const id = first.addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a') });
+  const made = { app: APP_VERSION, model: modelVersion() };
+  expect(first.getScan(id).made).toEqual(made);
+  // recent.json with a scan kept before scans kept their versions (milestones 2, 3 and 5)
+  await flush();
+  const old = { id: 'old-3', label: 'Photo from gallery', source: 'gallery', at: '2026-11-20T01:00:00.000Z', result: result('/s/old') };
+  const kept = JSON.parse(memoryFs.files.get('file:///docs/recent.json') as string);
+  memoryFs.files.set('file:///docs/recent.json', JSON.stringify([...kept, old]));
+  memoryFs.dirs.add('file:///s/a');
+  memoryFs.dirs.add('file:///s/old');
+  jest.resetModules();
+  const second = require('../lib/scans');
+  await second.loadRecent();
+  expect(second.getScan(id).made).toEqual(made);
+  expect(second.getScan('old-3').made).toBeUndefined();
+});
+
 test('the reading itself removes the edit', () => {
   const { addScan, setEdit, getScan } = require('../lib/scans');
   const id = addScan({ label: 'Sample 0007', source: 'sample', sampleId: 'inv_0007', result: result('/s/c') });
