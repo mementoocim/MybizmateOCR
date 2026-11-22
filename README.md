@@ -8,10 +8,12 @@ so Android and iPhone will read a photo or a PDF the same way.
 - Design: `../docs/2026-11-19-expo-scanner-design.md`
 - Plans: milestone 1, `../docs/superpowers/plans/2026-11-19-scanner-m1-core-reads-a-photo.md`; milestone 2,
   `../docs/superpowers/plans/2026-11-20-scanner-m2-camera-and-both-forms.md`; milestone 3,
-  `../docs/superpowers/plans/2026-11-20-scanner-m3-edit-checks-lists-export.md`; milestone 5,
+  `../docs/superpowers/plans/2026-11-20-scanner-m3-edit-checks-lists-export.md`; milestone 4,
+  `../docs/superpowers/plans/2026-11-22-scanner-m4-annotation-and-training-export.md`; milestone 5,
   `../docs/superpowers/plans/2026-11-20-scanner-m5-pdf-and-2307.md`
 - MyBizMate's import templates, and which of the scanner's boxes go in which column: `../docs/mybizmate-templates/`
 - The Python reference the core is checked against: `../prototype/benchmark/`
+- The fine-tuning set, its notebook, and the reader of the app's training exports: `../prototype/training/`
 
 ## What it does
 
@@ -164,13 +166,148 @@ so Android and iPhone will read a photo or a PDF the same way.
   and the branch is the business's own. The ranges, the warning for 2307s exported before and the "Mark as exported"
   question are the same as for sales; the ranges go by the period's last day.
 
+### Annotation mode and the training export (milestone 4)
+
+For the reading model's first fine-tune: in team builds, the team checks every box of a scan in the app itself, then
+sends the checked boxes in one zip. People's own scans aren't sent yet: they wait for consent (milestone 6).
+
+- **Team tools** (⋮ → Settings → TEAM TOOLS, team builds only): the Annotation mode switch, Training data and the
+  Speed test.
+- **The install ID:** a random ID (expo-crypto's version 4 UUID), made at the app's first start and kept in
+  `install.json`. It comes from nothing about the business or the phone, and no client screen shows it. It keeps one
+  phone's handwriting together in the training data. If it can't be kept, the app still starts, and the export tries
+  again.
+- **Versions:** each new scan keeps the app's version (app.json's `version`, now `1.0.0`) and the model's
+  (`modules/scanner/assets/scanner/model.json` names the model and pins its SHA-256 and size; a scan keeps the name
+  and the SHA-256's first 12 digits). An update between scanning and exporting doesn't relabel a scan. A scan made
+  before milestone 4 has neither.
+- **Training boxes:** the boxes the scanner read from the picture, except:
+  - the personal boxes: the customer's name, TIN and address on an invoice; the payee's and the payor's TIN, name,
+    address and ZIP on a 2307;
+  - boxes read from a PDF's own text;
+  - multi-line boxes, whose crop stacks lines the model read one by one: the Service Invoice's amount in words (two
+    boxes, read as one), and any template field marked multi-line (today only the Service Invoice's customer address,
+    a personal box anyway).
+
+  A blank box has no reading, so it isn't one either. Only training boxes need checking, and only they are exported.
+- **Annotation mode** (the switch's note: "Every box must be checked before a scan saves, and each scan gets a client
+  and writer code."):
+  - Each training box's row says "Not checked yet", "Checked" or "Corrected". The box editor adds **Looks right**,
+    which checks the box as it stands. It shows only while the field still holds the box's value: once another
+    reading is picked or something else is typed, it goes, and Save makes the box corrected. Taking an edit back
+    leaves the box not checked.
+  - Save waits for every training box: it opens the list of the boxes still to check (boxes no section shows
+    included), and the card says "Check every box first: N left" when nothing else is to check.
+  - Then the save sheet asks a **Client code** and a **Writer code**: the scan's source tag. A code starts with a
+    letter, holds at least one digit, and is 1 to 12 characters of A–Z, 0–9 and "-". It is upper-cased. So C014, W03
+    and W-03 are codes, and a name, a phone number or a TIN isn't. Under the fields: "Codes only, like C014 and W03.
+    Never a name." and "Start with a letter. Use letters, digits and -, with at least one digit." Save waits until
+    both are codes. A new scan starts from the last annotated save's codes; a scan saved before keeps its own.
+  - A scan saved in annotation mode is annotated, with its tag. Saved again with the mode off, it's a plain save: no
+    tag, and out of the training export. Turning the mode off by itself drops nothing.
+  - The mode works in team builds only. A phone moved to a client build keeps the setting, but nothing there asks for
+    codes or waits for checks.
+  - Samples can't be saved. A scan from the camera's test photo is marked as a test image: it saves, but never becomes
+    training data.
+- **Training data** (Team tools): "N annotated scans not exported yet." and **Export training data**, or "No
+  annotated scans to export yet." An export holds every annotated scan not sent yet, as it was last saved
+  (`saved/<id>/scan.json`): a change that wasn't saved never goes out. The file goes out with the share sheet:
+  `MyBizMate Scan training data <date>.zip`. Then the app asks "Did the file go where you wanted?": only "Mark as
+  exported" marks the scans (`trainingExportedAt`, apart from the import files' mark), so the next export leaves them
+  out. A save in annotation mode clears that mark: a scan corrected after it was sent goes out again in the next
+  export, and the reader keeps the newest copy of each scan. A plain save keeps the mark.
+- **The zip** is stored, not compressed, without ZIP64, so it holds at most 65,535 files (more gives "Couldn't make the
+  file."). It holds `manifest.json`, then each training box's crop at `crops/<scan id>/<box>.png`: the core's lossless
+  crop, at the page's own pixels. Nothing else: no personal box, no page, no photo. A crop that can't be read leaves
+  its box out, counted in `missing`. The whole zip is built in the phone's memory.
+- **The manifest** (format `mybizmate-scan-training`, version 1) holds the export's time, the install ID, the app's
+  version and `missing`, then each scan:
+  - its ID, form, source (`photo` or `pdf`), `annotated`, its tag, the install ID, and the app and model versions it
+    was read with (null on a scan made before milestone 4);
+  - the photo checks' measures, and the checks' flags (codes, never what a box says);
+  - each training box: its name and type; its crop's path and size; the model's first reading, with its confidence
+    and backup readings; `used`, the value the checks used, only where it differs from the reading (an invoice row's
+    quantity, unit price and amount, the date as ISO, the total due; a 2307 row's months, total and tax, and its total
+    rows); `label`, the person's correction, else the reading (`""` for a box the person cleared); `edited`
+    (corrected); and `confirmed` (checked: confirmed as read, or corrected).
+
+  The emulator's export (synthetic: no name is in it), with only its Sales Invoice and 2 of that scan's 16 boxes. In
+  the zip, the manifest is one line.
+
+  ```json
+  {
+    "format": "mybizmate-scan-training",
+    "version": 1,
+    "exportedAt": "2026-11-22T06:28:26.500Z",
+    "installId": "1df7866a-c700-4790-844f-2adebb1679ce",
+    "app": "1.0.0",
+    "missing": 0,
+    "scans": [
+      {
+        "id": "1795327915148-1",
+        "form": "sales_invoice",
+        "source": "photo",
+        "annotated": true,
+        "tag": { "client": "C001", "writer": "W01" },
+        "installId": "1df7866a-c700-4790-844f-2adebb1679ce",
+        "app": "1.0.0",
+        "model": "PP-OCRv6 small, Latin cut, pretrained 9731cc125476",
+        "photo": { "sharpness": 2.535332326959977, "sharpMin": 1, "light": 255, "darkMax": 50, "turned": false },
+        "flags": [],
+        "boxes": [
+          {
+            "name": "date", "type": "date", "crop": "crops/1795327915148-1/date.png", "size": [132, 41],
+            "reading": "11-18-26", "conf": 0.9999533295631409, "alts": [], "used": null,
+            "label": "11-18-26", "edited": false, "confirmed": true
+          },
+          {
+            "name": "item1_unit", "type": "text", "crop": "crops/1795327915148-1/item1_unit.png", "size": [69, 43],
+            "reading": "pack", "conf": 0.9999301433563232, "alts": [], "used": null,
+            "label": "packs", "edited": true, "confirmed": true
+          }
+        ]
+      }
+    ]
+  }
+  ```
+
+  ("packs" is a made-up correction, to try one.)
+- **The reader** (`../prototype/training/read_scan_exports.py`, with its tests in `test_read_scan_exports.py`, both
+  outside git) turns one or more exports into the fine-tuning set, in `make_rec_dataset.py`'s format. From
+  `../prototype/training`:
+
+  ```powershell
+  ..\..\.venv\Scripts\python.exe read_scan_exports.py real\rec_dataset "real\MyBizMate Scan training data 2026-11-22.zip" --val-count 5
+  ```
+
+  - Write to a new folder named `rec_dataset` (`real\rec_dataset` here): the reader refuses a folder that holds
+    anything, or a zip that's already there; the zip it writes next to the folder puts every file under the folder's
+    name; and the notebook reads `/content/rec_dataset`.
+  - It writes `train/` and `val/` (each crop as `<5-digit index>_<box>.png`, byte for byte), `train_list.txt` and
+    `val_list.txt` (`<path><TAB><label>`), `dataset_info.json`, and the folder zipped (`rec_dataset.zip`, for Colab).
+  - The split is by writer: the tag's `client/writer`, or `install:<id>` for a scan without a tag. All of a writer's
+    crops go to one side, so validation reads handwriting training never saw. `--val-writers` names the writers to
+    hold out; without it, `--val-count` of them are picked with `--seed`. It warns with fewer than 20 writers, or
+    fewer than 5 held out.
+  - It skips, and counts in `dataset_info.json`'s `stats`: boxes nobody checked, empty labels (a cleared box), labels
+    over 25 characters (the fine-tune's `max_text_length`), and labels with a character outside the app's 98 and the
+    space. It keeps, and counts, confirmed, unedited boxes whose `used` differs from their label.
+  - A scan in more than one export is kept once, from the newest export.
+  - It stops, saying why, on an export it doesn't know (its format or version), a `--val-writers` name with no crops,
+    a split that leaves no writer for training, and a box name with two types.
+  - The notebook (`finetune_ppocrv6_rec.ipynb`) reads either set: the synthetic one (`val_fonts`) or the reader's
+    (`val_writers`).
+
 ## Team builds
 
 Debug builds are team builds. A release is a client build unless it's built with `EXPO_PUBLIC_TEAM_BUILD=1`:
 
 - client: Home's ⋮ menu has Saved invoices, Your lists and Settings;
-- team: the menu also has the **Speed test** (also at `mybizmatescan://speed`, on any build), and the Result's
-  footnote shows the straighten and read times.
+- team: Settings also has **Team tools** (Annotation mode, Training data and the Speed test: milestone 4, above), and
+  the Result's footnote shows the straighten and read times.
+
+A link (`mybizmatescan://speed`, say) opens the Speed test or Training data screen in any build, but outside team
+builds those screens show only "This is for team builds."
 
 Build a team release for a phone (PowerShell, phone connected with USB debugging):
 
@@ -236,6 +373,10 @@ scans): to keep it, see "Reinstalling without losing the app's data", below.
 In a debug build, the dev client's Tools button starts over Home's ⋮ menu: drag it aside. On the emulator, a tap sent
 with `adb shell input` can open Gboard's "Try out your stylus" once; Cancel it.
 
+If adb stops answering (hung `adb -s emulator-5554 shell dumpsys package com.google.android.gms` calls pile up, one
+every 10 seconds, and even `adb kill-server` hangs), end every adb process and start the server again. In PowerShell:
+`Get-Process adb | Stop-Process -Force`, then `adb start-server`.
+
 On Windows, `plugins/with-windows-native-paths.js` keeps the native builds under Windows' 260-character path
 limit: it moves each library's CMake build folder to `%LOCALAPPDATA%\mbs-cxx` (a build cache that can be deleted
 any time).
@@ -298,7 +439,8 @@ Windows paths, the backup fails, and the file holds an error message instead. Th
 
 `mybizmatescan://camera?test=<sample>` shows a sample (`inv_0051`, say) in place of the camera picture, and
 `?test=file:///…` any photo in the app's own storage. The camera then finds the form, takes the photo by itself and
-reads it, as with a real sheet. For a Service Invoice:
+reads it, as with a real sheet. The scan is marked as a test image: it can be saved, but never becomes training data.
+For a Service Invoice:
 
 ```powershell
 adb push fixtures/core/photos/svc_0000.jpg /data/local/tmp/
@@ -376,6 +518,79 @@ run the same `scan_file` again.
   exporter that writes `fixtures/checks/` and `fixtures/lists/`.
 - From the same folder: `test_make_2307_template.py` (the 2307's template and ATC list), `test_synth_2307.py` (the
   synthetic 2307s and PDFs) and `test_export_core_fixtures.py` (everything the core's exporter writes).
+- From `../prototype/training`: `..\..\.venv\Scripts\python.exe -I test_read_scan_exports.py`: the tests of the
+  training exports' reader.
+
+## Checked on the emulator (milestone 4)
+
+A debug build on the emulator (Medium Phone, API 36, x86_64), 2026-11-22, built from `dc90485`; the JavaScript came
+from Metro. On the final tree, every suite passed: jest (46 suites, 327 tests), the typecheck and ESLint, the core's
+doctest (73 test cases, 9102 assertions) and the module's Kotlin tests (32), both unchanged by this milestone, and the
+reader's tests (9 of 9). Every scan below is synthetic: fixture photos pushed to the gallery, then deleted.
+
+1. **The reinstall** (expo-crypto is native), as in "Reinstalling without losing the app's data": the backup was whole
+   (371 files, 20.2 MB), and all 371 came back, each with the same MD5. Home then showed the restored data ("Saved
+   invoices, 4 to export" and the 6 recent scans), Settings its accounts, and Saved invoices the 5 saved scans (2 from
+   milestone 3, 3 from milestone 5). The first start made `install.json`, with a version 4 UUID; the next start kept
+   it.
+2. **Team tools:** Settings showed TEAM TOOLS (Annotation mode, Training data, Speed test), and Home's ⋮ menu no
+   longer has the Speed test. Training data said "No annotated scans to export yet.": the scans saved before aren't
+   training data.
+3. **An invoice in annotation mode:** `inv_0017.jpg`, a Sales Invoice, from the gallery: "Check every box first: 16
+   left" (its 19 boxes without the customer's 3). Save opened "Check every box first", every box "Not checked yet".
+   After "Looks right" on 5 boxes, the card said 11 left; later 4, then 1. Row 1's unit, read "pack", was changed to
+   "packs": once the field differed, Looks right was gone, and after Save the row said "You changed it to “packs”."
+   and "Corrected". With every box checked, the card said "Ready to post", and the save sheet
+   asked the Client code and the Writer code, with both notes. A name was refused: "Juan" became "JUAN", and Save
+   stayed off. So did a phone number, 09171234567. With `C001` and `W01` it saved ("Saved as a sale on Nov 22, 2026.
+   Not exported yet."), and Settings kept both codes.
+4. **A 2307 in annotation mode:** `bir2307_photo_0.jpg` from the gallery: "Check every box first: 14 left" (the payee's
+   and the payor's 8 boxes left out). With all 14 checked, "Ready to save"; the save sheet started with the offset
+   account `1105` and the codes `C001` and `W01`, and the 2307 saved.
+5. **Each new scan's versions** (in its `saved/<id>/scan.json`, read on its own): `"app": "1.0.0"` (app.json's version)
+   and `"model": "PP-OCRv6 small, Latin cut, pretrained 9731cc125476"`.
+6. **Saved scans from milestones 3 and 5, with annotation mode on:** the milestone 3 sale (Flores Grocery, Oct 21,
+   2026) and the milestone 5 photo 2307 opened from Saved invoices with no crash, each with its page and its saved
+   line: the sale with "2 things to check", the 2307 with "Check every box first: 14 left". The sale's Save changes
+   opened "Check every box first", every box "Not checked yet"; it was closed without saving. Their rows in Saved
+   invoices, and the milestone 5 scans in Recent scans (2 PDFs, 2 samples), showed as before.
+7. **The export:** Training data said "2 annotated scans not exported yet." Export training data opened the share
+   sheet, which was closed with Back, so nothing was sent. The app asked "Did the file go where you wanted?" ("Mark
+   these 2 scans as exported, so the next export leaves them out."). The zip was copied out with `adb exec-out run-as`
+   (the same MD5 as on the phone). Then "Mark as exported" said "Marked 2 scans as exported.", and Training data "No
+   annotated scans to export yet." The 2 scans got `trainingExportedAt`; their `exportedAt` stayed empty.
+8. **The zip** (`MyBizMate Scan training data 2026-11-22.zip`, 348,748 bytes) tests clean. It holds `manifest.json`
+   (7,569 bytes) and 30 crops, all stored, exactly the crops the manifest lists, each PNG the size its box gives. The
+   manifest has the format and version, the install ID (the same in both scans), the app `1.0.0`, `missing` 0, and
+   the 2 scans with their tag `C001`/`W01`. No personal box is in it, and none of the fixtures' names, TINs and
+   addresses is in its text. Every box is confirmed; only Row 1's unit is edited, with the label "packs"; every other
+   label is its reading. No box has a `used` (each reading was the value the checks used), and neither scan has flags.
+9. **Its size:** about 174 KB per scan: 11.2 KB per crop, and 11.6 KB per box with its share of the manifest and the
+   zip's headers. 200 annotated scans like these (15 training boxes each) would make a zip of about 35 MB; with fuller
+   invoices (40 boxes each), about 93 MB, built in the phone's memory.
+10. **The reader** on that zip, with `--val-count 0`, into a new folder: it warned of 1 writer and 0 held out, as
+    expected with one writer. It wrote 29 crops for training, all from `C001/W01` (amount 20, text 3, digits 2, date
+    1, number 1, code 1, printed digits 1), and none for validation. Its `stats`: 1 export, 2 scans, 30 boxes, 1
+    skipped as too long (the amount in words, 36 characters), no other skip, no duplicate and no `used` difference.
+    The corrected unit went in as "packs", and every file of `rec_dataset.zip` is under `rec_dataset/`.
+11. **A save in annotation mode sends a scan again:** the sale, saved again in annotation mode (its own codes in the
+    sheet), lost its `trainingExportedAt`, and Training data said "1 annotated scan not exported yet."
+12. **Annotation mode off:** `inv_0001.jpg` from the gallery said "Ready to post", with no box to check. The save sheet
+    asked no codes, and the sale saved as before (not annotated, no tag). Training data still said "1 annotated scan
+    not exported yet.": the plain save isn't counted, and turning the mode off kept the annotated scan.
+13. **Nothing logged:** the log, from the emulator's start through all of it, has no crash, and the app logged no box
+    text.
+
+**Still open:**
+- **Consent and people's queue** (milestone 6). Only the team's annotated scans are exported. People's own saved scans
+  wait for their consent and their own queue.
+- **Clearing saved images.** A saved scan keeps its page, crops and photo, since the export needs the crops. When to
+  clear them is decided with people's queue, in milestone 6.
+- **Multi-line boxes' per-line crops.** The Service Invoice's amount in words stays out of the training data: its crop
+  stacks two lines the model read one by one. It can go in once the core keeps each line's crop.
+- **The export's size.** One export takes every scan not sent yet, built in the phone's memory (about 35 MB for 200
+  scans like the ones above). The final review decides whether an export needs a cap.
+- **A phone.** All of the above on a real phone, with a team release.
 
 ## Checked on the emulator (milestone 5)
 
