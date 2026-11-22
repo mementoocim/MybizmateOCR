@@ -13,11 +13,20 @@ export function formatClock(d: Date): string {
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const thousands = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
-/** An amount as the test app shows it: "₱1,575.00"; "—" when there's none. By hand: Hermes' Intl can differ. */
-export function peso(v: number | null): string {
+/**
+ * An amount in a row, without the peso sign (design §6): "5,810.50", "-12.30"; "—" when there's none. By hand:
+ * Hermes' Intl can differ.
+ */
+export function amount(v: number | null): string {
   if (v === null) return '—';
   const [whole, cents] = Math.abs(v).toFixed(2).split('.');
-  return `${v < 0 ? '-' : ''}₱${thousands(whole)}.${cents}`;
+  return `${v < 0 ? '-' : ''}${thousands(whole)}.${cents}`;
+}
+
+/** An amount as a total or in a summary, as the test app shows it: "₱1,575.00"; "—" when there's none. */
+export function peso(v: number | null): string {
+  if (v === null) return '—';
+  return `${v < 0 ? '-' : ''}₱${amount(Math.abs(v))}`;
 }
 
 /** A quantity with up to 2 decimals and thousands commas: "1,500", "0.5", "0.33"; "?" when there's none. */
@@ -32,6 +41,12 @@ export function prettyDate(iso: string | null): string | null {
   if (!iso) return null;
   const [y, m, d] = iso.split('-').map(Number);
   return `${MONTHS[m - 1]} ${d}, ${y}`;
+}
+
+/** An ISO date as a short date: "Nov 22". */
+export function monthDay(isoDate: string): string {
+  const [, m, d] = isoDate.split('-').map(Number);
+  return `${MONTHS[m - 1]} ${d}`;
 }
 
 /** The months from one ISO date to another: "Oct–Dec 2026", "Oct 2026", "Dec 2025–Feb 2026". */

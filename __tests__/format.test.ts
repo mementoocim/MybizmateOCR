@@ -1,10 +1,23 @@
-import { formatClock, formatMs, monthSpan, peso, prettyDate, qty } from '../lib/format';
+import { amount, formatClock, formatMs, monthDay, monthSpan, peso, prettyDate, qty } from '../lib/format';
+
+test('amount: rows without the peso sign', () => {
+  expect(amount(5810.5)).toBe('5,810.50');
+  expect(amount(12345678.9)).toBe('12,345,678.90');
+  expect(amount(-12.3)).toBe('-12.30');
+  expect(amount(null)).toBe('—');
+});
+
+test('monthDay', () => {
+  expect(monthDay('2026-11-22')).toBe('Nov 22');
+  expect(monthDay('2026-01-05')).toBe('Jan 5');
+});
 
 test('pesos, quantities and dates as the test app writes them', () => {
   expect(peso(1575)).toBe('₱1,575.00');
   expect(peso(1234567.5)).toBe('₱1,234,567.50');
   expect(peso(0.5)).toBe('₱0.50');
   expect(peso(null)).toBe('—');
+  expect(peso(-12.3)).toBe('-₱12.30');
   expect(qty(0.5)).toBe('0.5');
   expect(qty(1500)).toBe('1,500');
   expect(qty(1 / 3)).toBe('0.33');

@@ -182,6 +182,36 @@ test('Tap shows a 2 dp focus ring while focused', async () => {
   expect(screen.getByTestId('focus-ring')).toHaveStyle({ borderRadius: 24 + 3 });
 });
 
+test("an inside focus ring sits on the control's edge, for full-bleed rows (ruling T4-1)", async () => {
+  await render(
+    <>
+      <Tap accessibilityRole="button" accessibilityLabel="Row" focusRing="inside" focusRadius={0} onPress={noop}>
+        <Text>Row</Text>
+      </Tap>
+      <Tap accessibilityRole="button" accessibilityLabel="Card" focusRing="inside" onPress={noop}>
+        <Text>Card</Text>
+      </Tap>
+    </>,
+  );
+  // Rows stack edge to edge in a scroll view: the next row's fill would cover a ring outside, and the scroll would
+  // clip its sides. Inside, it's the same 2 dp ring at inset 0, on the control's own radius.
+  await fireEvent(button('Row'), 'focus');
+  expect(screen.getByTestId('focus-ring')).toHaveStyle({
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 2,
+    borderColor: colors.focus,
+    borderRadius: 0,
+  });
+  await fireEvent(button('Row'), 'blur');
+
+  await fireEvent(button('Card'), 'focus'); // the default radius, not 3 dp out
+  expect(screen.getByTestId('focus-ring')).toHaveStyle({ top: 0, borderRadius: radius.button });
+});
+
 test('the adapters map to variants', async () => {
   await render(
     <>
