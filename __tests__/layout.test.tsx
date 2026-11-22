@@ -370,6 +370,22 @@ test('BottomBar pads by the inset and sits on a hairline', async () => {
   expect(onPress).toHaveBeenCalledTimes(1);
 });
 
+test("BottomBar: a button's ref reaches its pressable, so a sheet it opens can give TalkBack focus back to it", async () => {
+  const save = createRef<ViewInstance>();
+  await render(
+    <BottomBar
+      buttons={[
+        { label: 'Retake', variant: 'secondary', onPress: noop },
+        { label: 'Save sale', onPress: noop, ref: save },
+      ]}
+    />,
+  );
+  // The view TalkBack focus would go to: the button's own pressable, with its role and name.
+  expect(save.current).toMatchObject({ props: { accessibilityRole: 'button', accessibilityLabel: 'Save sale' } });
+  await screen.rerender(<BottomBar buttons={[{ label: 'Retake', variant: 'secondary', onPress: noop }]} />);
+  expect(save.current).toBeNull(); // gone with its button
+});
+
 test('ButtonRow puts two buttons side by side, and stacks them, primary last, when a label wraps', async () => {
   await render(<ButtonRow buttons={retakeAnd('Save purchase')} />);
   const row = () => screen.getByTestId('button-row');

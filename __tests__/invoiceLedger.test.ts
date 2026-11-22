@@ -105,7 +105,13 @@ test("sections and keys in today's order", () => {
   updateScan(id, { kind: 'purchase' });
   const purchase = sectionsOf(id);
   expect(keysOf(purchase)[0]).toEqual(['Invoice', ['number', 'date', 'supplier', 'sold_to', 'terms']]);
-  expect(rowOf(purchase, 'supplier')).toMatchObject({ label: 'Supplier', value: 'Not chosen yet', open: { kind: 'supplier' } });
+  expect(rowOf(purchase, 'supplier')).toMatchObject({
+    label: 'Supplier',
+    value: 'Not chosen yet',
+    open: { kind: 'supplier' },
+    hint: 'Opens your suppliers', // TalkBack's: the other rows open what the camera saw (LedgerRow's default)
+  });
+  expect(purchase.flatMap((s) => s.rows).filter((r) => r.hint !== undefined).map((r) => r.key)).toEqual(['supplier']);
   expect(wordsOf(rowOf(purchase, 'supplier'))).toMatchObject({
     sub: null,
     reason: 'Printed at the top of the invoice: tap to choose it', // the flagged status's sub-line, as its reason

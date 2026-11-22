@@ -98,6 +98,7 @@ export default function Result() {
   const termsOpener = useRef<ViewInstance | null>(null);
   const customerOpener = useRef<ViewInstance | null>(null);
   const supplierOpener = useRef<ViewInstance | null>(null);
+  const saveButton = useRef<ViewInstance>(null); // Save, in the bottom bar: the sheets it opens give focus back to it
   const scrollRef = useRef<ScrollViewInstance>(null);
   const stripRef = useRef<ViewInstance>(null);
   const moreRef = useRef<ViewInstance>(null);
@@ -161,8 +162,8 @@ export default function Result() {
   }
 
   function openSave() {
-    if (unchecked) openSheet({ kind: 'boxes', title: 'Check every box first', boxes: unchecked }, null);
-    else if (block === null) openSheet({ kind: 'save' }, null);
+    if (unchecked) openSheet({ kind: 'boxes', title: 'Check every box first', boxes: unchecked }, saveButton.current);
+    else if (block === null) openSheet({ kind: 'save' }, null); // the save sheets' returnFocus is Save itself
     else if (blocked) toast(blocked);
   }
 
@@ -215,7 +216,7 @@ export default function Result() {
       ? [{ label: 'Retake', variant: 'secondary', onPress: retake }]
       : [
           { label: 'Retake', variant: 'secondary', onPress: retake },
-          { label: saveLabel, testID: 'save-open', onPress: openSave },
+          { label: saveLabel, testID: 'save-open', onPress: openSave, ref: saveButton },
         ];
 
   const header = (
@@ -340,10 +341,24 @@ export default function Result() {
         />
       ) : null}
       {save && sale ? (
-        <SaveSheet key={save.n} visible={open?.kind === 'save'} scan={scan} sale={sale} onClose={closeSheet} />
+        <SaveSheet
+          key={save.n}
+          visible={open?.kind === 'save'}
+          scan={scan}
+          sale={sale}
+          onClose={closeSheet}
+          returnFocus={saveButton}
+        />
       ) : null}
       {save && cert ? (
-        <CertSaveSheet key={save.n} visible={open?.kind === 'save'} scan={scan} view={cert} onClose={closeSheet} />
+        <CertSaveSheet
+          key={save.n}
+          visible={open?.kind === 'save'}
+          scan={scan}
+          view={cert}
+          onClose={closeSheet}
+          returnFocus={saveButton}
+        />
       ) : null}
       <PhotoViewer visible={viewing} result={r} onClose={() => setViewing(false)} />
       {isSaved ? (

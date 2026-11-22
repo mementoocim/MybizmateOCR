@@ -38,6 +38,7 @@ export type LedgerRowSpec = {
   flagged: boolean;
   edited: boolean;
   open: LedgerOpen | null; // null: a row that opens nothing ("No items read")
+  hint?: string; // TalkBack's hint, for a row that doesn't open what the camera saw (LedgerRow's default)
 };
 
 export type LedgerSection = { title: string; right?: string; rows: LedgerRowSpec[] };
@@ -162,6 +163,7 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
         flagged,
         edited: false,
         open: { kind: 'supplier' },
+        hint: 'Opens your suppliers',
       },
       {
         key: 'sold_to',
@@ -342,6 +344,7 @@ export function Ledger({
               amountStrong={row.amountStrong}
               flagged={row.flagged}
               edited={row.edited}
+              accessibilityHint={row.hint}
               onPress={row.open ? () => onOpen(row, rowRefs.get(row.key) ?? null) : undefined}
             />
           ))}

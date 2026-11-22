@@ -1,5 +1,5 @@
-import { useState, useSyncExternalStore } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { type RefObject, useState, useSyncExternalStore } from 'react';
+import { StyleSheet, Text, View, type ViewInstance } from 'react-native';
 
 import { type CertView, periodName, taxWithheld } from '../lib/cert';
 import type { Terms } from '../lib/checks/finalize';
@@ -47,11 +47,13 @@ export function SaveSheet({
   scan,
   sale,
   onClose,
+  returnFocus,
 }: {
   visible: boolean;
   scan: StoredScan;
   sale: SaleView;
   onClose: () => void;
+  returnFocus?: RefObject<ViewInstance | null>; // Save, which opened it
 }) {
   const s = useSyncExternalStore(subscribeSettings, settings);
   const isSale = scan.kind === 'sale';
@@ -92,7 +94,8 @@ export function SaveSheet({
       visible={visible}
       title={isSale ? 'Save as a sale' : 'Save as a purchase'}
       subtitle={`It becomes a row in MyBizMate's ${isSale ? 'Sales' : 'Purchases'} import. Export it from Saved invoices.`}
-      onClose={onClose}>
+      onClose={onClose}
+      returnFocus={returnFocus}>
       <View style={styles.summary}>
         <Line label="Date" value={prettyDate(sale.final.date) ?? '—'} />
         <Line label={isSale ? 'Customer' : 'Supplier'} value={sale.party.shown + (NOT_LISTED[sale.party.status] ?? '')} />
@@ -153,11 +156,13 @@ export function CertSaveSheet({
   scan,
   view,
   onClose,
+  returnFocus,
 }: {
   visible: boolean;
   scan: StoredScan;
   view: CertView;
   onClose: () => void;
+  returnFocus?: RefObject<ViewInstance | null>; // Save, which opened it
 }) {
   const s = useSyncExternalStore(subscribeSettings, settings);
   const [account, setAccount] = useState(scan.saved?.details.account ?? s.offsetAccount);
@@ -184,7 +189,8 @@ export function CertSaveSheet({
       visible={visible}
       title="Save 2307"
       subtitle="Each payment becomes a row in MyBizMate's 2307-CWT import. Export it from Saved invoices."
-      onClose={onClose}>
+      onClose={onClose}
+      returnFocus={returnFocus}>
       <View style={styles.summary}>
         <Line label="Payor" value={payor.shown + (NOT_LISTED[payor.status] ?? '')} />
         <Line label="Period" value={periodName(cert)} />

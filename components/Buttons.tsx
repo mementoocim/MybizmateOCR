@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { type Ref, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, type ViewInstance } from 'react-native';
 
 import { colors, radius, space, touch, type } from '../lib/theme';
 import type { IconComponent } from './icons';
@@ -10,7 +10,8 @@ import { Tap } from './Tap';
 // destructiveText a danger label. Large is at least 56 dp tall and default 48; both grow with the label. Disabled is a
 // sand fill with a mute label, on every variant. Loading keeps the label, shows a spinner before it and blocks presses,
 // and so does a press whose promise hasn't settled: a double tap runs once. A button can report how many lines its
-// label took, so a row of them (ButtonRow) can stack when one wraps.
+// label took, so a row of them (ButtonRow) can stack when one wraps. Its ref is its pressable's view: a sheet it opens
+// gives TalkBack focus back to it.
 
 export type ButtonVariant = 'primary' | 'secondary' | 'text' | 'destructive' | 'destructiveText';
 export type ButtonProps = {
@@ -24,6 +25,7 @@ export type ButtonProps = {
   testID?: string;
   accessibilityHint?: string;
   onLabelLines?: (lines: number) => void; // from the label's onTextLayout
+  ref?: Ref<ViewInstance>; // its pressable (a sheet's returnFocus)
 };
 
 const LARGE = 56; // a large button's minimum height (§5.6)
@@ -39,6 +41,7 @@ export function Button({
   testID,
   accessibilityHint,
   onLabelLines,
+  ref,
 }: ButtonProps) {
   const [pending, setPending] = useState(false);
   const running = useRef(false); // set at once, so a second tap is refused even before the re-render disables it
@@ -61,6 +64,7 @@ export function Button({
 
   return (
     <Tap
+      ref={ref}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityHint={accessibilityHint}

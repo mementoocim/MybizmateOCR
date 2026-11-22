@@ -454,6 +454,9 @@ test('a purchase', async () => {
   expect(
     screen.getByText("Another business issued it to you. It becomes a row in MyBizMate's Purchases import."),
   ).toBeTruthy();
+  // The scanner doesn't read the supplier: its row opens your suppliers, not what the camera saw.
+  expect(screen.getByTestId('row-supplier')).toHaveProp('accessibilityHint', 'Opens your suppliers');
+  expect(screen.getByTestId('row-sold_to')).toHaveProp('accessibilityHint', 'Opens what the camera saw');
 });
 
 test('the kind switch: a radio group, Sale | Purchase, with today\'s sentence', async () => {
@@ -713,6 +716,44 @@ test('a sheet gives TalkBack focus back to the row that opened it; a chip, to it
   focus.mockClear();
   await press(button('Close'));
   expect(focusedTestIDs()).toEqual([['row-date', 'focus']]);
+});
+
+test('closing a save sheet gives TalkBack focus back to Save', async () => {
+  /** The last view TalkBack focus went to, as its pressable's props. */
+  const lastFocus = () => focus.mock.calls.at(-1);
+  // an invoice's save sheet
+  await show('inv_0007', { source: 'gallery', from: 'recent' });
+  await press(screen.getByTestId('save-open'));
+  expect(header('Save as a sale')).toBeOnTheScreen();
+  focus.mockClear();
+  await press(button('Cancel'));
+  expect(focus).toHaveBeenCalledTimes(1);
+  expect(lastFocus()).toEqual([
+    expect.objectContaining({ props: expect.objectContaining({ testID: 'save-open', accessibilityLabel: 'Save sale' }) }),
+    'focus',
+  ]);
+
+  // a 2307's
+  await show('bir2307_text_1', { source: 'pdf', from: 'recent' });
+  await press(screen.getByTestId('save-open'));
+  expect(header('Save 2307')).toBeOnTheScreen();
+  focus.mockClear();
+  await press(button('Cancel'));
+  expect(focus).toHaveBeenCalledTimes(1);
+  expect(lastFocus()).toEqual([
+    expect.objectContaining({ props: expect.objectContaining({ testID: 'save-open', accessibilityLabel: 'Save 2307' }) }),
+    'focus',
+  ]);
+
+  // what Save opens first in annotation mode: the boxes not checked yet
+  mockTeam = true;
+  await act(async () => updateSettings({ annotation: true }));
+  await show('inv_0007', { source: 'gallery', from: 'recent' });
+  await press(screen.getByTestId('save-open'));
+  expect(header('Check every box first')).toBeOnTheScreen();
+  focus.mockClear();
+  await press(button('Close'));
+  expect(focusedTestIDs()).toEqual([['save-open', 'focus']]);
 });
 
 test('Save opens its sheet once: a tap while it is open changes nothing', async () => {
