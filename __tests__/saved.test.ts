@@ -169,12 +169,14 @@ test("an old saved scan loads and isn't training data", async () => {
   });
   jest.resetModules();
   const again = load();
+  const { trainingRecord } = require('../lib/training/record') as typeof import('../lib/training/record');
   await again.saved.loadSaved();
   expect(again.saved.savedList().map((s) => s.id).sort()).toEqual([...ids].sort());
   for (const id of ids) {
     const scan = await again.saved.openSaved(id);
     expect(scan).toMatchObject({ confirmed: [], annotated: false, tag: null, testImage: false });
     expect(scan!.result.reads.every((b) => b.fromText === false)).toBe(true);
+    expect(trainingRecord(scan!, again.lists.lists(), again.settings.settings())).toBeNull(); // it exports nothing
   }
 });
 
