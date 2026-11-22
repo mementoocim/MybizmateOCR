@@ -1,13 +1,6 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import { createRef } from 'react';
-import {
-  DeviceEventEmitter,
-  Keyboard,
-  type ScrollViewInstance,
-  StyleSheet,
-  type TextInputInstance,
-  type ViewInstance,
-} from 'react-native';
+import { type ScrollViewInstance, StyleSheet, type TextInputInstance } from 'react-native';
 
 import { ChoiceChips } from '../components/ChoiceChips';
 import { Search } from '../components/icons';
@@ -15,6 +8,8 @@ import { Screen } from '../components/Screen';
 import { Segmented } from '../components/Segmented';
 import { TextField } from '../components/TextField';
 import { colors, radius, space, touch, type } from '../lib/theme';
+import { keyboard } from '../test-utils/keyboard';
+import { standIn } from '../test-utils/scrollStandIn';
 
 // Design B §5.6 and §7: the inputs. Segmented and ChoiceChips are radio groups that TalkBack names, with the chosen
 // option in ink with a paper label (§5.1: selection is ink). A TextField has its label above, an outline border that
@@ -44,18 +39,6 @@ const TAX_TYPES = [
 ] as const;
 const SUGGESTED = "Suggested from the invoice's VAT boxes";
 
-/** What Android sends when the keyboard opens (its height above the navigation bar, in dp), or 0: it closed. */
-async function keyboard(height: number) {
-  Keyboard.isVisible(); // loads RN's Keyboard module first, so its own record of the keyboard hears this too
-  await act(() => {
-    DeviceEventEmitter.emit(height > 0 ? 'keyboardDidShow' : 'keyboardDidHide', {
-      duration: 0,
-      easing: 'keyboard',
-      endCoordinates: { screenX: 0, screenY: 0, width: 360, height },
-    });
-  });
-}
-
 /**
  * A TextField in a Screen. jest's ScrollView and TextInput have no layout, so this stands in the scroll's content
  * view and records its scrolls, and puts the field `y` dp down that content.
@@ -68,9 +51,7 @@ async function fieldInScreen(y: number) {
       <TextField label="Offset account for 2307s" value="" onChangeText={noop} inputRef={inputRef} />
     </Screen>,
   );
-  const content = {} as ViewInstance;
-  const scrollTo = jest.fn();
-  Object.assign(scrollRef.current!, { getInnerViewRef: () => content, scrollTo });
+  const { content, scrollTo } = standIn(scrollRef.current);
   const measureLayout = jest.fn(
     (_relativeTo: unknown, onSuccess: (x: number, y: number, w: number, h: number) => void) =>
       onSuccess(0, y, 328, touch.target),

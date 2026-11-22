@@ -4,7 +4,6 @@ import {
   DeviceEventEmitter,
   Dimensions,
   FlatList,
-  Keyboard,
   Modal,
   ScrollView,
   type ScrollViewInstance,
@@ -20,6 +19,8 @@ import { IconButton } from '../components/IconButton';
 import { ListIcon, SettingsIcon } from '../components/icons';
 import { Screen, ScrollIntoViewScope, useEndPadding, useKeyboardHeight, useScrollIntoView } from '../components/Screen';
 import { colors, space, touch, type } from '../lib/theme';
+import { keyboard } from '../test-utils/keyboard';
+import { standIn } from '../test-utils/scrollStandIn';
 
 // Design B §5.6 and §8: the frame every screen is built from. The app is edge-to-edge, so the header pads by the
 // status bar's inset, and the bottom bar (or the end of the scroll) by the navigation bar's; Android no longer resizes
@@ -48,18 +49,6 @@ const kids = (instance: Instance) => instance.children.filter((child): child is 
 const glyphOf = (target: Instance) => kids(target)[0];
 const endPadding = (testID: string) => StyleSheet.flatten(screen.getByTestId(testID).props.contentContainerStyle);
 
-/** What Android sends when the keyboard opens (its height above the navigation bar, in dp), or 0: it closed. */
-async function keyboard(height: number) {
-  Keyboard.isVisible(); // loads RN's Keyboard module first, so its own record of the keyboard hears this too
-  await act(() => {
-    DeviceEventEmitter.emit(height > 0 ? 'keyboardDidShow' : 'keyboardDidHide', {
-      duration: 0,
-      easing: 'keyboard',
-      endCoordinates: { screenX: 0, screenY: 0, width: 360, height },
-    });
-  });
-}
-
 const retakeAnd = (save: string): ButtonProps[] => [
   { label: 'Retake', variant: 'secondary', onPress: noop },
   { label: save, onPress: noop },
@@ -83,13 +72,6 @@ function fieldAt(y: number) {
     onSuccess(0, y, 360, 48),
   );
   return { field: { measureLayout } as unknown as ViewInstance, measureLayout };
-}
-/** jest's ScrollView has no layout: stand in its content view and record its scrolls. */
-function standIn(scrollView: ScrollViewInstance | null) {
-  const content = {} as ViewInstance;
-  const scrollTo = jest.fn();
-  Object.assign(scrollView!, { getInnerViewRef: () => content, scrollTo });
-  return { content, scrollTo };
 }
 
 beforeEach(() => {
