@@ -53,13 +53,21 @@ test('edits, checked boxes, terms, kind and party are kept, and come back after 
   });
 });
 
-test('an edit takes the box out of the checked ones', () => {
+test('a change to its edit takes a box out of the checked ones', () => {
   const { addScan, confirmBox, getScan, setEdit } = require('../lib/scans');
   const id = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a') });
+  const checked = () => getScan(id).confirmed;
   confirmBox(id, 'date');
   confirmBox(id, 'invoice_no');
-  setEdit(id, 'date', '10/21/2026');
-  expect(getScan(id).confirmed).toEqual(['invoice_no']);
+  setEdit(id, 'date', 'Sep 20, 2026'); // its own reading saved untouched: no edit before or after
+  expect(checked()).toEqual(['date', 'invoice_no']);
+  setEdit(id, 'date', '10/21/2026'); // an edit stored
+  expect(checked()).toEqual(['invoice_no']);
+  confirmBox(id, 'date');
+  setEdit(id, 'date', ' 10/21/2026 '); // the same edit again: nothing changed
+  expect(checked()).toEqual(['invoice_no', 'date']);
+  setEdit(id, 'date', '10/22/2026'); // the edit changed
+  expect(checked()).toEqual(['invoice_no']);
   confirmBox(id, 'date');
   setEdit(id, 'date', 'Sep 20, 2026'); // the edit taken back
   expect(getScan(id)).toMatchObject({ edits: {}, confirmed: ['invoice_no'] });

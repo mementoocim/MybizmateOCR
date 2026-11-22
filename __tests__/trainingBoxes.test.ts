@@ -130,6 +130,11 @@ test("a box's state follows the last change", () => {
   setEdit(id, 'date', reading);
   expect(state(id)).toBe('unchecked');
 
+  id = fresh();
+  confirmBox(id, 'date');
+  setEdit(id, 'date', reading); // its own reading saved untouched: no edit before or after, so nothing changed
+  expect(state(id)).toBe('confirmed');
+
   // what's left to check: the training boxes neither confirmed nor corrected
   id = fresh();
   const all = names(trainingBoxes(getScan(id)!));

@@ -129,9 +129,14 @@ export function updateScan(
   return scan;
 }
 
+/** A box's edit; null when it has none ('' is an edit: the person cleared the box). */
+const editOf = (edits: Readonly<Record<string, string>>, box: string): string | null =>
+  Object.prototype.hasOwnProperty.call(edits, box) ? edits[box] : null;
+
 /**
- * "The box says this". The box's own reading (or nothing typed, on a box that wasn't read) removes the edit. Either
- * way the box is no longer confirmed: the last change decides whether it's checked.
+ * "The box says this". The box's own reading (or nothing typed, on a box that wasn't read) removes the edit. An edit
+ * stored, changed or taken back also drops the box's confirm, so the last change decides whether it's checked. The
+ * reading saved untouched, where there was no edit, changes nothing: a confirm stays.
  */
 export function setEdit(id: string, box: string, text: string): void {
   const scan = getScan(id);
@@ -141,7 +146,8 @@ export function setEdit(id: string, box: string, text: string): void {
   const edits = { ...scan.edits };
   if (read ? said === read.text : said === '') delete edits[box];
   else edits[box] = said;
-  updateScan(id, { edits, confirmed: (scan.confirmed ?? []).filter((b) => b !== box) });
+  const unchanged = editOf(scan.edits, box) === editOf(edits, box);
+  updateScan(id, unchanged ? { edits } : { edits, confirmed: (scan.confirmed ?? []).filter((b) => b !== box) });
 }
 
 /** "The box was read right" ("Looks right" in annotation mode). An edit made later takes it back. */

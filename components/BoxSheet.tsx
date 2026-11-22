@@ -21,9 +21,9 @@ const STATE_LINE: Record<BoxState, string> = {
 
 /**
  * What the camera saw in the given boxes, each one fixable: the person types what the box says (an edit is "the box
- * says this", kept apart from the reading), and the checks run again. In annotation mode a box's reading can be
- * confirmed as it is ("Looks right"), and each box that can become training data says whether it's checked yet.
- * children: more under the boxes (the customer).
+ * says this", kept apart from the reading), and the checks run again. In annotation mode each box that can become
+ * training data says whether it's checked yet, and its reading can be confirmed as it is ("Looks right"). children:
+ * more under the boxes (the customer).
  */
 export function BoxSheet({
   visible,
@@ -45,6 +45,9 @@ export function BoxSheet({
   const annotation = useSyncExternalStore(subscribeSettings, annotationOn);
   const form = scan.result.form!;
   const readOf = (box: string) => scan.result.reads.find((r) => r.name === box) ?? null;
+  // in annotation mode, the boxes that can become training data: only they need checking, so only they get a state
+  // line and "Looks right"
+  const training = new Set(annotation ? trainingBoxes(scan).map((r) => r.name) : []);
 
   function close() {
     setEditing(null);
@@ -84,7 +87,7 @@ export function BoxSheet({
           {"Type exactly what is written, even if it looks wrong. The checks then show what doesn't add up."}
         </Text>
         <View style={styles.buttons}>
-          {annotation && read && (
+          {training.has(editing) && (
             <OutlinedButton
               testID="box-confirm"
               label="Looks right"
@@ -108,8 +111,6 @@ export function BoxSheet({
     );
   }
 
-  // in annotation mode, the boxes that can become training data, each to be checked
-  const training = new Set(annotation ? trainingBoxes(scan).map((r) => r.name) : []);
   return (
     <Sheet
       visible={visible}

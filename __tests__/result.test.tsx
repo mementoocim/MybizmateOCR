@@ -155,6 +155,12 @@ test('the editor confirms a box in annotation mode', async () => {
   expect(screen.queryByLabelText('What the box says')).toBeNull(); // back to the box list
   expect(screen.getByText('Checked')).toBeTruthy();
   expect(getScan(id)!.confirmed).toEqual(['date']);
+  // saving the box's own reading untouched changes nothing, so it stays checked
+  await press(screen.getByTestId('fix-date'));
+  expect(screen.getByLabelText('What the box says').props.value).toBe('Sep 20, 2026');
+  await press(screen.getByTestId('box-save'));
+  expect(screen.getByText('Checked')).toBeTruthy();
+  expect(getScan(id)!.confirmed).toEqual(['date']);
   // a correction takes the check's place
   await press(screen.getByTestId('fix-date'));
   await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), '9/20/2026'));
@@ -163,15 +169,22 @@ test('the editor confirms a box in annotation mode', async () => {
   expect(screen.getByText('You changed it to “9/20/2026”.')).toBeTruthy();
   await press(screen.getByLabelText('Close'));
 
-  // the customer's boxes never become training data, so they have no state
+  // the customer's boxes never become training data: no state, and nothing to confirm
   await press(screen.getByText('Customer'));
   expect(screen.getByText('TIN')).toBeTruthy();
   expect(screen.queryByText(STATES)).toBeNull();
+  await press(screen.getByTestId('fix-customer_name'));
+  expect(screen.getByLabelText('What the box says')).toBeTruthy();
+  expect(screen.queryByTestId('box-confirm')).toBeNull();
+  await press(screen.getByText('Cancel'));
   await press(screen.getByLabelText('Close'));
 
-  // an empty box has no reading to confirm
+  // a multi-line box (the Service Invoice's amount in words) has nothing to confirm either, nor has an empty box
   await show('svc_0000');
   await press(screen.getByText('Total due'));
+  await press(screen.getByTestId('fix-amount_words'));
+  expect(screen.queryByTestId('box-confirm')).toBeNull();
+  await press(screen.getByText('Cancel'));
   await press(screen.getByTestId('fix-zero_rated'));
   expect(screen.queryByTestId('box-confirm')).toBeNull();
 });
