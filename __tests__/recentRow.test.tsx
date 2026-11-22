@@ -10,6 +10,7 @@ import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 import { memoryFs } from '../test-utils/memoryFs';
 import { pinToday } from '../test-utils/today';
+import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §9.2: one of Home's recent scans is a list row. Its title is where it came from (a PDF's file name), its
 // sub-line when it was read and the form found, and its badge the scan's one state, as the Scan screen's strip has it
@@ -122,11 +123,9 @@ test("title, time and form: a PDF by its file name, the form's name, a 12-hour c
   expect(screen.getByText('sales_text_0.pdf')).toHaveStyle({ ...type.value, color: colors.ink });
   expect(screen.queryByText(/^PDF: /)).toBeNull();
   // mono, in caps by the style; the words stay as the form's name for TalkBack
-  expect(screen.getByText('10:00 AM · MyBizMate Sales Invoice')).toHaveStyle({
-    ...type.figureSmall,
-    color: colors.mute,
-    textTransform: 'uppercase',
-  });
+  const sub = screen.getByText('10:00 AM · MyBizMate Sales Invoice');
+  expect(typeStylesOf(sub)).toEqual(['figureSmall']); // a label of the same size flattens alike here
+  expect(sub).toHaveStyle({ ...type.figureSmall, color: colors.mute, textTransform: 'uppercase' });
   await fireEvent.press(screen.getByRole('button', { name: /^sales_text_0\.pdf, / }));
   expect(onPress).toHaveBeenCalledTimes(1);
 

@@ -12,6 +12,7 @@ import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 import { memoryFs } from '../test-utils/memoryFs';
 import { pinToday } from '../test-utils/today';
+import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §9.2: Home as a workspace. The header's wordmark and two icon buttons; capture first; on a first run, the
 // tips; "Get set up" until it's done, once; what's waiting to export, per kind; the recent scans with their state;
@@ -305,6 +306,12 @@ test('To export: a row per kind with its count and total; a row opens Saved for 
   // every purchase went out, so there's no Purchases row
   expect(exportRows()).toEqual(['Sales, 2 to export, ₱39,440.50', '2307s, 1 to export · Tax withheld, ₱4,160.86']);
   expect(screen.getByText('₱39,440.50')).toHaveStyle({ ...type.figure, textAlign: 'right' });
+  // the counts in the figure style too (design §9.2): figureSmall, in mute
+  for (const count of ['2 to export', '1 to export · Tax withheld']) {
+    const sub = screen.getByText(count);
+    expect(typeStylesOf(sub)).toEqual(['figureSmall']); // mono: a label of the same size flattens alike here
+    expect(sub).toHaveStyle({ ...type.figureSmall, color: colors.mute });
+  }
   expect(iconsIn(button(/^Sales, /), colors.chevron)).toHaveLength(1);
   await press(button(/^Sales, /));
   expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/saved', params: { kind: 'sale' } });

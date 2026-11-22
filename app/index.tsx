@@ -205,8 +205,8 @@ function Tips() {
 }
 
 /**
- * The saved scans: a row per kind with any waiting to export, with their count and total, each opening Saved for its
- * kind; or, with none waiting, one row saying everything is exported.
+ * The saved scans: a row per kind with any waiting to export, with their count (figureSmall) and total (figure), each
+ * opening Saved for its kind; or, with none waiting, one row saying everything is exported.
  */
 function ToExport({ saved, onOpen }: { saved: readonly SavedSummary[]; onOpen: (kind?: Kind) => void }) {
   const waiting = saved.filter((s) => s.exportedAt === null);
@@ -229,6 +229,7 @@ function ToExport({ saved, onOpen }: { saved: readonly SavedSummary[]; onOpen: (
             key={kind}
             title={title}
             sub={sub(mine.length)}
+            subMono
             amount={peso(mine.reduce((sum, s) => sum + totalOf(s), 0))}
             chevron
             onPress={() => onOpen(kind)}
