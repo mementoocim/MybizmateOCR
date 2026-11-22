@@ -1,7 +1,8 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { setBottomClearance } from '../lib/snackbar';
 import { colors, space } from '../lib/theme';
 import { Button, type ButtonProps, type ButtonVariant } from './Buttons';
 
@@ -11,6 +12,7 @@ import { Button, type ButtonProps, type ButtonVariant } from './Buttons';
 // secondary and destructive 0.8, text buttons at their own width. When any label wraps (large text, a narrow phone),
 // they stack full width in the given order, which puts the primary last. A row that stacked stays stacked for those
 // labels at that width and font size: once full width the labels fit on one line, and flipping back would loop.
+// While it's mounted, the bar reports its height, so the snackbar sits above it (lib/snackbar).
 
 export function ButtonRow({ buttons }: { buttons: readonly ButtonProps[] }) {
   const { width, fontScale } = useWindowDimensions();
@@ -42,8 +44,13 @@ export function ButtonRow({ buttons }: { buttons: readonly ButtonProps[] }) {
 
 export function BottomBar({ buttons, children }: { buttons: readonly ButtonProps[]; children?: ReactNode }) {
   const insets = useSafeAreaInsets();
+  const ownerRef = useRef(null); // this bar, as the clearance knows it
+  useEffect(() => () => setBottomClearance(ownerRef, null), []);
   return (
-    <View testID="bottom-bar" style={[styles.bar, { paddingBottom: space.m + insets.bottom }]}>
+    <View
+      testID="bottom-bar"
+      onLayout={(e) => setBottomClearance(ownerRef, e.nativeEvent.layout.height)}
+      style={[styles.bar, { paddingBottom: space.m + insets.bottom }]}>
       {children}
       <ButtonRow buttons={buttons} />
     </View>

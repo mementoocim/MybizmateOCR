@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import { View } from 'react-native';
 
 import { BrandSplash } from '../components/BrandSplash';
+import { SnackbarHost } from '../components/Snackbar';
 import { bold, colors } from '../lib/theme';
 
 // The phone's own splash stays up until the brand splash has drawn; that one stays until the scanner is ready.
@@ -32,6 +33,8 @@ export default function RootLayout() {
         <Stack.Screen name="saved" options={{ title: 'Saved invoices' }} />
         <Stack.Screen name="lists" options={{ title: 'Your lists' }} />
       </Stack>
+      {/* The snackbar's root host, over every screen; an open sheet or the photo viewer has its own. */}
+      <SnackbarHost />
       {!ready && <BrandSplash onReady={onReady} />}
     </View>
   );

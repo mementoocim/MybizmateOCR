@@ -23,6 +23,7 @@ import type { ButtonProps } from './Buttons';
 import { IconButton } from './IconButton';
 import { ArrowLeft, Close } from './icons';
 import { ScrollIntoViewScope, useKeyboardHeight } from './Screen';
+import { SnackbarHost } from './Snackbar';
 import { Tap } from './Tap';
 
 // Design B §5.5, §5.6, §7 and §8: a sheet from the bottom, on an RN Modal with no animation of its own. The scrim
@@ -33,7 +34,9 @@ import { Tap } from './Tap';
 // navigation bar's inset and by the open keyboard, whose height RN 0.88 reports above that bar (ruling T5-1); a sheet
 // with no action row pads the end of its scroll instead. The scroll is its fields' scroll-into-view: they never scroll
 // the Screen behind the Modal. Back, Close, the scrim and system back ask before typing is lost (dirty). TalkBack
-// focus moves to the title once the sheet is up, and to returnFocus once it has gone.
+// focus moves to the title once the sheet is up, and to returnFocus once it has gone. While it's open, the panel is
+// the snackbar's host (the plan's call 4), so a message shows above the action row, not dimmed behind the scrim; it
+// goes back to the host under the sheet as the sheet starts to close.
 // The exit motion needs the Sheet kept mounted, with `visible` driving it: useLingering keeps a caller's last content
 // for it while it closes. A caller that unmounts the Sheet to close it gets no exit motion, but focus still goes back,
 // once, from the unmount.
@@ -93,6 +96,7 @@ export function Sheet({
   const [scrim] = useState(() => new Animated.Value(0));
   const [panel] = useState(() => new Animated.Value(0)); // 1: up; 0: below the screen, or clear with reduced motion
   const slide = useMemo(() => panel.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }), [panel, height]);
+  const [actionsHeight, setActionsHeight] = useState(0); // as laid out: its padding takes in the inset and keyboard
   const titleRef = useRef<TextInstance>(null);
   const scrollRef = useRef<ScrollViewInstance>(null);
   // While the sheet is up: the opener TalkBack focus goes back to once it has gone, closed or unmounted.
@@ -177,10 +181,14 @@ export function Sheet({
             </ScrollView>
           </ScrollIntoViewScope>
           {actions?.length ? (
-            <View testID="sheet-actions" style={[styles.actions, { paddingBottom: space.m + clearance }]}>
+            <View
+              testID="sheet-actions"
+              onLayout={(e) => setActionsHeight(e.nativeEvent.layout.height)}
+              style={[styles.actions, { paddingBottom: space.m + clearance }]}>
               <ButtonRow buttons={actions} />
             </View>
           ) : null}
+          {closing ? null : <SnackbarHost bottomOffset={(actions?.length ? actionsHeight : clearance) + space.s} />}
         </Animated.View>
       </View>
     </Modal>

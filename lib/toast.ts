@@ -1,7 +1,10 @@
-import { Alert, Platform, ToastAndroid } from 'react-native';
+import { type SnackAction, showSnack } from './snackbar';
 
-/** A short message at the bottom of the screen (the test app's snackbars). */
-export function toast(message: string): void {
-  if (Platform.OS === 'android') ToastAndroid.show(message, ToastAndroid.LONG);
-  else Alert.alert(message);
+/**
+ * A short message in the snackbar (design B §5.6), with an optional action such as "View", in place of the one
+ * showing. It keeps the test app's name and call shape, so its callers, and the tests that mock this module, stay as
+ * they were.
+ */
+export function toast(message: string, action?: SnackAction): void {
+  showSnack(message, action);
 }
