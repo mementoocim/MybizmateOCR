@@ -76,7 +76,12 @@ export function PartySheet({
     section = (
       <>
         <Text style={styles.party}>{`Closest match: ${withTin(party.shown, party.listParty)}`}</Text>
-        <TextButton label="That's the one" onPress={() => party.listParty && choose(party.listParty)} />
+        <TextButton
+          label="That's the one"
+          onPress={() => {
+            if (party.listParty) choose(party.listParty);
+          }}
+        />
         {chooseAnother('Choose another')}
         {addButton(`Add “${written}” as a new customer`)}
       </>
