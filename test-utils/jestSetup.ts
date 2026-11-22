@@ -10,3 +10,10 @@ jest.mock('react-native-safe-area-context', () => require('react-native-safe-are
 const { PlatformConstants } = require('react-native/Libraries/BatchedBridge/NativeModules').default;
 const platformConstants = PlatformConstants.getConstants();
 PlatformConstants.getConstants = () => ({ ...platformConstants, isDisableAnimations: true });
+
+// The phone recommends the very time a snackbar asks it for (components/Snackbar): 4 s, or 8 s with an action. RN's
+// own jest mock resolves false, which took a message down at the next timer tick. This is that mock's own
+// implementation, not a spy over it, so jest.restoreAllMocks() leaves it; a test that wants another answer mocks it
+// again (__tests__/snackbar.test.tsx).
+const { AccessibilityInfo } = require('react-native');
+jest.mocked(AccessibilityInfo.getRecommendedTimeoutMillis).mockImplementation(async (ms: number) => ms);
