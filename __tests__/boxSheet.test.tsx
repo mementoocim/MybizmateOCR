@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { type ReactNode, useState, useSyncExternalStore } from 'react';
-import { Alert, type AlertButton, Platform, StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, Alert, type AlertButton, Platform, StyleSheet, Text } from 'react-native';
 
 import { BoxSheet, isHardToRead, readingLine } from '../components/BoxSheet';
 import { clearItems, lists, subscribeLists } from '../lib/lists';
@@ -107,6 +107,14 @@ const sides = () =>
 const scrim = () => screen.getByTestId('sheet-scrim', { includeHiddenElements: true });
 /** Android's back: the Modal's onRequestClose. */
 const systemBack = () => act(async () => screen.getByTestId('sheet').props.onRequestClose());
+const focus = jest.mocked(AccessibilityInfo.sendAccessibilityEvent);
+type Focused = { props: { testID?: string; accessibilityRole?: string; children?: unknown } };
+/** Where TalkBack focus was sent since the last clear, in order: a row by its testID, the sheet's title as its words. */
+const focused = () =>
+  focus.mock.calls.map(([view]) => {
+    const { props } = view as unknown as Focused;
+    return props.accessibilityRole === 'header' ? `title: ${String(props.children)}` : props.testID;
+  });
 
 let alert: jest.SpyInstance;
 /** The prompt's buttons, from the last Alert.alert: Keep editing, then Discard. */
@@ -167,6 +175,8 @@ test('the reading has no percentage; Hard to read below 0.90 only', async () => 
   await showSheet(fromText, 'Date', ['date']);
   expect(screen.queryByText('Hard to read')).toBeNull();
   expect(screen.queryByText(/^Read as/)).toBeNull();
+  await showSheet(fromText, 'Invoice', ['date', 'invoice_no']);
+  expect(listed()[0]).toBe("Date, From the PDF's text");
 
   // The words, as readingLine and isHardToRead give them.
   const read = getScan(dateAt(0.85))!.result.reads.find((b) => b.name === 'date')!;
@@ -182,16 +192,22 @@ test('the reading has no percentage; Hard to read below 0.90 only', async () => 
 });
 
 test("the crop: what the camera saw, or the PDF's own text, or no picture", async () => {
-  // A box from the PDF's own text says so where the crop would be, with no crop, and again as its reading.
+  // A box from the PDF's own text says so where the crop would be (FROM THE PDF'S TEXT), with no crop and no reading
+  // line to repeat it (ruling T13-3): the field holds the text.
   const pdf = addPhoto((r) => {
     r.reads.find((b) => b.name === 'date')!.fromText = true;
   });
   await showSheet(pdf, 'Date', ['date']);
-  const [source, reading] = screen.getAllByText("From the PDF's text");
-  expect(source).toHaveStyle({ ...type.overline, color: colors.mute }); // FROM THE PDF'S TEXT
-  expect(reading).toHaveStyle(type.body);
+  const said = screen.getAllByText("From the PDF's text");
+  expect(said).toHaveLength(1);
+  expect(said[0]).toHaveStyle({ ...type.overline, color: colors.mute });
   expect(screen.queryByText('What the camera saw')).toBeNull();
   expect(screen.queryByTestId('editor-crop')).toBeNull();
+  expect(screen.queryByText(/^Read as/)).toBeNull();
+  expect(field().props.value).toBe('21 0ct 2026');
+  // listed, its reading line still says where it came from
+  await showSheet(pdf, 'Invoice', ['invoice_no', 'date']);
+  expect(listed()).toEqual(['SI no., Read as “0008869”', "Date, From the PDF's text"]);
 
   // A scan that kept no files has no picture of the box.
   const result = parseScanResult(coreJson('inv_0051', null));
@@ -407,6 +423,56 @@ test('Cancel leaves without asking', async () => {
   expect(getScan(id)!.edits).toEqual({});
 });
 
+test("TalkBack focus follows the sheet: a listed box's editor takes it to its title, and back at the list, its row", async () => {
+  // Ruling T13-2 (design §7): the row opened the editor, so leaving the editor gives focus back to it.
+  const id = addPhoto();
+  await showSheet(id, 'Plywood 1/4', ROW1);
+  focus.mockClear();
+  await press(screen.getByTestId('box-item1_unit'));
+  expect(focused()).toEqual(['title: Row 1 · Unit']); // the title, now the box's label
+  focus.mockClear();
+  await press(screen.getByTestId('box-save'));
+  expect(focused()).toEqual(['box-item1_unit']); // Save: the list again, on that box's row
+
+  // every other way back to the list lands on the row of the box that was open, once
+  const ways: [string, string, () => Promise<unknown>][] = [
+    ['item1_qty', 'Row 1 · Qty', () => press(button('Cancel'))],
+    ['item1_description', 'Row 1 · Description', () => press(button('Back'))],
+    ['item1_unit_price', 'Row 1 · Unit price', systemBack],
+  ];
+  for (const [box, label, leave] of ways) {
+    focus.mockClear();
+    await press(screen.getByTestId(`box-${box}`));
+    expect(focused()).toEqual([`title: ${label}`]);
+    focus.mockClear();
+    await leave();
+    expect([box, focused()]).toEqual([box, [`box-${box}`]]);
+  }
+  // after typing, Back asks first: nothing moves until Discard
+  await press(screen.getByTestId('box-item1_amount'));
+  await typeIn('7,000');
+  focus.mockClear();
+  await press(button('Back'));
+  expect(focus).not.toHaveBeenCalled();
+  await act(async () => promptButtons()[1].onPress!());
+  expect(focused()).toEqual(['box-item1_amount']);
+
+  // Close from an editor closes the whole sheet: no row; the sheet gives focus back to its own opener (none here)
+  await press(screen.getByTestId('box-item1_unit'));
+  focus.mockClear();
+  await press(button('Close'));
+  expect(onClose).toHaveBeenCalledTimes(1);
+  expect(focused()).toEqual([]);
+
+  // A one-box sheet has no list: Save closes it, with no title or row of its own to focus (the Scan screen sends
+  // focus to its strip, ruling T13-1)
+  await showSheet(id, 'Date', ['date']);
+  focus.mockClear();
+  await press(screen.getByTestId('box-save'));
+  expect(onSaved).toHaveBeenCalledTimes(1);
+  expect(focused()).toEqual([]);
+});
+
 test('typing survives store updates while the editor is open', async () => {
   // Review Focus 2: the scan, the lists and the settings are replaced while the editor is open; the draft stays.
   const id = addPhoto();
@@ -484,12 +550,14 @@ describe('annotation mode', () => {
     expect(looksRight()).toBeNull();
     await typeIn(' 7,092 '); // its value again, spaces aside, as Save keeps it
     expect(looksRight()).toBeOnTheScreen();
+    focus.mockClear();
     await press(looksRight()!);
     expect(getScan(id)!.confirmed).toEqual(['item1_amount']);
     expect(getScan(id)!.edits).toEqual({});
-    // back to the list, which says so
+    // back to the list, which says so, with TalkBack on the box's row (ruling T13-2)
     expect(header('Plywood 1/4')).toBeOnTheScreen();
     expect(within(screen.getByTestId('box-item1_amount')).getByText('Checked')).toBeOnTheScreen();
+    expect(focused()).toEqual(['box-item1_amount']);
 
     // A corrected box: its correction as it stands can be confirmed, but not the reading it replaced.
     await act(async () => setEdit(id, 'item1_unit', 'pcs'));

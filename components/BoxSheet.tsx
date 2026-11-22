@@ -1,5 +1,15 @@
-import { Children, type ReactNode, type RefObject, useState, useSyncExternalStore } from 'react';
 import {
+  Children,
+  type ReactNode,
+  type Ref,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
+import {
+  AccessibilityInfo,
   Image,
   type KeyboardTypeOptions,
   Platform,
@@ -36,6 +46,9 @@ import { TextField } from './TextField';
 // (ruling T7-4), so a fix for the keyboard over a sheet only has to lift them. Save, or Looks right, goes back to the
 // list, or closes a one-box sheet and calls onSaved (the Scan screen then gives TalkBack focus to its strip). Cancel
 // leaves at once; Back, Close, the scrim and system back ask first while the field differs from where it started.
+// A box opened from the list is a step of the sheet (focusKey), so TalkBack focus moves to its title, the box's label;
+// back at the list, focus goes to that box's row, which opened it (ruling T13-2, design §7). A box from the PDF's own
+// text has no reading line in its editor: its overline says so, and the field holds the text (ruling T13-3).
 // The draft lives in this sheet's state, with the box it's for. It's set only when an editor opens, from a chip, or by
 // typing, so a new scan, list or settings while the editor is open never resets it (Review Focus 2). The Scan screen
 // keys the sheet per opening (ruling T11-1), so each opening starts fresh.
@@ -124,6 +137,15 @@ export function BoxSheet({
   const [editor, setEditor] = useState<Editor | null>(() =>
     boxes.length === 1 && Children.toArray(children).length === 0 ? editorOf(scan, boxes[0], false) : null,
   );
+  // Each listed box's row, by its box, and the box whose row takes TalkBack focus once the list is back.
+  const [rowRefs] = useState(() => new Map<string, ViewInstance | null>());
+  const returnTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (editor !== null || returnTo.current === null) return;
+    const row = rowRefs.get(returnTo.current);
+    returnTo.current = null;
+    if (row) AccessibilityInfo.sendAccessibilityEvent(row, 'focus');
+  }, [editor, rowRefs]);
   const form = scan.result.form!;
   const readOf = (box: string) => scan.result.reads.find((r) => r.name === box) ?? null;
   // in annotation mode, the boxes that can become training data: only they have a state, and Looks right
@@ -142,6 +164,9 @@ export function BoxSheet({
         {boxes.map((box) => (
           <ListedBox
             key={box}
+            ref={(view) => {
+              rowRefs.set(box, view);
+            }}
             name={box}
             label={fieldLabel(form, box)}
             read={readOf(box)}
@@ -166,44 +191,50 @@ export function BoxSheet({
   );
   const { keyboardType, autoCapitalize } = keyboardOf(fieldType(form, box));
   const setDraft = (text: string) => setEditor((e) => e && { ...e, draft: text });
+  /** The list again, with TalkBack focus on this box's row. */
+  const backToList = () => {
+    returnTo.current = box;
+    setEditor(null);
+  };
 
   /** Done with the box: back to the list, or a one-box sheet closes (and the Scan screen hears it was saved). */
   function leave(saved: boolean) {
     if (fromList) {
-      setEditor(null);
+      backToList();
       return;
     }
     onClose();
     if (saved) onSaved?.();
   }
 
-  const actions: ButtonProps[] = [{ label: 'Cancel', variant: 'text', onPress: () => leave(false) }];
-  if (canConfirm) {
-    actions.push({
-      label: 'Looks right',
-      variant: 'secondary',
-      testID: 'box-confirm',
-      onPress: () => {
-        confirmBox(scan.id, box);
-        leave(true);
-      },
-    });
-  }
-  actions.push({
+  const cancel: ButtonProps = { label: 'Cancel', variant: 'text', onPress: () => leave(false) };
+  const looksRight: ButtonProps = {
+    label: 'Looks right',
+    variant: 'secondary',
+    testID: 'box-confirm',
+    onPress: () => {
+      confirmBox(scan.id, box);
+      leave(true);
+    },
+  };
+  const save: ButtonProps = {
     label: 'Save',
     testID: 'box-save',
     onPress: () => {
       setEdit(scan.id, box, draft);
       leave(true);
     },
-  });
+  };
+  // Cancel · Looks right · Save (the plan's call 19), Looks right only while the field holds the box's value
+  const actions = canConfirm ? [cancel, looksRight, save] : [cancel, save];
 
   return (
     <Sheet
       visible={visible}
       title={fieldLabel(form, box)}
       onClose={onClose}
-      onBack={fromList ? () => setEditor(null) : null}
+      onBack={fromList ? backToList : null}
+      focusKey={fromList ? box : undefined} // a step of the list; a one-box sheet has only the one
       dirty={visible && draft !== start} // a closing sheet has nothing more to ask
       returnFocus={returnFocus}
       actions={actions}>
@@ -224,11 +255,13 @@ export function BoxSheet({
             <Text style={[type.body, styles.mute]}>No picture of this box</Text>
           )}
         </View>
-        <View style={styles.reading}>
-          <Text style={[type.body, styles.ink]}>{readingLine(read)}</Text>
-          {isHardToRead(read) ? <Badge {...HARD} /> : null}
-          {state ? <Badge {...STATE[state]} /> : null}
-        </View>
+        {read?.fromText ? null : ( // the overline already says it's the PDF's own text (ruling T13-3)
+          <View style={styles.reading}>
+            <Text style={[type.body, styles.ink]}>{readingLine(read)}</Text>
+            {isHardToRead(read) ? <Badge {...HARD} /> : null}
+            {state ? <Badge {...STATE[state]} /> : null}
+          </View>
+        )}
         {others.length > 0 ? (
           <View style={styles.group}>
             <Text style={[type.label, styles.mute]}>Could also be</Text>
@@ -275,6 +308,7 @@ function ListedBox({
   edit,
   state,
   onPress,
+  ref,
 }: {
   name: string;
   label: string;
@@ -282,6 +316,7 @@ function ListedBox({
   edit: string | null; // '' when the person cleared it
   state: BoxState | null; // annotation mode, a training box
   onPress: () => void;
+  ref?: Ref<ViewInstance>; // the row, which takes TalkBack focus back from its editor
 }) {
   const changed = edit === null ? null : edit === '' ? 'You cleared it.' : `You changed it to “${edit}”.`;
   const badges = [isHardToRead(read) ? HARD : null, state ? STATE[state] : edit !== null ? EDITED : null].filter(
@@ -292,6 +327,7 @@ function ListedBox({
     .join(', ');
   return (
     <Tap
+      ref={ref}
       testID={`box-${name}`}
       accessibilityRole="button"
       accessibilityLabel={spoken}

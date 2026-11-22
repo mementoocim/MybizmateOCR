@@ -356,6 +356,37 @@ test('TalkBack focus moves to the title once it has opened, and back to the open
   expect(focus).toHaveBeenLastCalledWith(opener.current, 'focus');
 });
 
+test('a new step (focusKey) moves TalkBack focus to the title again; back to no step, the caller places it', async () => {
+  // Ruling T13-2: a box sheet's list opens a box's editor in the same sheet, with the box's label as the title.
+  const focus = jest.mocked(AccessibilityInfo.sendAccessibilityEvent);
+  const ui = (title: string, focusKey?: string, visible = true) => (
+    <Sheet visible={visible} title={title} focusKey={focusKey} onClose={noop} />
+  );
+  /** The titles TalkBack focus was sent to since the last clear (each read before the title changes again). */
+  const titles = () =>
+    focus.mock.calls.map(([view, event]) => [(view as unknown as { props: { children: string } }).props.children, event]);
+  await show(ui('Plywood 1/4'));
+  expect(titles()).toEqual([['Plywood 1/4', 'focus']]); // once it has opened, as before
+  focus.mockClear();
+  await screen.rerender(ui('Row 1 · Unit', 'item1_unit'));
+  expect(titles()).toEqual([['Row 1 · Unit', 'focus']]);
+  focus.mockClear();
+  await screen.rerender(ui('Row 1 · Unit', 'item1_unit')); // the same step: nothing more
+  expect(focus).not.toHaveBeenCalled();
+  await screen.rerender(ui('Row 1 · Qty', 'item1_qty')); // another step
+  expect(titles()).toEqual([['Row 1 · Qty', 'focus']]);
+  focus.mockClear();
+  // Back to no step: the caller gives focus to what opened the step (a list's row); the sheet sends none.
+  await screen.rerender(ui('Plywood 1/4'));
+  expect(focus).not.toHaveBeenCalled();
+  // With no focusKey, a new title alone moves nothing, as before.
+  await screen.rerender(ui('Customer'));
+  expect(focus).not.toHaveBeenCalled();
+  // A closing sheet takes no focus, whatever its step.
+  await screen.rerender(ui('Row 1 · Amount', 'item1_amount', false));
+  expect(focus).not.toHaveBeenCalled();
+});
+
 /** The opener, and a sheet that's up, closed, or gone (its caller rendered it only while it was open). */
 function openerAndSheet() {
   const opener = createRef<ViewInstance>();

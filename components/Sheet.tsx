@@ -34,10 +34,10 @@ import { Tap } from './Tap';
 // T13-1), then the action row pinned under it. The Modal is edge to edge, so the action row pads by the navigation
 // bar's inset and by the open keyboard, whose height RN 0.88 reports above that bar (ruling T5-1); a sheet with no
 // action row pads the end of its scroll instead. The scroll is its fields' scroll-into-view: they never scroll the
-// Screen behind the Modal. Back, Close, the scrim and system back ask before typing is lost (dirty). TalkBack
-// focus moves to the title once the sheet is up, and to returnFocus once it has gone. While it's open, the panel is
-// the snackbar's host (the plan's call 4), so a message shows above the action row, not dimmed behind the scrim; it
-// goes back to the host under the sheet as the sheet starts to close.
+// Screen behind the Modal. Back, Close, the scrim and system back ask before typing is lost (dirty). TalkBack focus
+// moves to the title once the sheet is up, and again when it shows a new step (focusKey), and to returnFocus once it
+// has gone. While it's open, the panel is the snackbar's host (the plan's call 4), so a message shows above the action
+// row, not dimmed behind the scrim; it goes back to the host under the sheet as the sheet starts to close.
 // The exit motion needs the Sheet kept mounted, with `visible` driving it: useLingering keeps a caller's last content
 // for it while it closes. A caller that unmounts the Sheet to close it gets no exit motion, but focus still goes back,
 // once, from the unmount.
@@ -75,6 +75,7 @@ export function Sheet({
   onBack,
   returnFocus,
   gutter = true,
+  focusKey,
   testID = 'sheet',
 }: {
   visible: boolean;
@@ -87,6 +88,7 @@ export function Sheet({
   onBack?: (() => void) | null; // a step's back: a Back button in the title row; system back calls it
   returnFocus?: RefObject<ViewInstance | null>; // TalkBack focus goes back here on close
   gutter?: boolean; // default true: the body's 16 dp sides; false for full-bleed rows, which pad themselves
+  focusKey?: string; // the step shown, in a sheet with steps: a new one while it's up moves TalkBack focus to the title
   testID?: string; // the Modal's
 }) {
   const insets = useSafeAreaInsets();
@@ -123,6 +125,17 @@ export function Sheet({
     });
     return () => animation.stop();
   }, [visible, shown, scrim, panel]);
+
+  // A new step while the sheet is up (ruling T13-2): TalkBack focus moves to the title again, as when it opened. Back to
+  // no step, the caller puts focus where it belongs (a box list: the row of the box that was open).
+  const lastStep = useRef(focusKey);
+  useEffect(() => {
+    const newStep = focusKey !== undefined && focusKey !== lastStep.current;
+    lastStep.current = focusKey;
+    if (newStep && visible && shown && titleRef.current) {
+      AccessibilityInfo.sendAccessibilityEvent(titleRef.current, 'focus');
+    }
+  }, [focusKey, visible, shown]);
 
   // Once the Modal has gone, TalkBack focus goes back to what opened the sheet.
   useEffect(() => {

@@ -793,12 +793,14 @@ test('Save in a one-box sheet sends TalkBack focus to the strip, which says the 
   await press(button('Cancel'));
   expect(focusedTestIDs()).toEqual([['row-date', 'focus']]);
 
-  // a row with several boxes: Save goes back to its list, so focus stays in the sheet until it closes
+  // a row with several boxes: Save goes back to its list, on the box's row (ruling T13-2); closing the sheet gives
+  // focus back to the ledger row that opened it
   await press(screen.getByTestId('row-total_due'));
   await press(screen.getByTestId('box-total_due'));
   focus.mockClear();
   await press(screen.getByTestId('box-save'));
-  expect(focus).not.toHaveBeenCalled();
+  expect(focusedTestIDs()).toEqual([['box-total_due', 'focus']]);
+  focus.mockClear();
   await press(button('Close'));
   expect(focusedTestIDs()).toEqual([['row-total_due', 'focus']]);
 });
@@ -965,10 +967,10 @@ test('a text box says where it came from', async () => {
     },
   });
   await press(screen.getByText('SI no.')); // a one-box row: its editor
-  // where the crop would be, and as its reading: the PDF's own text, with no crop
-  const [source, reading] = screen.getAllByText("From the PDF's text");
-  expect(source).toHaveStyle(type.overline);
-  expect(reading).toHaveStyle(type.body);
+  // where the crop would be: the PDF's own text, with no crop, and no reading line to say it again (ruling T13-3)
+  const said = screen.getAllByText("From the PDF's text");
+  expect(said).toHaveLength(1);
+  expect(said[0]).toHaveStyle(type.overline);
   expect(screen.queryByText('What the camera saw')).toBeNull();
   expect(screen.queryByText(/^Read as /)).toBeNull();
   expect(screen.getByLabelText('What the box says').props.value).toBe('0000888');
