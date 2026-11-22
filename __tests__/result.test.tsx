@@ -311,6 +311,7 @@ test('the editor confirms a box in annotation mode', async () => {
   // a correction takes the check's place
   await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), '9/20/2026'));
   await press(screen.getByTestId('box-save'));
+  expect(getScan(id)!.edits.date).toBe('9/20/2026');
   expect(getScan(id)!.confirmed).toEqual([]);
   await press(screen.getByText('Date'));
   expect(screen.getByText('Corrected')).toBeTruthy();
@@ -482,6 +483,48 @@ test('Check every box first lists the unchecked boxes with their states', async 
   expect(screen.getByText('Checked')).toHaveStyle({ color: colors.success });
   expect(within(screen.getByTestId('sheet-panel')).queryByText('Edited')).toBeNull();
   expect(header('Check every box first: 1 left')).toBeOnTheScreen();
+});
+
+test('Check every box first keeps its list with one box left, and gives focus back to Save', async () => {
+  // Ruling T13-5: milestone 4 opened the list here; the one-box shortcut is for rows
+  mockTeam = true;
+  await act(async () => updateSettings({ annotation: true }));
+  const id = await show('inv_0007', { source: 'gallery', from: 'recent' });
+  await act(async () => {
+    uncheckedBoxes(getScan(id)!)
+      .filter((box) => box !== 'item3_unit')
+      .forEach((box) => confirmBox(id, box));
+  });
+  expect(header('Check every box first: 1 left')).toBeOnTheScreen();
+  await press(screen.getByTestId('save-open'));
+  expect(header('Check every box first')).toBeOnTheScreen(); // the list, not the box's editor
+  const listed = () => screen.getAllByTestId(/^box-/).map((row) => row.props.accessibilityLabel);
+  expect(listed()).toEqual(['Row 3 · Unit, Read as “can”, Hard to read, Not checked yet']);
+  expect(screen.queryByLabelText('What the box says')).toBeNull();
+
+  // Looks right in its editor goes back to the list, on the box's row (ruling T13-2)
+  await press(screen.getByTestId('box-item3_unit'));
+  expect(header('Row 3 · Unit')).toBeOnTheScreen();
+  focus.mockClear();
+  await press(screen.getByTestId('box-confirm'));
+  expect(header('Check every box first')).toBeOnTheScreen();
+  expect(listed()).toEqual(['Row 3 · Unit, Read as “can”, Hard to read, Checked']);
+  expect(focusedTestIDs()).toEqual([['box-item3_unit', 'focus']]);
+  expect(header('Checks passed')).toBeOnTheScreen(); // every box checked now
+  // and so does Save
+  await press(screen.getByTestId('box-item3_unit'));
+  await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), 'cans'));
+  focus.mockClear();
+  await press(screen.getByTestId('box-save'));
+  expect(getScan(id)!.edits.item3_unit).toBe('cans');
+  expect(header('Check every box first')).toBeOnTheScreen();
+  expect(listed()).toEqual(['Row 3 · Unit, Read as “can”, You changed it to “cans”, Hard to read, Corrected']);
+  expect(focusedTestIDs()).toEqual([['box-item3_unit', 'focus']]);
+
+  // Closing it gives focus back to Save, which opened it: no strip focus (that's for a row's one-box sheet)
+  focus.mockClear();
+  await press(button('Close'));
+  expect(focusedTestIDs()).toEqual([['save-open', 'focus']]);
 });
 
 test('terms', async () => {

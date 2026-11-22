@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { type ReactNode, useState, useSyncExternalStore } from 'react';
-import { AccessibilityInfo, Alert, type AlertButton, Platform, StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, Alert, type AlertButton, Platform, StyleSheet, Text, TextInput } from 'react-native';
 
 import { BoxSheet, isHardToRead, readingLine } from '../components/BoxSheet';
 import { clearItems, lists, subscribeLists } from '../lib/lists';
@@ -107,6 +107,11 @@ const sides = () =>
 const scrim = () => screen.getByTestId('sheet-scrim', { includeHiddenElements: true });
 /** Android's back: the Modal's onRequestClose. */
 const systemBack = () => act(async () => screen.getByTestId('sheet').props.onRequestClose());
+/** jest's text inputs (and views) share their native methods' mocks: the fields focus() was called on, by label. */
+const fieldsFocused = () =>
+  (TextInput as unknown as { prototype: { focus: jest.Mock } }).prototype.focus.mock.contexts.map(
+    (input) => (input as { props: { accessibilityLabel?: string } }).props.accessibilityLabel,
+  );
 const focus = jest.mocked(AccessibilityInfo.sendAccessibilityEvent);
 type Focused = { props: { testID?: string; accessibilityRole?: string; children?: unknown } };
 /** Where TalkBack focus was sent since the last clear, in order: a row by its testID, the sheet's title as its words. */
@@ -205,9 +210,11 @@ test("the crop: what the camera saw, or the PDF's own text, or no picture", asyn
   expect(screen.queryByTestId('editor-crop')).toBeNull();
   expect(screen.queryByText(/^Read as/)).toBeNull();
   expect(field().props.value).toBe('21 0ct 2026');
-  // listed, its reading line still says where it came from
+  // listed, its reading line still says where it came from, and it has no crop there either (ruling T13-6)
   await showSheet(pdf, 'Invoice', ['invoice_no', 'date']);
   expect(listed()).toEqual(['SI no., Read as “0008869”', "Date, From the PDF's text"]);
+  expect(screen.getByTestId('crop-invoice_no')).toBeOnTheScreen();
+  expect(screen.queryByTestId('crop-date')).toBeNull();
 
   // A scan that kept no files has no picture of the box.
   const result = parseScanResult(coreJson('inv_0051', null));
@@ -241,10 +248,14 @@ test('Could also be: a chip fills the field', async () => {
     expect(touch.chip + 2 * chip.props.hitSlop).toBe(touch.target);
   }
   expect(screen.getByText('21 Oct 2026')).toHaveStyle({ ...type.figure, color: colors.ink });
+  expect(fieldsFocused()).toEqual([]); // not focused on open
   await press(chips[1]);
   expect(field().props.value).toBe('21 Oct 2026');
+  // and typing starts, so a near-miss is one tap from fixing its last character (§9.5)
+  expect(fieldsFocused()).toEqual(['What the box says']);
   await press(chips[0]);
   expect(field().props.value).toBe('27 0ct 2026');
+  expect(fieldsFocused()).toEqual(['What the box says', 'What the box says']);
 
   // With an edit, the reading itself is one of them.
   await act(async () => setEdit(id, 'date', 'Oct 21, 2026'));

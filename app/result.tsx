@@ -74,8 +74,12 @@ const WHOLE_FORM = [
 /** The photo's height when the form wasn't found, in dp (§9.5). */
 const PHOTO_HEIGHT = 240;
 
-/** What a sheet opens with: a row's (LedgerOpen), or the save sheet; n counts the openings, so each starts fresh. */
-type SheetOpen = LedgerOpen | { kind: 'save' };
+type BoxesOpen = Extract<LedgerOpen, { kind: 'boxes' }>;
+/**
+ * What a sheet opens with: a row's (LedgerOpen), the boxes annotation mode still needs checked (always a list, as
+ * milestone 4 had it: ruling T13-5), or the save sheet; n counts the openings, so each starts fresh.
+ */
+type SheetOpen = Exclude<LedgerOpen, BoxesOpen> | (BoxesOpen & { alwaysList?: boolean }) | { kind: 'save' };
 type Opening = SheetOpen & { n: number };
 
 const dayOf = (iso: string) => monthDay(localIsoDate(new Date(iso)));
@@ -166,9 +170,15 @@ export default function Result() {
   }
 
   function openSave() {
-    if (unchecked) openSheet({ kind: 'boxes', title: 'Check every box first', boxes: unchecked }, saveButton.current);
-    else if (block === null) openSheet({ kind: 'save' }, null); // the save sheets' returnFocus is Save itself
-    else if (blocked) toast(blocked);
+    if (unchecked) {
+      // always a list, as milestone 4 had it, even with one box left (ruling T13-5)
+      const check: SheetOpen = { kind: 'boxes', title: 'Check every box first', boxes: unchecked, alwaysList: true };
+      openSheet(check, saveButton.current);
+    } else if (block === null) {
+      openSheet({ kind: 'save' }, null); // the save sheets' returnFocus is Save itself
+    } else if (blocked) {
+      toast(blocked);
+    }
   }
 
   /** A flag chip: the photo opens the viewer; any other scrolls its row into view and opens it, as tapping it does. */
@@ -298,6 +308,7 @@ export default function Result() {
           title={boxes.title}
           scan={scan}
           boxes={boxes.boxes}
+          alwaysList={boxes.alwaysList}
           onClose={closeSheet}
           // A one-box sheet's Save: the sheet gives TalkBack focus to its opener once it has gone, so pointing the
           // opener at the strip lands focus there, and the strip says the new state (ruling T13-1).

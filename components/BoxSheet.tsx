@@ -15,6 +15,7 @@ import {
   Platform,
   StyleSheet,
   Text,
+  type TextInputInstance,
   type TextInputProps,
   View,
   type ViewInstance,
@@ -36,16 +37,18 @@ import { TextField } from './TextField';
 
 // Design B §9.5 ("Fix a box"), §12 A8 and the plan's calls 15 and 19: what the camera saw in a row's boxes, each one
 // fixable. The person types what the box says (an edit is "the box says this", kept apart from the reading), and the
-// checks run again. A row with one box, and nothing under it, opens straight at that box's editor; otherwise the sheet
-// lists the boxes, full-bleed rows each with its crop (ruling T13-1), what was read and its badges, with what comes
-// under them (children: the party, a new item; full-bleed too, so they pad their own text), and Done. A listed box
-// opens its editor in the same sheet, with Back to the list.
+// checks run again. A row with one box, and nothing under it, opens straight at that box's editor; otherwise, or when
+// the caller keeps it a list (alwaysList: annotation mode's "Check every box first", ruling T13-5), the sheet lists the
+// boxes, full-bleed rows each with its crop (none for the PDF's own text: ruling T13-6), what was read and its badges,
+// with what comes under them (children: the party, a new item; full-bleed too, so they pad their own text), and Done.
+// A listed box opens its editor in the same sheet, with Back to the list.
 // The editor: what the camera saw (or that the box is the PDF's own text), the reading with no percentage and "Hard
-// to read" under 0.90, the other readings as chips that fill the field, and the field, not focused on open, with the
-// keyboard for the box's kind (call 15). Cancel, Looks right (annotation mode) and Save are the sheet's pinned actions
-// (ruling T7-4), so a fix for the keyboard over a sheet only has to lift them. Save, or Looks right, goes back to the
-// list, or closes a one-box sheet and calls onSaved (the Scan screen then gives TalkBack focus to its strip). Cancel
-// leaves at once; Back, Close, the scrim and system back ask first while the field differs from where it started.
+// to read" under 0.90, the other readings as chips that fill the field and start typing in it (§9.5), and the field,
+// not focused on open, with the keyboard for the box's kind (call 15). Cancel, Looks right (annotation mode) and Save
+// are the sheet's pinned actions (ruling T7-4), so a fix for the keyboard over a sheet only has to lift them. Save, or
+// Looks right, goes back to the list, or closes a one-box sheet and calls onSaved (the Scan screen then gives TalkBack
+// focus to its strip). Cancel leaves at once; Back, Close, the scrim and system back ask first while the field differs
+// from where it started.
 // A box opened from the list is a step of the sheet (focusKey), so TalkBack focus moves to its title, the box's label;
 // back at the list, focus goes to that box's row, which opened it (ruling T13-2, design §7). A box from the PDF's own
 // text has no reading line in its editor: its overline says so, and the field holds the text (ruling T13-3).
@@ -121,6 +124,7 @@ export function BoxSheet({
   onClose,
   onSaved,
   returnFocus,
+  alwaysList = false,
   children,
 }: {
   visible: boolean;
@@ -130,13 +134,17 @@ export function BoxSheet({
   onClose: () => void;
   onSaved?: () => void; // a one-box sheet: after Save (or Looks right) closes it
   returnFocus?: RefObject<ViewInstance | null>; // the row that opened it, which TalkBack focus goes back to
+  alwaysList?: boolean; // a list even with one box ("Check every box first", as milestone 4 had it)
   children?: ReactNode; // under the list: the party section, the payor line, a new item
 }) {
   const annotation = useSyncExternalStore(subscribeSettings, annotationOn);
   // One box and nothing under it: straight to its editor. Decided once, as the sheet opens.
   const [editor, setEditor] = useState<Editor | null>(() =>
-    boxes.length === 1 && Children.toArray(children).length === 0 ? editorOf(scan, boxes[0], false) : null,
+    !alwaysList && boxes.length === 1 && Children.toArray(children).length === 0
+      ? editorOf(scan, boxes[0], false)
+      : null,
   );
+  const input = useRef<TextInputInstance>(null); // the field: a chip starts typing in it
   // Each listed box's row, by its box, and the box whose row takes TalkBack focus once the list is back.
   const [rowRefs] = useState(() => new Map<string, ViewInstance | null>());
   const returnTo = useRef<string | null>(null);
@@ -271,7 +279,10 @@ export function BoxSheet({
                   key={text}
                   accessibilityRole="button"
                   accessibilityLabel={text}
-                  onPress={() => setDraft(text)}
+                  onPress={() => {
+                    setDraft(text);
+                    input.current?.focus(); // typing starts: a near-miss needs only its last character fixed
+                  }}
                   hitSlop={CHIP_SLOP}
                   focusRadius={radius.pill}
                   style={styles.chip}>
@@ -287,6 +298,7 @@ export function BoxSheet({
           value={draft}
           onChangeText={setDraft}
           helper={HELPER}
+          inputRef={input}
           mono
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
@@ -297,9 +309,9 @@ export function BoxSheet({
 }
 
 /**
- * A box in the list: its label, its crop, how it was read, what the person changed it to, and its badges ("Hard to
- * read"; "Edited", or a training box's state). One full-bleed row that opens its editor, and one stop for TalkBack,
- * which says it all, badges included (ruling T4-4).
+ * A box in the list: its label, its crop (a box from the PDF's own text has none), how it was read, what the person
+ * changed it to, and its badges ("Hard to read"; "Edited", or a training box's state). One full-bleed row that opens
+ * its editor, and one stop for TalkBack, which says it all, badges included (ruling T4-4).
  */
 function ListedBox({
   name,
@@ -337,7 +349,7 @@ function ListedBox({
       focusRadius={0}
       style={styles.row}>
       <Text style={[type.label, styles.mute]}>{label}</Text>
-      {read?.cropUri ? (
+      {read?.cropUri && !read.fromText ? ( // the PDF's own text has no crop, as in its editor (ruling T13-6)
         <Image
           testID={`crop-${name}`}
           source={{ uri: read.cropUri }}
