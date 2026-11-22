@@ -237,7 +237,7 @@ function CodeFields({ codes }: { codes: ReturnType<typeof useCodes> }) {
         autoCapitalize="characters"
       />
       <Text style={styles.note}>Codes only, like C014 and W03. Never a name.</Text>
-      <Text style={styles.note}>Start with a letter. Use letters, digits and -, with at least one digit.</Text>
+      <Text style={styles.note}>Start with a letter. Use letters, digits and -, with 1 to 6 digits.</Text>
     </>
   );
 }

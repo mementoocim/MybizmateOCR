@@ -289,10 +289,12 @@ test('codes are codes', () => {
   expect(cleanCode('W03')).toBe('W03');
   expect(cleanCode('W-03')).toBe('W-03');
   expect(cleanCode(' w03 ')).toBe('W03');
-  expect(cleanCode('C01234567890')).toBe('C01234567890'); // 12 characters
-  // a name, nothing, a space inside, 13 characters, a letter outside A-Z, no digit at all; and what doesn't start
-  // with a letter: a phone number, a TIN, a dash
-  const refused = ['Juan', '', 'C 014', 'C012345678901', 'ñ1', 'WC-', '09171234567', '123-456-789', '-03'];
+  expect(cleanCode('CLIENT-00014')).toBe('CLIENT-00014'); // 12 characters
+  expect(cleanCode('C123456')).toBe('C123456'); // 6 digits
+  // a name, nothing, a space inside, 13 characters, a letter outside A-Z, no digit at all; what doesn't start with a
+  // letter: a phone number, a TIN, a dash; and more than 6 digits, as a phone number or a TIN after a letter has
+  const refused = ['Juan', '', 'C 014', 'CLIENT-000014', 'ñ1', 'WC-', '09171234567', '123-456-789', '-03'];
+  refused.push('C1234567', 'P09171234567', 'T123-456-789');
   expect(refused.map(cleanCode)).toEqual(refused.map(() => null));
 });
 
@@ -307,7 +309,7 @@ test('the save sheet asks for the codes', async () => {
   expect(screen.getByLabelText('Client code').props.value).toBe(''); // none kept yet
   expect(screen.getByLabelText('Writer code').props.value).toBe('');
   expect(screen.getByText('Codes only, like C014 and W03. Never a name.')).toBeTruthy();
-  expect(screen.getByText('Start with a letter. Use letters, digits and -, with at least one digit.')).toBeTruthy();
+  expect(screen.getByText('Start with a letter. Use letters, digits and -, with 1 to 6 digits.')).toBeTruthy();
   expect(screen.getByTestId('save-confirm')).toBeDisabled();
   await type('Client code', 'Juan');
   expect(screen.getByTestId('save-confirm')).toBeDisabled();
