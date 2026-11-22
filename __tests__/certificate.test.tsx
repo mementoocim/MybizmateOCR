@@ -73,7 +73,7 @@ const button = (name: string) => screen.getByRole('button', { name });
 const header = (name: string) => screen.getByRole('header', { name });
 
 /** The boxes the open sheet lists, in order. */
-const boxesShown = () => screen.queryAllByTestId(/^fix-/).map((el) => String(el.props.testID).slice('fix-'.length));
+const boxesShown = () => screen.queryAllByTestId(/^box-/).map((el) => String(el.props.testID).slice('box-'.length));
 
 /** The boxes a row's sheet shows, in order; the sheet is closed again. */
 async function boxesIn(row: string): Promise<string[]> {
@@ -268,7 +268,7 @@ test('fixing a month re-runs the checks', async () => {
   const id = await show('bir2307_text_0');
   expect(screen.getByRole('header', { name: 'Checks passed' })).toBeTruthy();
   await press(screen.getByText('WC610 · Purchase of corn'));
-  await press(screen.getByTestId('fix-ewt1_m1'));
+  await press(screen.getByTestId('box-ewt1_m1'));
   await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), '100,674.00'));
   await press(screen.getByTestId('box-save'));
   expect(screen.getByText('You changed it to “100,674.00”.')).toBeTruthy();

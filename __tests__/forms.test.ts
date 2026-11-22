@@ -1,4 +1,5 @@
-import { FORMS, fieldLabel, formFields } from '../lib/forms';
+import { FORMS, fieldLabel, fieldType, formFields } from '../lib/forms';
+import type { FieldType, FormName } from '../modules/scanner';
 
 test("each form's boxes, in the template's order, without the ticks", () => {
   const sales = formFields('sales_invoice');
@@ -36,6 +37,35 @@ test("the BIR 2307's labels are its template's, the official form's words", () =
   const template: { name: string; label: string }[] = require('../modules/scanner/assets/scanner/bir_2307.json').fields;
   for (const box of formFields('bir_2307')) {
     expect([box, fieldLabel('bir_2307', box)]).toEqual([box, template.find((f) => f.name === box)!.label]);
+  }
+});
+
+test("a box's type is its template's; text when the form has no such box", () => {
+  expect(fieldType('sales_invoice', 'invoice_no')).toBe('printed_digits');
+  expect(fieldType('sales_invoice', 'date')).toBe('date');
+  expect(fieldType('sales_invoice', 'customer_tin')).toBe('tin');
+  expect(fieldType('sales_invoice', 'total_due')).toBe('amount');
+  expect(fieldType('sales_invoice', 'item3_qty')).toBe('number');
+  expect(fieldType('sales_invoice', 'item3_description')).toBe('text');
+  expect(fieldType('service_invoice', 'withholding')).toBe('amount');
+  expect(fieldType('bir_2307', 'period_from')).toBe('digits');
+  expect(fieldType('bir_2307', 'ewt10_atc')).toBe('code');
+  expect(fieldType('bir_2307', 'bt_total_tax')).toBe('amount');
+  // a tick box, or a name the form doesn't have
+  expect(fieldType('sales_invoice', 'terms_cash')).toBe('text');
+  expect(fieldType('bir_2307', 'date')).toBe('text');
+  expect(fieldType('sales_invoice', 'constructor')).toBe('text');
+  // every box of every form, as its template says
+  const templates: [FormName, string][] = [
+    ['sales_invoice', 'field_map.json'],
+    ['service_invoice', 'service_invoice.json'],
+    ['bir_2307', 'bir_2307.json'],
+  ];
+  for (const [form, file] of templates) {
+    const fields: { name: string; type: FieldType | 'checkbox' }[] = require(`../modules/scanner/assets/scanner/${file}`).fields;
+    for (const f of fields.filter((f) => f.type !== 'checkbox')) {
+      expect([form, f.name, fieldType(form, f.name)]).toEqual([form, f.name, f.type]);
+    }
   }
 });
 

@@ -8,9 +8,9 @@ import { certOf } from '../lib/cert';
 import { localIsoDate } from '../lib/checks/dates';
 import { blockWords, saveBlock } from '../lib/exportRows';
 import { amount, formatClock, formatMs, monthDay, peso, qty } from '../lib/format';
-import { lists } from '../lib/lists';
+import { clearItems, lists } from '../lib/lists';
 import { markExported, savedSummary, saveScan } from '../lib/saved';
-import { addScan, confirmBox, getScan, loadRecent, setEdit } from '../lib/scans';
+import { addScan, confirmBox, getScan, loadRecent, setEdit, updateScan } from '../lib/scans';
 import type { ScanSource } from '../lib/scans';
 import { settings, updateSettings } from '../lib/settings';
 import { colors, space, type } from '../lib/theme';
@@ -199,7 +199,7 @@ test('to check: a chip per problem word, and a chip opens its row', async () => 
   ]);
   expect(scrollMethods.scrollTo).toHaveBeenCalledWith({ y: 600 - space.xl, animated: true });
   expect(header('Date')).toBeOnTheScreen(); // the open sheet's title
-  expect(screen.getByTestId('fix-date')).toBeOnTheScreen();
+  expect(screen.getByLabelText('What the box says')).toBeOnTheScreen(); // one box: straight to its editor
   await press(button('Close'));
   await press(button('Terms, to check'));
   expect(header('Terms')).toBeOnTheScreen();
@@ -231,29 +231,32 @@ test('a 2307 with no payments read: the blocked strip', async () => {
 });
 
 test('fix a box, and the checks run again', async () => {
-  await show('inv_0007');
-  await press(screen.getByText('Date'));
-  await press(screen.getByTestId('fix-date'));
+  const id = await show('inv_0007');
+  await press(screen.getByText('Date')); // a one-box row: straight to its editor
   await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), '13/45/2026'));
   await press(screen.getByTestId('box-save'));
+  expect(screen.queryByLabelText('What the box says')).toBeNull(); // the sheet closed
+  expect(getScan(id)!.edits.date).toBe('13/45/2026');
   expect(header('1 to check')).toBeOnTheScreen();
   expect(button('Date, to check')).toBeOnTheScreen();
-  expect(screen.getByText('You changed it to “13/45/2026”.')).toBeTruthy();
   expect(screen.getByText("Couldn't make out a date")).toBeTruthy(); // the row's reason
 });
 
-test('the box sheet', async () => {
+test('a one-box row opens at its editor, whose reading has no percentage', async () => {
   await show('inv_0007');
   await press(screen.getByText('SI no.'));
-  expect(screen.getByText('Read as “0007655” · 100% sure')).toBeTruthy();
-  expect(screen.getByText('What the camera saw in each box. If a box was read wrong, type what it says.')).toBeTruthy();
+  expect(header('SI no.')).toBeOnTheScreen();
+  expect(screen.getByText('What the camera saw')).toHaveStyle(type.overline);
+  expect(screen.getByText('Read as “0007655”')).toBeTruthy();
+  expect(screen.queryByText(/% sure/)).toBeNull();
+  expect(screen.getByLabelText('What the box says').props.value).toBe('0007655');
 });
 
 test('a backup reading is a quick pick', async () => {
   await show('inv_0007');
   await press(screen.getByText('Total due'));
-  await press(screen.getByTestId('fix-total_due'));
-  expect(screen.getByText('OTHER READINGS')).toBeTruthy();
+  await press(screen.getByTestId('box-total_due'));
+  expect(screen.getByText('Could also be')).toBeTruthy();
   await press(screen.getByText('24.377'));
   expect(screen.getByLabelText('What the box says').props.value).toBe('24.377');
 });
@@ -262,11 +265,14 @@ test('an empty box can be filled', async () => {
   await show('svc_0000');
   expect(screen.queryByText('Zero-rated sales')).toBeNull();
   await press(screen.getByText('Total due'));
-  expect(screen.getByTestId('fix-zero_rated')).toHaveTextContent('Add what it says');
-  await press(screen.getByTestId('fix-zero_rated'));
+  expect(within(screen.getByTestId('box-zero_rated')).getByText('Empty box')).toBeOnTheScreen();
+  await press(screen.getByTestId('box-zero_rated'));
+  expect(screen.getByText('No picture of this box')).toBeOnTheScreen();
   await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), '100.00'));
   await press(screen.getByTestId('box-save'));
-  expect(screen.getByText('100.00')).toBeTruthy(); // the row's amount, without the peso sign
+  // back at the list, which says what changed; the row's amount shows, without the peso sign
+  expect(within(screen.getByTestId('box-zero_rated')).getByText('You changed it to “100.00”.')).toBeOnTheScreen();
+  expect(screen.getByText('100.00')).toBeTruthy();
 });
 
 test('the editor confirms a box in annotation mode', async () => {
@@ -279,41 +285,52 @@ test('the editor confirms a box in annotation mode', async () => {
     mockTeam = team;
     await act(async () => updateSettings({ annotation }));
     await show('inv_0007');
-    await press(screen.getByText('Date'));
+    await press(screen.getByText('Date')); // a one-box row: straight to its editor
+    expect(screen.getByLabelText('What the box says')).toBeTruthy();
     expect(screen.queryByText(STATES)).toBeNull();
-    await press(screen.getByTestId('fix-date'));
     expect(screen.queryByTestId('box-confirm')).toBeNull();
   }
 
   mockTeam = true;
   await act(async () => updateSettings({ annotation: true }));
   const id = await show('inv_0007');
+  // A one-box row has no list: its editor says the box's state, and Looks right closes it, as Save does.
   await press(screen.getByText('Date'));
   expect(screen.getByText('Not checked yet')).toBeTruthy();
-  await press(screen.getByTestId('fix-date'));
   await press(screen.getByTestId('box-confirm'));
-  expect(screen.queryByLabelText('What the box says')).toBeNull(); // back to the box list
-  expect(screen.getByText('Checked')).toBeTruthy();
+  expect(screen.queryByLabelText('What the box says')).toBeNull(); // the sheet closed
   expect(getScan(id)!.confirmed).toEqual(['date']);
+  await press(screen.getByText('Date'));
+  expect(screen.getByText('Checked')).toBeTruthy();
   // saving the box's own reading untouched changes nothing, so it stays checked
-  await press(screen.getByTestId('fix-date'));
   expect(screen.getByLabelText('What the box says').props.value).toBe('Sep 20, 2026');
   await press(screen.getByTestId('box-save'));
-  expect(screen.getByText('Checked')).toBeTruthy();
   expect(getScan(id)!.confirmed).toEqual(['date']);
+  await press(screen.getByText('Date'));
+  expect(screen.getByText('Checked')).toBeTruthy();
   // a correction takes the check's place
-  await press(screen.getByTestId('fix-date'));
   await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), '9/20/2026'));
   await press(screen.getByTestId('box-save'));
+  expect(getScan(id)!.confirmed).toEqual([]);
+  await press(screen.getByText('Date'));
   expect(screen.getByText('Corrected')).toBeTruthy();
-  expect(screen.getByText('You changed it to “9/20/2026”.')).toBeTruthy();
+  await press(screen.getByLabelText('Close'));
+
+  // A row with several boxes: Looks right goes back to its list, where each box says its state.
+  await press(screen.getByText('VAT 12%'));
+  expect(screen.getAllByText('Not checked yet')).toHaveLength(3);
+  await press(screen.getByTestId('box-vat'));
+  await press(screen.getByTestId('box-confirm'));
+  expect(screen.queryByLabelText('What the box says')).toBeNull(); // back to the box list
+  expect(within(screen.getByTestId('box-vat')).getByText('Checked')).toBeTruthy();
+  expect(screen.getAllByText('Not checked yet')).toHaveLength(2);
   await press(screen.getByLabelText('Close'));
 
   // the customer's boxes never become training data: no state, and nothing to confirm
   await press(screen.getByText('Customer'));
   expect(screen.getByText('TIN')).toBeTruthy();
   expect(screen.queryByText(STATES)).toBeNull();
-  await press(screen.getByTestId('fix-customer_name'));
+  await press(screen.getByTestId('box-customer_name'));
   expect(screen.getByLabelText('What the box says')).toBeTruthy();
   expect(screen.queryByTestId('box-confirm')).toBeNull();
   await press(screen.getByText('Cancel'));
@@ -322,10 +339,10 @@ test('the editor confirms a box in annotation mode', async () => {
   // a multi-line box (the Service Invoice's amount in words) has nothing to confirm either, nor has an empty box
   await show('svc_0000');
   await press(screen.getByText('Total due'));
-  await press(screen.getByTestId('fix-amount_words'));
+  await press(screen.getByTestId('box-amount_words'));
   expect(screen.queryByTestId('box-confirm')).toBeNull();
   await press(screen.getByText('Cancel'));
-  await press(screen.getByTestId('fix-zero_rated'));
+  await press(screen.getByTestId('box-zero_rated'));
   expect(screen.queryByTestId('box-confirm')).toBeNull();
 });
 
@@ -336,7 +353,7 @@ test("Looks right is only for the box's value as it stands", async () => {
   const confirmButton = () => screen.queryByTestId('box-confirm');
   const typeIn = (text: string) => act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), text));
   await press(screen.getByText('Total due'));
-  await press(screen.getByTestId('fix-total_due'));
+  await press(screen.getByTestId('box-total_due'));
   expect(confirmButton()).toBeTruthy(); // its reading, “24,377”
   // a backup reading picked, or other words typed, is a correction: only Save keeps it
   await press(screen.getByText('24.377'));
@@ -349,7 +366,7 @@ test("Looks right is only for the box's value as it stands", async () => {
   await press(screen.getByTestId('box-save'));
   expect(screen.getByText('Corrected')).toBeTruthy();
   // on a corrected box, the correction as it stands can be confirmed, but not the reading it replaced
-  await press(screen.getByTestId('fix-total_due'));
+  await press(screen.getByTestId('box-total_due'));
   expect(confirmButton()).toBeTruthy();
   await press(screen.getByText('24,377'));
   expect(confirmButton()).toBeNull();
@@ -400,14 +417,14 @@ test('annotation mode blocks an unchecked save', async () => {
   expect(mockToast).not.toHaveBeenCalled();
   expect(screen.queryByTestId('save-confirm')).toBeNull();
   expect(screen.getByText('Check every box first')).toBeTruthy();
-  expect(screen.getAllByTestId(/^fix-/).map((b) => b.props.testID)).toEqual(left.map((box) => `fix-${box}`));
+  expect(screen.getAllByTestId(/^box-/).map((b) => b.props.testID)).toEqual(left.map((box) => `box-${box}`));
   expect(screen.getAllByText('Not checked yet')).toHaveLength(3);
   for (const box of ['ewt2_payment', 'ewt1_tax']) {
-    await press(screen.getByTestId(`fix-${box}`));
+    await press(screen.getByTestId(`box-${box}`));
     await press(screen.getByTestId('box-confirm'));
   }
   expect(screen.getAllByText('Checked')).toHaveLength(2);
-  expect(screen.getAllByTestId(/^fix-/)).toHaveLength(3); // the list stays as it opened
+  expect(screen.getAllByTestId(/^box-/)).toHaveLength(3); // the list stays as it opened
   expect(header('Check every box first: 1 left')).toBeTruthy();
   expect(blockWords('unchecked', scan())).toBe('Check every box first: 1 left.');
   await press(screen.getByLabelText('Close'));
@@ -425,6 +442,46 @@ test('annotation mode blocks an unchecked save', async () => {
   await press(screen.getByTestId('save-open'));
   expect(screen.getByTestId('save-confirm')).toBeTruthy();
   expect(screen.getByLabelText('Client code')).toBeTruthy();
+});
+
+test('Check every box first lists the unchecked boxes with their states', async () => {
+  // Ruling P7: through the Scan screen's Save, in annotation mode, with every box of sample 0007 checked but three
+  mockTeam = true;
+  await act(async () => updateSettings({ annotation: true }));
+  const id = await show('inv_0007', { source: 'gallery' });
+  const left = ['total_due', 'item3_unit', 'item3_amount'];
+  await act(async () => {
+    uncheckedBoxes(getScan(id)!)
+      .filter((box) => !left.includes(box))
+      .forEach((box) => confirmBox(id, box));
+  });
+  await press(screen.getByTestId('save-open'));
+  expect(header('Check every box first')).toBeOnTheScreen(); // the box sheet's title
+  // each box with its state, in place of Edited (the plan's call 19), and Hard to read where the score is under 0.90
+  const listed = () => screen.getAllByTestId(/^box-/).map((row) => row.props.accessibilityLabel);
+  expect(listed()).toEqual([
+    'Total due, Read as “24,377”, Not checked yet',
+    'Row 3 · Unit, Read as “can”, Hard to read, Not checked yet',
+    'Row 3 · Amount, Read as “72”, Hard to read, Not checked yet',
+  ]);
+  for (const badge of screen.getAllByText('Not checked yet')) expect(badge).toHaveStyle({ color: colors.warning });
+
+  // one looks right, one is corrected: the list stays as it opened, with their new states
+  await press(screen.getByTestId('box-item3_unit'));
+  await press(screen.getByTestId('box-confirm'));
+  await press(screen.getByTestId('box-total_due'));
+  await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), '24,377.00'));
+  await press(screen.getByTestId('box-save'));
+  expect(header('Check every box first')).toBeOnTheScreen();
+  expect(listed()).toEqual([
+    'Total due, Read as “24,377”, You changed it to “24,377.00”, Corrected',
+    'Row 3 · Unit, Read as “can”, Hard to read, Checked',
+    'Row 3 · Amount, Read as “72”, Hard to read, Not checked yet',
+  ]);
+  expect(screen.getByText('Corrected')).toHaveStyle({ color: colors.success });
+  expect(screen.getByText('Checked')).toHaveStyle({ color: colors.success });
+  expect(within(screen.getByTestId('sheet-panel')).queryByText('Edited')).toBeNull();
+  expect(header('Check every box first: 1 left')).toBeOnTheScreen();
 });
 
 test('terms', async () => {
@@ -718,6 +775,50 @@ test('a sheet gives TalkBack focus back to the row that opened it; a chip, to it
   expect(focusedTestIDs()).toEqual([['row-date', 'focus']]);
 });
 
+test('Save in a one-box sheet sends TalkBack focus to the strip, which says the new state', async () => {
+  // Ruling T13-1: the sheet's own focus return, once it has gone, lands on the strip, not the row
+  const id = await show('inv_0007', { from: 'recent' });
+  await press(screen.getByTestId('row-date'));
+  focus.mockClear();
+  await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), '13/45/2026'));
+  await press(screen.getByTestId('box-save'));
+  expect(getScan(id)!.edits.date).toBe('13/45/2026');
+  expect(header('1 to check')).toBeOnTheScreen();
+  expect(focusedTestIDs().at(-1)).toEqual(['status-strip', 'focus']);
+  expect(focusedTestIDs()).not.toContainEqual(['row-date', 'focus']);
+
+  // Cancel saves nothing: focus goes back to the row
+  await press(screen.getByTestId('row-date'));
+  focus.mockClear();
+  await press(button('Cancel'));
+  expect(focusedTestIDs()).toEqual([['row-date', 'focus']]);
+
+  // a row with several boxes: Save goes back to its list, so focus stays in the sheet until it closes
+  await press(screen.getByTestId('row-total_due'));
+  await press(screen.getByTestId('box-total_due'));
+  focus.mockClear();
+  await press(screen.getByTestId('box-save'));
+  expect(focus).not.toHaveBeenCalled();
+  await press(button('Close'));
+  expect(focusedTestIDs()).toEqual([['row-total_due', 'focus']]);
+});
+
+test('typing in a box survives the scan, the lists and the settings changing', async () => {
+  // Review Focus 2, on the Scan screen itself, which re-renders the open sheet with each change
+  const id = await show('inv_0007', { source: 'gallery' });
+  await press(screen.getByTestId('row-date'));
+  await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), 'Oct 28'));
+  await act(async () => {
+    updateScan(id, { terms: 'cash' });
+    await updateSettings({ atc: 'WC158' });
+    await clearItems();
+  });
+  expect(screen.getByLabelText('What the box says').props.value).toBe('Oct 28');
+  expect(header('Date')).toBeOnTheScreen();
+  await press(button('Close')); // still unsaved: leaving asks
+  expect(alert).toHaveBeenLastCalledWith('Discard what you typed?', undefined, expect.any(Array));
+});
+
 test('closing a save sheet gives TalkBack focus back to Save', async () => {
   /** The last view TalkBack focus went to, as its pressable's props. */
   const lastFocus = () => focus.mock.calls.at(-1);
@@ -863,17 +964,19 @@ test('a text box says where it came from', async () => {
       r.reads.find((b) => b.name === 'date')!.fromText = false; // read from the rendered page
     },
   });
-  await press(screen.getByText('SI no.'));
-  expect(screen.getByText("From the PDF's text")).toBeTruthy();
+  await press(screen.getByText('SI no.')); // a one-box row: its editor
+  // where the crop would be, and as its reading: the PDF's own text, with no crop
+  const [source, reading] = screen.getAllByText("From the PDF's text");
+  expect(source).toHaveStyle(type.overline);
+  expect(reading).toHaveStyle(type.body);
+  expect(screen.queryByText('What the camera saw')).toBeNull();
   expect(screen.queryByText(/^Read as /)).toBeNull();
-  await press(screen.getByTestId('fix-invoice_no'));
-  expect(screen.getByText("From the PDF's text")).toBeTruthy();
   expect(screen.getByLabelText('What the box says').props.value).toBe('0000888');
-  await press(screen.getByText('Cancel'));
-  await press(screen.getByLabelText('Close'));
+  await press(screen.getByText('Cancel')); // a one-box sheet: Cancel closes it
 
   await press(screen.getByText('Date'));
-  expect(screen.getByText('Read as “27 Sep 2026” · 100% sure')).toBeTruthy();
+  expect(screen.getByText('What the camera saw')).toBeTruthy();
+  expect(screen.getByText('Read as “27 Sep 2026”')).toBeTruthy();
   expect(screen.queryByText("From the PDF's text")).toBeNull();
 });
 
@@ -895,7 +998,7 @@ test('a scan kept before PDFs shows as a photo', async () => {
   expect(screen.getByText('45 boxes read.')).toBeTruthy();
   expect(screen.queryByText(/PDF/)).toBeNull();
   await press(screen.getByText('SI no.'));
-  expect(screen.getByText('Read as “0007655” · 100% sure')).toBeTruthy();
+  expect(screen.getByText('Read as “0007655”')).toBeTruthy();
 });
 
 test('views', async () => {

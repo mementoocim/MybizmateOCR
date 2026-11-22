@@ -299,6 +299,11 @@ export default function Result() {
           scan={scan}
           boxes={boxes.boxes}
           onClose={closeSheet}
+          // A one-box sheet's Save: the sheet gives TalkBack focus to its opener once it has gone, so pointing the
+          // opener at the strip lands focus there, and the strip says the new state (ruling T13-1).
+          onSaved={() => {
+            boxesOpener.current = stripRef.current;
+          }}
           returnFocus={boxesOpener}>
           {boxes.row !== undefined && sale ? <NewItem scan={scan} sale={sale} row={boxes.row} /> : null}
         </BoxSheet>
@@ -490,7 +495,10 @@ function sampleLine(scan: StoredScan): string {
   return `Sample invoice: ${exact} of ${written} boxes read exactly as written. ${made}`;
 }
 
-/** On a sale, an item the lists don't have: one tap adds it, with its unit and the row's unit price. */
+/**
+ * On a sale, an item the lists don't have: one tap adds it, with its unit and the row's unit price. Under the box
+ * sheet's full-bleed rows, on the gutter.
+ */
 function NewItem({ scan, sale, row }: { scan: StoredScan; sale: SaleView; row: number }) {
   const item = sale.final.items.find((it) => it.row === row);
   if (scan.kind !== 'sale' || scan.source === 'sample' || !item || item.item_id !== null || !item.description) return null;
@@ -498,7 +506,11 @@ function NewItem({ scan, sale, row }: { scan: StoredScan; sale: SaleView; row: n
     await addItem({ name: item.description, unit: boxValue(scan, `item${row}_unit`) ?? '', price: item.unit_price });
     toast('Added to your items.');
   };
-  return <Button variant="text" label={`Add “${item.description}” to your items`} onPress={add} />;
+  return (
+    <View style={styles.newItem}>
+      <Button variant="text" label={`Add “${item.description}” to your items`} onPress={add} />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -514,6 +526,7 @@ const styles = StyleSheet.create({
   number: { color: colors.brandText },
   numberedLine: { flex: 1, color: colors.ink },
   footnote: { paddingHorizontal: space.l, paddingTop: space.l, gap: space.xs },
+  newItem: { paddingHorizontal: space.l, paddingTop: space.s },
   ink: { color: colors.ink },
   mute: { color: colors.mute },
   warning: { color: colors.warning },

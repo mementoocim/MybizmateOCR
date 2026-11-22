@@ -30,10 +30,11 @@ import { Tap } from './Tap';
 // fades in as the panel slides up (easing out), and both go back the same way; with reduced motion, both only fade.
 // The Modal stays up through the closing animation, which takes no touches and which TalkBack leaves. The panel is at
 // most 90% of the screen: a title row (a step's Back, the title, Close; there's no drag handle), an optional subtitle,
-// the scroll, then the action row pinned under it. The Modal is edge to edge, so the action row pads by the
-// navigation bar's inset and by the open keyboard, whose height RN 0.88 reports above that bar (ruling T5-1); a sheet
-// with no action row pads the end of its scroll instead. The scroll is its fields' scroll-into-view: they never scroll
-// the Screen behind the Modal. Back, Close, the scrim and system back ask before typing is lost (dirty). TalkBack
+// the scroll (its sides on the 16 dp gutter, unless a list of full-bleed rows pads its own: gutter={false}, ruling
+// T13-1), then the action row pinned under it. The Modal is edge to edge, so the action row pads by the navigation
+// bar's inset and by the open keyboard, whose height RN 0.88 reports above that bar (ruling T5-1); a sheet with no
+// action row pads the end of its scroll instead. The scroll is its fields' scroll-into-view: they never scroll the
+// Screen behind the Modal. Back, Close, the scrim and system back ask before typing is lost (dirty). TalkBack
 // focus moves to the title once the sheet is up, and to returnFocus once it has gone. While it's open, the panel is
 // the snackbar's host (the plan's call 4), so a message shows above the action row, not dimmed behind the scrim; it
 // goes back to the host under the sheet as the sheet starts to close.
@@ -73,6 +74,7 @@ export function Sheet({
   dirty = false,
   onBack,
   returnFocus,
+  gutter = true,
   testID = 'sheet',
 }: {
   visible: boolean;
@@ -84,6 +86,7 @@ export function Sheet({
   dirty?: boolean; // typed input would be lost: back, close and the scrim ask first
   onBack?: (() => void) | null; // a step's back: a Back button in the title row; system back calls it
   returnFocus?: RefObject<ViewInstance | null>; // TalkBack focus goes back here on close
+  gutter?: boolean; // default true: the body's 16 dp sides; false for full-bleed rows, which pad themselves
   testID?: string; // the Modal's
 }) {
   const insets = useSafeAreaInsets();
@@ -176,7 +179,10 @@ export function Sheet({
               ref={scrollRef}
               testID="sheet-scroll"
               keyboardShouldPersistTaps="handled"
-              contentContainerStyle={[styles.body, !actions?.length && { paddingBottom: space.xl + clearance }]}>
+              contentContainerStyle={[
+                gutter && styles.body,
+                !actions?.length && { paddingBottom: space.xl + clearance },
+              ]}>
               {children}
             </ScrollView>
           </ScrollIntoViewScope>

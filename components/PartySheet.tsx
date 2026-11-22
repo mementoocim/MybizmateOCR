@@ -5,7 +5,7 @@ import { formFields } from '../lib/forms';
 import { addParty, customersOf, formatTin, lists, type Party, subscribeLists } from '../lib/lists';
 import { boxValue, SAMPLE_NAMES, type SaleView } from '../lib/sale';
 import { type StoredScan, updateScan } from '../lib/scans';
-import { colors, sectionLabel } from '../lib/theme';
+import { colors, sectionLabel, space } from '../lib/theme';
 import { toast } from '../lib/toast';
 import { BoxSheet } from './BoxSheet';
 import { TextButton } from './Buttons';
@@ -134,7 +134,7 @@ export function PartySheet({
 }
 
 const styles = StyleSheet.create({
-  section: { marginTop: 20 },
+  section: { marginTop: 20, paddingHorizontal: space.l }, // under the box sheet's full-bleed rows, on the gutter
   party: { fontSize: 16, color: colors.ink, marginTop: 8 },
   note: { fontSize: 14, color: colors.mute, marginTop: 6, lineHeight: 20 },
 });

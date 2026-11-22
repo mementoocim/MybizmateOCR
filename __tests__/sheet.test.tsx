@@ -256,6 +256,30 @@ test('the panel: up to 90% of the screen, 16 dp top corners, padded by the botto
   await keyboard(0);
 });
 
+test("the body's sides: the 16 dp gutter, or none for full-bleed rows (ruling T13-1)", async () => {
+  const sides = () => StyleSheet.flatten(screen.getByTestId('sheet-scroll').props.contentContainerStyle);
+  await show(
+    <Sheet visible title="Total due" onClose={noop} actions={cancelAndSave()}>
+      <Text>Total due</Text>
+    </Sheet>,
+  );
+  expect(sides()).toMatchObject({ paddingHorizontal: space.l });
+  // A list of full-bleed rows pads its own rows, so a row's ripple spans the sheet.
+  await screen.rerender(
+    <Sheet visible gutter={false} title="Total due" onClose={noop} actions={cancelAndSave()}>
+      <Text>Total due</Text>
+    </Sheet>,
+  );
+  expect(sides()?.paddingHorizontal).toBeUndefined();
+  // The end of a scroll with no action row still clears the inset.
+  await screen.rerender(
+    <Sheet visible gutter={false} title="Total due" onClose={noop}>
+      <Text>Total due</Text>
+    </Sheet>,
+  );
+  expect(sides()).toEqual({ paddingBottom: space.xl + BOTTOM });
+});
+
 test("its fields scroll the sheet's own scroll, never the Screen behind it", async () => {
   const behindRef = createRef<ScrollViewInstance>();
   const input = createRef<TextInputInstance>();
