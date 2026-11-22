@@ -63,12 +63,19 @@ test('disabled: sand fill, mute label, no press', async () => {
   expect(onPress).not.toHaveBeenCalled();
 });
 
-test('a disabled text button keeps no fill, with a mute label', async () => {
+test('disabled text and destructiveText buttons get the sand fill too', async () => {
   const onPress = jest.fn();
-  await render(<Button label="Use this name" variant="text" disabled onPress={onPress} />);
-  expect(button('Use this name')).toHaveStyle({ backgroundColor: undefined });
-  expect(screen.getByText('Use this name')).toHaveStyle({ color: colors.mute });
-  await fireEvent.press(button('Use this name'));
+  await render(
+    <>
+      <Button label="Use this name" variant="text" disabled onPress={onPress} />
+      <Button label="Clear suppliers" variant="destructiveText" disabled onPress={onPress} />
+    </>,
+  );
+  for (const name of ['Use this name', 'Clear suppliers']) {
+    expect(button(name)).toHaveStyle({ backgroundColor: colors.sand });
+    expect(screen.getByText(name)).toHaveStyle({ color: colors.mute });
+    await fireEvent.press(button(name));
+  }
   expect(onPress).not.toHaveBeenCalled();
 });
 
@@ -141,24 +148,38 @@ test('Tap shows a 2 dp focus ring while focused', async () => {
   const onFocus = jest.fn();
   const onBlur = jest.fn();
   await render(
-    <Tap accessibilityRole="button" accessibilityLabel="Open" onPress={noop} onFocus={onFocus} onBlur={onBlur}>
-      <Text>Open</Text>
-    </Tap>,
+    <>
+      <Tap accessibilityRole="button" accessibilityLabel="Open" onPress={noop} onFocus={onFocus} onBlur={onBlur}>
+        <Text>Open</Text>
+      </Tap>
+      <Tap accessibilityRole="button" accessibilityLabel="Close" focusRadius={24} onPress={noop}>
+        <Text>Close</Text>
+      </Tap>
+    </>,
   );
   const tap = button('Open');
   expect(screen.queryByTestId('focus-ring')).toBeNull();
 
   await fireEvent(tap, 'focus');
+  // Ruling F3-1: the ring sits 3 dp outside the control, so it shows on any fill (focus on brand is about 1.4:1).
   expect(screen.getByTestId('focus-ring')).toHaveStyle({
+    position: 'absolute',
+    top: -3,
+    left: -3,
+    right: -3,
+    bottom: -3,
     borderWidth: 2,
     borderColor: colors.focus,
-    borderRadius: radius.button,
+    borderRadius: radius.button + 3,
   });
   expect(onFocus).toHaveBeenCalledTimes(1);
 
   await fireEvent(tap, 'blur');
   expect(screen.queryByTestId('focus-ring')).toBeNull();
   expect(onBlur).toHaveBeenCalledTimes(1);
+
+  await fireEvent(button('Close'), 'focus'); // a Tap's own corner radius, 3 dp out
+  expect(screen.getByTestId('focus-ring')).toHaveStyle({ borderRadius: 24 + 3 });
 });
 
 test('the adapters map to variants', async () => {

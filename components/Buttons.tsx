@@ -8,8 +8,8 @@ import { Tap } from './Tap';
 // Design B's buttons (§5.6). Primary is the brand fill with an ink label; secondary a panel fill in an outline border,
 // with an ink label; text a brandText label; destructive a panel fill in a dangerLine border, with a danger label;
 // destructiveText a danger label. Large is at least 56 dp tall and default 48; both grow with the label. Disabled is a
-// sand fill with a mute label (a text button keeps no fill). Loading keeps the label, shows a spinner before it and
-// blocks presses, and so does a press whose promise hasn't settled: a double tap runs once.
+// sand fill with a mute label, on every variant. Loading keeps the label, shows a spinner before it and blocks presses,
+// and so does a press whose promise hasn't settled: a double tap runs once.
 
 export type ButtonVariant = 'primary' | 'secondary' | 'text' | 'destructive' | 'destructiveText';
 export type ButtonProps = {
@@ -70,7 +70,7 @@ export function Button({
         styles.button,
         size === 'large' ? styles.large : styles.default,
         fill,
-        fill && disabled && styles.disabled,
+        disabled && styles.disabled,
         pressed && variant === 'primary' && styles.primaryPressed, // iOS has no ripple
       ]}>
       {busy ? (
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   label: { flexShrink: 1, textAlign: 'center' }, // wraps beside the icon or spinner instead of overflowing
 });
 
-/** The box behind the label: none for the text variants. */
+/** The box behind the label while enabled: none for the text variants. */
 const FILL: Record<ButtonVariant, (typeof styles)[keyof typeof styles] | null> = {
   primary: styles.primary,
   secondary: styles.secondary,
