@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { act, fireEvent, render, renderHook, screen, within } from '@testing-library/react-native';
 import { createRef, type ReactElement, type ReactNode } from 'react';
 import {
   AccessibilityInfo,
@@ -20,7 +20,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { ButtonProps } from '../components/Buttons';
 import { Menu } from '../components/Menu';
 import { Screen } from '../components/Screen';
-import { confirmDiscard, Sheet } from '../components/Sheet';
+import { confirmDiscard, Sheet, useLingering } from '../components/Sheet';
 import { TextField } from '../components/TextField';
 import { colors, durations, elevation, radius, space, touch, type } from '../lib/theme';
 import { keyboard } from '../test-utils/keyboard';
@@ -330,6 +330,83 @@ test('TalkBack focus moves to the title once it has opened, and back to the open
   expect(screen.queryByTestId('sheet', { includeHiddenElements: true })).toBeNull();
   expect(focus).toHaveBeenCalledTimes(2);
   expect(focus).toHaveBeenLastCalledWith(opener.current, 'focus');
+});
+
+/** The opener, and a sheet that's up, closed, or gone (its caller rendered it only while it was open). */
+function openerAndSheet() {
+  const opener = createRef<ViewInstance>();
+  const ui = (sheet: 'up' | 'closed' | 'gone') => (
+    <>
+      <View ref={opener} />
+      {sheet !== 'gone' && <Sheet visible={sheet === 'up'} title="Customer" onClose={noop} returnFocus={opener} />}
+    </>
+  );
+  return { opener, ui };
+}
+
+test('a sheet unmounted while it is up, or while it closes, still gives TalkBack focus back, once', async () => {
+  const focus = jest.mocked(AccessibilityInfo.sendAccessibilityEvent);
+  const { opener, ui } = openerAndSheet();
+  await show(ui('closed'));
+  await screen.rerender(ui('gone'));
+  expect(focus).not.toHaveBeenCalled(); // never up: nothing to give back
+
+  await screen.rerender(ui('up'));
+  expect(focus).toHaveBeenCalledTimes(1); // the title (the test setup ends the open animation at once)
+  await screen.rerender(ui('gone')); // closed by unmounting it: no exit motion, but focus goes back
+  expect(screen.queryByTestId('sheet', { includeHiddenElements: true })).toBeNull();
+  expect(focus).toHaveBeenCalledTimes(2);
+  expect(focus).toHaveBeenLastCalledWith(opener.current, 'focus');
+
+  // Unmounted halfway through its closing animation: focus goes back once, and the stopped animation adds none.
+  let finish: EndCallback = noop;
+  jest.spyOn(Animated, 'parallel').mockImplementation(() => ({
+    start: (callback?: EndCallback) => {
+      finish = callback ?? noop;
+    },
+    stop: noop,
+    reset: noop,
+  }));
+  await screen.rerender(ui('up'));
+  await act(async () => finish({ finished: true }));
+  focus.mockClear();
+  await screen.rerender(ui('closed'));
+  await screen.rerender(ui('gone'));
+  expect(focus).toHaveBeenCalledTimes(1);
+  expect(focus).toHaveBeenLastCalledWith(opener.current, 'focus');
+  await act(async () => finish({ finished: true }));
+  expect(focus).toHaveBeenCalledTimes(1);
+});
+
+test('once a sheet has closed and given focus back, unmounting it sends nothing more', async () => {
+  const focus = jest.mocked(AccessibilityInfo.sendAccessibilityEvent);
+  const { opener, ui } = openerAndSheet();
+  await show(ui('up'));
+  await screen.rerender(ui('closed')); // the exit motion, kept mounted (the test setup ends it at once)
+  expect(focus).toHaveBeenCalledTimes(2); // the title, then the opener
+  expect(focus).toHaveBeenLastCalledWith(opener.current, 'focus');
+  await screen.rerender(ui('gone'));
+  expect(focus).toHaveBeenCalledTimes(2);
+});
+
+test('useLingering keeps the last value it was given, follows a new one, and holds it through a null', async () => {
+  type Open = { kind: 'boxes'; boxes: string[] } | { kind: 'terms' };
+  const { result, rerender } = await renderHook(({ value }: { value: Open | null }) => useLingering(value), {
+    initialProps: { value: null as Open | null },
+  });
+  expect(result.current).toBeNull();
+
+  const boxes: Open = { kind: 'boxes', boxes: ['date'] };
+  await rerender({ value: boxes });
+  expect(result.current).toBe(boxes);
+  await rerender({ value: null }); // the sheet closes: its content stays as it was
+  expect(result.current).toBe(boxes);
+
+  const terms: Open = { kind: 'terms' };
+  await rerender({ value: terms });
+  expect(result.current).toBe(terms);
+  await rerender({ value: null });
+  expect(result.current).toBe(terms);
 });
 
 test('motion: the scrim fades and the panel slides up, easing out; with reduced motion both only fade', async () => {

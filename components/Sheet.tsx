@@ -34,6 +34,9 @@ import { Tap } from './Tap';
 // with no action row pads the end of its scroll instead. The scroll is its fields' scroll-into-view: they never scroll
 // the Screen behind the Modal. Back, Close, the scrim and system back ask before typing is lost (dirty). TalkBack
 // focus moves to the title once the sheet is up, and to returnFocus once it has gone.
+// The exit motion needs the Sheet kept mounted, with `visible` driving it: useLingering keeps a caller's last content
+// for it while it closes. A caller that unmounts the Sheet to close it gets no exit motion, but focus still goes back,
+// once, from the unmount.
 
 /** The prompt before typed input is lost (§9.5). The box editor's own paths ask with it too. */
 export function confirmDiscard(onDiscard: () => void): void {
@@ -41,6 +44,20 @@ export function confirmDiscard(onDiscard: () => void): void {
     { text: 'Keep editing', style: 'cancel' },
     { text: 'Discard', style: 'destructive', onPress: onDiscard },
   ]);
+}
+
+/**
+ * The last value it was given that wasn't null. A caller that keeps a sheet mounted through its exit, with `visible`
+ * driving it, renders the sheet's content from this, so the content stays as it was while the sheet closes:
+ * `const shown = useLingering(open)`, then
+ * `<BoxSheet visible={open?.kind === 'boxes'} boxes={shown?.kind === 'boxes' ? shown.boxes : []} … />`.
+ * Give it state, or another value that keeps its identity from render to render: a new object on every render would
+ * never settle.
+ */
+export function useLingering<T>(value: T | null): T | null {
+  const [last, setLast] = useState(value);
+  if (value !== null && value !== last) setLast(value);
+  return value ?? last;
 }
 
 export function Sheet({
@@ -78,7 +95,8 @@ export function Sheet({
   const slide = useMemo(() => panel.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }), [panel, height]);
   const titleRef = useRef<TextInstance>(null);
   const scrollRef = useRef<ScrollViewInstance>(null);
-  const wasShown = useRef(shown);
+  // While the sheet is up: the opener TalkBack focus goes back to once it has gone, closed or unmounted.
+  const focusOwed = useRef<RefObject<ViewInstance | null> | null>(null);
 
   useEffect(() => {
     if (!shown) return;
@@ -101,10 +119,11 @@ export function Sheet({
 
   // Once the Modal has gone, TalkBack focus goes back to what opened the sheet.
   useEffect(() => {
-    const opener = returnFocus?.current;
-    if (wasShown.current && !shown && opener) AccessibilityInfo.sendAccessibilityEvent(opener, 'focus');
-    wasShown.current = shown;
+    if (shown) focusOwed.current = returnFocus ?? null;
+    else giveFocusBack(focusOwed);
   }, [shown, returnFocus]);
+  // Unmounted while it's up (its caller renders it only while it's open): no exit motion, but focus still goes back.
+  useEffect(() => () => giveFocusBack(focusOwed), []);
 
   const askFirst = (leave: () => void) => () => (dirty ? confirmDiscard(leave) : leave());
   const close = askFirst(onClose);
@@ -166,6 +185,13 @@ export function Sheet({
       </View>
     </Modal>
   );
+}
+
+/** Sends TalkBack focus to the opener a sheet owes it to, and settles the debt, so it's sent once at most. */
+function giveFocusBack(owed: RefObject<RefObject<ViewInstance | null> | null>) {
+  const opener = owed.current?.current;
+  owed.current = null;
+  if (opener) AccessibilityInfo.sendAccessibilityEvent(opener, 'focus');
 }
 
 const styles = StyleSheet.create({
