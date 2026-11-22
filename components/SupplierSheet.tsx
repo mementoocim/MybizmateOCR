@@ -15,9 +15,9 @@ import { Sheet } from './Sheet';
 import { TextField } from './TextField';
 
 // Design B §9.5: the Supplier row's sheet on a purchase. The seller is printed, not read, so the person chooses it:
-// from their suppliers (the picker), as Various suppliers, or by a name not in the list, used as typed or added to the
-// suppliers. A list of full-bleed rows and strips, so the sheet has no gutter, and the field and its buttons pad
-// themselves onto it.
+// from their suppliers (the picker, its search not focused on open, so the keyboard doesn't cover these choices), as
+// Various suppliers, or by a name not in the list, used as typed or added to the suppliers. A list of full-bleed rows
+// and strips, so the sheet has no gutter, and the field and its buttons pad themselves onto it.
 
 export function SupplierSheet({
   visible,
@@ -79,7 +79,12 @@ export function SupplierSheet({
       returnFocus={returnFocus}
       gutter={false}>
       {suppliers.length > 0 ? (
-        <PartyPicker parties={suppliers} label="Search your suppliers" onPick={(p) => pick({ listId: p.id })} />
+        <PartyPicker
+          parties={suppliers}
+          label="Search your suppliers"
+          onPick={(p) => pick({ listId: p.id })}
+          autoFocus={false} // its choices show first: the keyboard would cover them (ruling T14-1)
+        />
       ) : null}
       <ListRow title="Various suppliers" sub="Exported as VARIOUS-SUPP" onPress={() => pick({ various: true })} />
       <SectionHeader title="Not in your list?" />

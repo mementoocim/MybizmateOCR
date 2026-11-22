@@ -9,9 +9,35 @@ test('fold removes case and accents', () => {
   expect(fold(' Peña ')).toBe('pena');
   expect(fold('PEÑAFLOR, Ma. Teresa')).toBe('penaflor, ma. teresa');
   expect(fold('Café Niño')).toBe('cafe nino');
-  expect(fold('Peña')).toBe('pena'); // already split into the letter and its tilde
+  expect(fold('Pen\u0303a')).toBe('pena'); // already split into the letter and its tilde
   expect(fold('Santos General Merchandise')).toBe('santos general merchandise');
   expect(fold('   ')).toBe('');
+});
+
+test('fold never throws where normalize is missing or breaks: the accents just stay', () => {
+  // Ruling T14-3: until the phone's engine is checked (Task 26), a String.prototype.normalize that's missing, or that
+  // throws, leaves the string as it is, lowercased and trimmed; a name typed as written is still found.
+  const pena = party({ id: 'p1', registeredName: 'Peña Hardware' });
+  const builtIn = Object.getOwnPropertyDescriptor(String.prototype, 'normalize')!;
+  Reflect.deleteProperty(String.prototype, 'normalize'); // an engine without it
+  try {
+    expect(''.normalize).toBeUndefined();
+    expect(() => fold(' Peña ')).not.toThrow();
+    expect(fold(' Peña ')).toBe('peña');
+    expect(matchesParty(pena, 'PEÑA')).toBe(true);
+  } finally {
+    Reflect.defineProperty(String.prototype, 'normalize', builtIn); // the built-in back, as it was
+  }
+  const broken = jest.spyOn(String.prototype, 'normalize').mockImplementation(() => {
+    throw new RangeError('Invalid normalization form');
+  });
+  try {
+    expect(fold('PEÑA ')).toBe('peña');
+    expect(broken).toHaveBeenCalled(); // it was asked, and failed
+  } finally {
+    broken.mockRestore();
+  }
+  expect(fold(' Peña ')).toBe('pena'); // back as before
 });
 
 test('a party matches by name, trade name or code, folded', () => {

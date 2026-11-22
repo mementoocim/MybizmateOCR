@@ -251,7 +251,8 @@ test("the picker's search is focused and finds Peña by pena", async () => {
   await press(screen.getByText('Customer'));
   await press(screen.getByText('Choose another'));
   expect(header('In your customers')).toBeTruthy();
-  // a search field, focused on open (§9.5): its label is spoken, not shown, and it leads with the search icon
+  // a search field, focused on open (§9.5; Choose another opens it to search): its label is spoken, not shown, and it
+  // leads with the search icon
   const search = () => screen.getByLabelText('Search your customers');
   expect(search().props.autoFocus).toBe(true);
   expect(search().props.placeholder).toBe('Search your customers');
@@ -362,9 +363,10 @@ test('the supplier sheet: the picker, Various suppliers, and a name not in the l
       "Who sold it to you: the business printed at the top of the invoice. The scanner doesn't read that part, so choose it here.",
     ),
   ).toBeTruthy();
-  // the suppliers to pick from, as the customers' picker has them
+  // the suppliers to pick from, as the customers' picker has them, but its search isn't focused on open: the sheet
+  // shows its choices first, which the keyboard would cover (ruling T14-1)
   const search = screen.getByLabelText('Search your suppliers');
-  expect(search.props.autoFocus).toBe(true);
+  expect(search.props.autoFocus).toBe(false);
   expect(found()).toEqual([
     'Isabela Wholesale Trading, TIN 900-000-001-00000 · S001',
     'Maria Santos Reyes, TIN 900-000-002-00000 · B001',
@@ -412,6 +414,12 @@ test("terms are radio rows in the form's words", async () => {
   await showScan(); // sample 0007's photo: On account is ticked
   await press(screen.getByTestId('row-terms'));
   expect(sheet().getByText('On the paper: On account is ticked.')).toBeTruthy();
+  // a radio group named Terms, as Segmented and ChoiceChips are (ruling T14-2), of the two choices in the form's order
+  const choices = (group: string) =>
+    within(screen.getByRole('radiogroup', { name: group }))
+      .getAllByRole('radio')
+      .map((radio) => radio.props.accessibilityLabel);
+  expect(choices('Terms')).toEqual(['Cash', 'On account']);
   const cash = () => screen.getByRole('radio', { name: 'Cash' });
   const account = () => screen.getByRole('radio', { name: 'On account' });
   expect(account()).toBeChecked();
@@ -441,6 +449,7 @@ test("terms are radio rows in the form's words", async () => {
   await showScan('svc_0000');
   await press(screen.getByTestId('row-terms'));
   expect(sheet().getByText('On the paper: Cash sales is ticked.')).toBeTruthy();
+  expect(choices('Terms')).toEqual(['Cash sales', 'Charge sales']);
   expect(screen.getByRole('radio', { name: 'Cash sales' })).toBeChecked();
   expect(screen.getByRole('radio', { name: 'Charge sales' })).not.toBeChecked();
 });

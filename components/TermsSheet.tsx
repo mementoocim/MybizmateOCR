@@ -13,7 +13,8 @@ import { Tap } from './Tap';
 // Design B §9.5: the terms. What the ticks on the paper show, then the choices as 48 dp radio rows in the form's own
 // words (Cash or On account; a Service Invoice's Cash sales or Charge sales), the chosen one with a check in ink
 // (selection is ink), and once the person has picked, a way back to the tick on the paper. A pick closes the sheet.
-// The rows are full-bleed, as list rows are, so the sheet has no gutter.
+// TalkBack hears a radio group named Terms, as Segmented and ChoiceChips are (ruling T14-2), then each row as a radio
+// button, checked or not. The rows are full-bleed, as list rows are, so the sheet has no gutter.
 
 /** The terms: what the ticks on the paper show, and the person's pick when they are unclear or wrong. */
 export function TermsSheet({
@@ -48,24 +49,26 @@ export function TermsSheet({
       onClose={onClose}
       returnFocus={returnFocus}
       gutter={false}>
-      {(['cash', 'account'] as const).map((t) => {
-        const words = t === 'cash' ? form.cash : form.account;
-        const checked = current === t;
-        return (
-          <Tap
-            key={t}
-            accessibilityRole="radio"
-            accessibilityLabel={words}
-            accessibilityState={{ checked }}
-            onPress={() => choose(t)}
-            focusRing="inside" // rows stack edge to edge (ruling T4-1)
-            focusRadius={0}
-            style={styles.choice}>
-            <Text style={[type.body, styles.words]}>{words}</Text>
-            {checked ? <Check size={touch.iconSmall} color={colors.ink} /> : null}
-          </Tap>
-        );
-      })}
+      <View accessible accessibilityRole="radiogroup" accessibilityLabel="Terms">
+        {(['cash', 'account'] as const).map((t) => {
+          const words = t === 'cash' ? form.cash : form.account;
+          const checked = current === t;
+          return (
+            <Tap
+              key={t}
+              accessibilityRole="radio"
+              accessibilityLabel={words}
+              accessibilityState={{ checked }}
+              onPress={() => choose(t)}
+              focusRing="inside" // rows stack edge to edge (ruling T4-1)
+              focusRadius={0}
+              style={styles.choice}>
+              <Text style={[type.body, styles.words]}>{words}</Text>
+              {checked ? <Check size={touch.iconSmall} color={colors.ink} /> : null}
+            </Tap>
+          );
+        })}
+      </View>
       {scan.terms !== null ? (
         <View style={styles.paper}>
           <Button variant="text" label="Use the tick on the paper" onPress={() => choose(null)} />

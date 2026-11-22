@@ -8,10 +8,12 @@ import { Search } from './icons';
 import { ListRow } from './ListRow';
 import { TextField } from './TextField';
 
-// Design B §9.5: the party picker, in the Customer and Supplier sheets. A search field at the top, focused on open,
-// finds a party by its name, trade name or code, case and accents aside, or by its TIN's digits (lib/search); then the
-// parties as list rows, the name over its TIN and code in figures, and tapping one picks it. Its rows are full-bleed,
-// so it pads its own field and notes: its sheet has no gutter.
+// Design B §9.5: the party picker, in the Customer and Supplier sheets. A search field at the top finds a party by its
+// name, trade name or code, case and accents aside, or by its TIN's digits (lib/search); then the parties as list
+// rows, the name over its TIN and code in figures, and tapping one picks it. The search is focused on open where the
+// picker is what the person came for (Choose another); the Supplier sheet shows its other choices first, which the
+// keyboard would cover (ruling T14-1). Its rows are full-bleed, so it pads its own field and notes: its sheet has no
+// gutter.
 
 const SHOWN = 50; // rows shown at a time: a long list is narrowed by typing
 
@@ -24,10 +26,12 @@ export function PartyPicker({
   parties,
   label,
   onPick,
+  autoFocus = true,
 }: {
   parties: readonly Party[];
   label: string; // the search's spoken name and placeholder: "Search your customers"
   onPick: (p: Party) => void;
+  autoFocus?: boolean; // default true: the search takes the focus (and the keyboard) on open
 }) {
   const [query, setQuery] = useState('');
   const found = parties.filter((p) => matchesParty(p, query));
@@ -40,7 +44,7 @@ export function PartyPicker({
           hideLabel
           leading={Search}
           clearLabel="Clear the search"
-          autoFocus
+          autoFocus={autoFocus}
           value={query}
           onChangeText={setQuery}
         />
