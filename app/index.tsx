@@ -3,7 +3,7 @@ import { useState, useSyncExternalStore } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { OutlinedButton, PrimaryButton, TextButton } from '../components/Buttons';
-import { Camera, ChevronRight, DocumentIcon, ImageIcon, Lock, More } from '../components/icons';
+import { Camera, ChevronRight, FileText, ImageIcon, Lock, More } from '../components/icons';
 import { ReadingOverlay } from '../components/ReadingOverlay';
 import { RecentRow } from '../components/RecentRow';
 import { ScanIllustration } from '../components/ScanIllustration';
@@ -71,7 +71,7 @@ export default function Home() {
           />
           <OutlinedButton
             label="Import PDF"
-            icon={DocumentIcon}
+            icon={FileText}
             disabled={flow.reading}
             onPress={() => flow.fromPdf()}
           />

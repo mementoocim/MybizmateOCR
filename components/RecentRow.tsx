@@ -9,7 +9,7 @@ import { isInvoice, saleOf } from '../lib/sale';
 import type { StoredScan } from '../lib/scans';
 import { annotationOn, settings, subscribeSettings } from '../lib/settings';
 import { bold, colors } from '../lib/theme';
-import { CheckCircle, ChevronRight, ErrorCircle } from './icons';
+import { ChevronRight, CircleAlert, CircleCheck } from './icons';
 
 /**
  * One of Home's recent scans: where it stands (its form not found, saved, its things to check, what it still needs
@@ -43,7 +43,7 @@ export function RecentRow({ scan, onPress }: { scan: StoredScan; onPress: () => 
   const ok = checked !== null && (scan.saved !== null || (checked.problems.length === 0 && blocked === null));
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      {ok ? <CheckCircle size={24} color={colors.pine} /> : <ErrorCircle size={24} color={colors.ember} />}
+      {ok ? <CircleCheck size={24} color={colors.pine} /> : <CircleAlert size={24} color={colors.ember} />}
       <View style={styles.words}>
         <Text style={styles.label}>{scan.label}</Text>
         <Text style={styles.status}>{`${status} · ${formatMs(r.timing.totalMs)} · ${formatClock(scan.at)}`}</Text>

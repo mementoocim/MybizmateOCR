@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { formatMs } from '../lib/format';
 import { bold, colors } from '../lib/theme';
 import type { ScanResult } from '../modules/scanner';
-import { CheckCircle, ErrorCircle } from './icons';
+import { CircleAlert, CircleCheck } from './icons';
 
 const NOT_FOUND_PHOTO =
   'Get the whole form in the photo: all 4 black corner squares of a MyBizMate Sales Invoice, the whole table of a Service Invoice, or the whole page of a BIR Form 2307. Then retake it.';
@@ -50,7 +50,7 @@ export function StatusCard({
 function Card({ warn, title, body }: { warn?: boolean; title: string; body: string }) {
   return (
     <View style={[styles.card, warn ? styles.warn : styles.good]}>
-      {warn ? <ErrorCircle size={24} color={colors.ember} /> : <CheckCircle size={24} color={colors.pine} />}
+      {warn ? <CircleAlert size={24} color={colors.ember} /> : <CircleCheck size={24} color={colors.pine} />}
       <View style={styles.words}>
         <Text style={[styles.title, { color: warn ? colors.amber : colors.pine }]}>{title}</Text>
         <Text style={styles.body}>{body}</Text>

@@ -7,7 +7,7 @@ import { AppState, Linking, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '../components/Buttons';
-import { Bolt, Close, FlashOff, FlashOn, ImageIcon } from '../components/icons';
+import { Bolt, Close, Flashlight, FlashlightOff, ImageIcon } from '../components/icons';
 import { ReadingOverlay } from '../components/ReadingOverlay';
 import { CAMERA_ERRORS, PERMISSION_TEXT, statusText } from '../lib/cameraCopy';
 import { sampleUri } from '../lib/samples';
@@ -198,7 +198,7 @@ export default function CameraScreen() {
             accessibilityLabel={torch ? 'Turn the flashlight off' : 'Turn the flashlight on'}
             style={styles.iconButton}
             onPress={() => setTorch((t) => !t)}>
-            {torch ? <FlashOn color={WHITE} /> : <FlashOff color={WHITE} />}
+            {torch ? <Flashlight color={WHITE} /> : <FlashlightOff color={WHITE} />}
           </Pressable>
         )}
       </View>

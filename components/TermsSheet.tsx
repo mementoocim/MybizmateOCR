@@ -5,7 +5,7 @@ import { FORMS } from '../lib/forms';
 import { type StoredScan, updateScan } from '../lib/scans';
 import { bold, colors } from '../lib/theme';
 import { TextButton } from './Buttons';
-import { CheckCircle } from './icons';
+import { CircleCheck } from './icons';
 import { Sheet } from './Sheet';
 
 /** The terms: what the ticks on the paper show, and the person's pick when they are unclear or wrong. */
@@ -33,7 +33,7 @@ export function TermsSheet({ visible, scan, onClose }: { visible: boolean; scan:
           onPress={() => choose(t)}
           style={({ pressed }) => [styles.option, pressed && styles.pressed]}>
           <Text style={[styles.optionText, current === t && styles.chosen]}>{t === 'cash' ? form.cash : form.account}</Text>
-          {current === t && <CheckCircle size={20} color={colors.coralText} />}
+          {current === t && <CircleCheck size={20} color={colors.coralText} />}
         </Pressable>
       ))}
       {scan.terms !== null && <TextButton label="Use the tick on the paper" onPress={() => choose(null)} />}
