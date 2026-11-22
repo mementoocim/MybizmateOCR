@@ -12,7 +12,9 @@ import type { LedgerOpen, LedgerRowSpec, LedgerSection } from './InvoiceLedger';
 // when it has any, and each table's totals) as row descriptors, with today's words, flags and boxes. The quarter is a
 // badge beside the period. A payment row has its tax on the right, under the section's "Tax", its total in the
 // sub-line, and its flags' words as its reason. Amounts in rows lose the peso sign; the total rows keep it (§6). Rows
-// are keyed as lib/flagTargets keys them ('period', `ewt${n}`, 'ewt_total', …), so a flag chip finds its row.
+// are keyed as lib/flagTargets keys them ('period', `ewt${n}`, 'ewt_total', …), so a flag chip finds its row. The
+// one-row sections' rows (Period, Payee, Payor) show no key, as their strips name them, but say it to TalkBack, which
+// can land on them from a chip or a closing sheet (ruling T12-1).
 
 type Table = CertRow['table'];
 type BoxesOpen = Extract<LedgerOpen, { kind: 'boxes' }>;
@@ -106,6 +108,7 @@ export function certSections(scan: StoredScan, view: CertView): LedgerSection[] 
   const periodRow: LedgerRowSpec = {
     key: 'period',
     section: 'Period',
+    spokenLabel: 'Period',
     value: quarter ? quarter.days : read.some((v) => v) ? read.map((v) => v || '—').join(' – ') : null,
     valueStyle: 'figure', // dates (§5.2)
     badge: quarter ? { label: quarter.badge, tone: 'neutral' } : null,
@@ -119,6 +122,7 @@ export function certSections(scan: StoredScan, view: CertView): LedgerSection[] 
   const payeeRow: LedgerRowSpec = {
     key: 'payee',
     section: 'Payee',
+    spokenLabel: 'Payee',
     value: cert.payee.name || null,
     sub: tinAndZip(cert.payee),
     subMono: true,
@@ -131,6 +135,7 @@ export function certSections(scan: StoredScan, view: CertView): LedgerSection[] 
   const payorRow: LedgerRowSpec = {
     key: 'payor',
     section: 'Payor',
+    spokenLabel: 'Payor',
     value: payor.shown || null,
     sub: `${payorSub(payor)}\n${tinAndZip(cert.payor)}`,
     flagged: has('payor_tin') || has('payor_new') || has('payor_unsure'),
@@ -205,6 +210,7 @@ export function certSections(scan: StoredScan, view: CertView): LedgerSection[] 
           section: 'Totals',
           value: name,
           sub: `Total ${peso(total?.total ?? null)}`,
+          subMono: true, // a figure, as a payment row's total (§5.2, ruling T12-2)
           amount: peso(total?.tax ?? null),
           amountStrong: true,
           reason: flagged ? "The rows don't add up to the total row" : null,

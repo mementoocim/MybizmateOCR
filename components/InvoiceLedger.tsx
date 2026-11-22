@@ -27,6 +27,7 @@ export type LedgerRowSpec = {
   key: string; // the row keys of lib/flagTargets
   section: string; // the SectionHeader it sits under
   label?: string;
+  spokenLabel?: string; // TalkBack's key for a row that shows none: a one-row section's field, which its strip names
   value: string | null;
   valueStyle?: 'value' | 'figure' | 'figureStrong';
   badge?: BadgeSpec | null;
@@ -334,6 +335,7 @@ export function Ledger({
               }}
               testID={`row-${row.key}`}
               label={row.label}
+              spokenLabel={row.spokenLabel}
               value={row.value}
               valueStyle={row.valueStyle}
               badge={row.badge}

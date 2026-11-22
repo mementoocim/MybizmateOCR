@@ -269,6 +269,29 @@ test('an empty value reads as a dash, and blank to TalkBack', async () => {
   expect(screen.getByRole('button', { name: 'Customer, blank' })).toBeOnTheScreen();
 });
 
+test('LedgerRow: a spoken-only label is said first and never shown; a shown key is said instead', async () => {
+  // Ruling T12-1: a one-row section's row (a 2307's Period) shows no key, since its strip names it, but says its field
+  await render(
+    <LedgerRow
+      spokenLabel="Period"
+      value="Oct 1 – Dec 31, 2026"
+      valueStyle="figure"
+      badge={{ label: 'Q4', tone: 'neutral' }}
+      onPress={noop}
+    />,
+  );
+  expect(screen.getByRole('button', { name: 'Period, Oct 1 – Dec 31, 2026, Q4' })).toBeOnTheScreen();
+  expect(screen.queryByText('Period')).toBeNull();
+  // blank and flagged, it still leads
+  await render(<LedgerRow spokenLabel="Payor" value={null} sub="Not in your customers" flagged onPress={noop} />);
+  expect(screen.getByRole('button', { name: 'Payor, blank, Not in your customers. Check' })).toBeOnTheScreen();
+  expect(screen.queryByText('Payor')).toBeNull();
+  // a row that shows its key says that one
+  await render(<LedgerRow label="Date" spokenLabel="When" value="Oct 29, 2026" onPress={noop} />);
+  expect(screen.getByRole('button', { name: 'Date, Oct 29, 2026' })).toBeOnTheScreen();
+  expect(screen.queryByText('When')).toBeNull();
+});
+
 test('LedgerRow: the value in its style with its badge, the sub-line, and the amount on the right', async () => {
   await render(
     <>

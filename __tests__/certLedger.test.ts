@@ -74,10 +74,17 @@ test("sections in today's order, the quarter as a badge", () => {
     ['Totals', ['ewt_total', 'bt_total']],
   ]);
   // The tables and their totals name their right column; each row knows the section it sits under. As today, no row
-  // has a key beside its value: its section strip says what it is.
+  // shows a key beside its value: its section strip says what it is. The one-row sections' rows say their field to
+  // TalkBack, which can land on them from a chip or a closing sheet (ruling T12-1); a table's rows are their values.
   expect(sections.map((s) => s.right)).toEqual([undefined, undefined, undefined, 'Tax', 'Tax', 'Tax']);
   for (const section of sections) for (const row of section.rows) expect(row.section).toBe(section.title);
-  expect(sections.flatMap((s) => s.rows).filter((r) => r.label !== undefined)).toEqual([]);
+  const rows = sections.flatMap((s) => s.rows);
+  expect(rows.filter((r) => r.label !== undefined)).toEqual([]);
+  expect(rows.filter((r) => r.spokenLabel !== undefined).map((r) => [r.key, r.spokenLabel])).toEqual([
+    ['period', 'Period'],
+    ['payee', 'Payee'],
+    ['payor', 'Payor'],
+  ]);
 
   // The period: a quarter's first and last days, its year said once, in figures; the quarter is a badge beside them.
   expect(rowOf(sections, 'period')).toMatchObject({
@@ -221,7 +228,8 @@ test('a payment row: tax on the right, total in the sub-line, flags as the reaso
 test('totals keep the peso sign', () => {
   const id = scanOf('bir2307_text_1');
   const sections = sectionsOf(id);
-  // One row per table: its total in the sub-line and its tax on the right, both with the peso sign.
+  // One row per table: its total in the sub-line, in mono as the payment rows' (ruling T12-2), and its tax on the
+  // right, both with the peso sign.
   expect(wordsOf(rowOf(sections, 'ewt_total'))).toEqual({
     value: 'Income payments',
     sub: 'Total ₱1,375,018.56',
@@ -230,6 +238,7 @@ test('totals keep the peso sign', () => {
   });
   expect(rowOf(sections, 'ewt_total')).toMatchObject({
     section: 'Totals',
+    subMono: true,
     amountStrong: true,
     flagged: false,
     edited: false,
@@ -242,6 +251,7 @@ test('totals keep the peso sign', () => {
     amount: '₱9,462.76',
   });
   expect(rowOf(sections, 'bt_total')).toMatchObject({
+    subMono: true,
     amountStrong: true,
     open: { kind: 'boxes', title: 'Business tax', boxes: columns('bt_total', TOTAL) },
   });

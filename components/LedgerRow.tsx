@@ -17,6 +17,7 @@ import { Tap } from './Tap';
 
 type LedgerRowProps = {
   label?: string; // the key ("Date"); none on item rows
+  spokenLabel?: string; // never shown, said in the key's place: a one-row section's field ("Period")
   value: string | null;
   valueStyle?: 'value' | 'figure' | 'figureStrong'; // default 'value'
   badge?: BadgeSpec | null; // beside the value: the 2307 quarter
@@ -42,6 +43,7 @@ const FLAG_BAR = 3;
 export const LedgerRow = forwardRef<ViewInstance, LedgerRowProps>(function LedgerRow(
   {
     label,
+    spokenLabel,
     value,
     valueStyle = 'value',
     badge,
@@ -93,7 +95,7 @@ export const LedgerRow = forwardRef<ViewInstance, LedgerRowProps>(function Ledge
     </>
   );
   const a11y = {
-    accessibilityLabel: spokenLabel({ label, value, badge, sub, amount, reason, flagged, edited }),
+    accessibilityLabel: spokenName({ label: label || spokenLabel, value, badge, sub, amount, reason, flagged, edited }),
     testID,
     style: styles.row,
   };
@@ -120,10 +122,11 @@ export const LedgerRow = forwardRef<ViewInstance, LedgerRowProps>(function Ledge
 });
 
 /**
- * What TalkBack says (§7): the key, the value ("blank" when empty), the badge beside it (ruling T4-4: a badge is part
- * of its row's label), the sub-line and the amount; then the flag and its reason, or that the value was edited.
+ * What TalkBack says (§7): the key (on a row that shows none, its spoken-only label: ruling T12-1), the value ("blank"
+ * when empty), the badge beside it (ruling T4-4: a badge is part of its row's label), the sub-line and the amount;
+ * then the flag and its reason, or that the value was edited.
  */
-function spokenLabel({
+function spokenName({
   label,
   value,
   badge,

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
-import { ScrollView, View } from 'react-native';
+import { AccessibilityInfo, ScrollView, View } from 'react-native';
 
 import Result from '../app/result';
 import { certOf } from '../lib/cert';
@@ -87,9 +87,16 @@ const columns = (prefix: string, names: string[]) => names.map((c) => `${prefix}
 const ROW = ['payment', 'atc', 'm1', 'm2', 'm3', 'total', 'tax'];
 const TOTAL = ['m1', 'm2', 'm3', 'total', 'tax'];
 
+/** The open sheet. */
+const sheet = () => within(screen.getByTestId('sheet-panel'));
+
 // jest's views and scroll views have no layout, and share their native methods: Android's measurements stand in.
 const viewMethods = View.prototype as unknown as { measureLayout: jest.Mock };
 const scrollMethods = ScrollView.prototype as unknown as { getInnerViewRef: jest.Mock; scrollTo: jest.Mock };
+const focus = jest.mocked(AccessibilityInfo.sendAccessibilityEvent);
+type Said = { props?: { accessibilityLabel?: string } };
+/** Where TalkBack focus was sent, as what each view says. */
+const focusedNames = () => focus.mock.calls.map(([view, event]) => [(view as Said).props?.accessibilityLabel, event]);
 
 /** The pack's customers in Your lists. */
 async function addPackCustomers(): Promise<void> {
@@ -118,7 +125,6 @@ test("a 2307's sections", async () => {
   // the period in figures, its quarter a badge beside it, which TalkBack says with the dates (ruling T4-4)
   expect(screen.getByText('Oct 1 – Dec 31, 2026')).toHaveStyle(type.figure);
   expect(screen.getByText('Q4')).toHaveStyle(type.badge);
-  expect(button('Oct 1 – Dec 31, 2026, Q4')).toBeTruthy();
 
   expect(screen.getByText('Peñaflor, Ma. Teresa Lim')).toBeTruthy();
   expect(screen.getByText('TIN 746-851-963-00000 · ZIP 3306')).toHaveStyle(type.figureSmall);
@@ -126,6 +132,15 @@ test("a 2307's sections", async () => {
   expect(screen.getByText('Castillo Eatery')).toBeTruthy();
   // RNTL's default matcher collapses the sub's line break into a space
   expect(screen.getByText('Add your customers in Your lists to check names TIN 334-455-667-00000 · ZIP 3303')).toBeTruthy();
+
+  // Ruling T12-1: a one-row section's row says its field first, since TalkBack can land on it from a chip or a closing
+  // sheet; only the strip shows the field's name
+  expect(button('Period, Oct 1 – Dec 31, 2026, Q4')).toBeTruthy();
+  expect(button('Payee, Peñaflor, Ma. Teresa Lim, TIN 746-851-963-00000 · ZIP 3306')).toBeTruthy();
+  expect(
+    button('Payor, Castillo Eatery, Add your customers in Your lists to check names TIN 334-455-667-00000 · ZIP 3303'),
+  ).toBeTruthy();
+  for (const field of ['Period', 'Payee', 'Payor']) expect(screen.getAllByText(field)).toHaveLength(1);
 
   // each payment: its ATC and payment, its total under them, and its tax on the right, in a row without the peso sign
   const payments = [
@@ -143,10 +158,12 @@ test("a 2307's sections", async () => {
   // the second table, laid out like the first
   expect(button('WV010 · Purchase of goods, Total 189,255.11, 9,462.76')).toBeTruthy();
 
-  // each table's total row: its total and its tax, with the peso sign
+  // each table's total row: its total, in mono as a payment's (ruling T12-2), and its tax, with the peso sign
   expect(button('Income payments, Total ₱1,375,018.56, ₱47,937.78')).toBeTruthy();
+  expect(screen.getByText('Total ₱1,375,018.56')).toHaveStyle(type.figureSmall);
   expect(screen.getByText('₱47,937.78')).toHaveStyle(type.figureStrong);
   expect(button('Business tax, Total ₱189,255.11, ₱9,462.76')).toBeTruthy();
+  expect(screen.getByText('Total ₱189,255.11')).toHaveStyle(type.figureSmall);
   expect(screen.getByText('₱9,462.76')).toHaveStyle(type.figureStrong);
 
   // none of an invoice's; saved as a 2307
@@ -177,7 +194,7 @@ test('a period that is not one calendar quarter', async () => {
   expect(screen.getByText('Not one calendar quarter')).toHaveStyle({ color: colors.warning });
   expect(screen.queryByText('Q4')).toBeNull(); // no quarter, no badge
   expect(within(screen.getByTestId('row-period')).getByTestId('flag-bar')).toBeTruthy();
-  expect(button('10012026 – 11302026. Check: not one calendar quarter')).toBeTruthy();
+  expect(button('Period, 10012026 – 11302026. Check: not one calendar quarter')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Period, to check' })).toBeTruthy();
   // the boxes as read, a box that wasn't read as a dash
   await show('bir2307_text_1', { edits: { period_to: '' } });
@@ -204,7 +221,9 @@ test("the rows' flags", async () => {
   expect(button('Office supplies, Total 208,043.00, 2,080.43. Check: no ATC')).toBeTruthy();
   // a business-tax row's own words
   await show('bir2307_photo_1', { edits: { bt1_atc: 'WC158' } });
-  expect(button('WC158 · Purchase of goods, Total 149,514.00, 7,475.70. Check: not an ATC for business tax')).toBeTruthy();
+  expect(
+    button('WC158 · Purchase of goods, Total 149,514.00, 7,475.70. Check: not an ATC for business tax'),
+  ).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Business tax row 1 ATC, to check' })).toBeTruthy();
 });
 
@@ -216,28 +235,32 @@ test("a 2307's flag chip scrolls its row into view, then opens it", async () => 
   scrollMethods.getInnerViewRef.mockReturnValueOnce(content);
   scrollMethods.scrollTo.mockClear();
   viewMethods.measureLayout.mockClear();
-  viewMethods.measureLayout.mockImplementationOnce((relativeTo, onSuccess) => relativeTo === content && onSuccess(0, 900, 360, 72));
+  viewMethods.measureLayout.mockImplementationOnce(
+    (relativeTo, onSuccess) => relativeTo === content && onSuccess(0, 900, 360, 72),
+  );
   await press(button('Row 2 tax, to check'));
   // measured against the scroll's content, and scrolled 24 dp under its top
-  expect(viewMethods.measureLayout.mock.contexts.map((row: { props: { testID: string } }) => row.props.testID)).toEqual([
-    'row-ewt2',
-  ]);
+  const measured = viewMethods.measureLayout.mock.contexts as { props: { testID: string } }[];
+  expect(measured.map((row) => row.props.testID)).toEqual(['row-ewt2']);
   expect(scrollMethods.scrollTo).toHaveBeenCalledWith({ y: 900 - space.xl, animated: true });
   // then its sheet, as tapping the row opens it
-  expect(within(screen.getByTestId('sheet-panel')).getByRole('header', { name: 'WC158 · Office supplies' })).toBeTruthy();
+  expect(sheet().getByRole('header', { name: 'WC158 · Office supplies' })).toBeTruthy();
   expect(boxesShown()).toEqual(columns('ewt2', ROW));
   await press(screen.getByLabelText('Close'));
 
   // the Period's chip opens the period's boxes; the strip's Period and the sheet's are both headers
   await show('bir2307_text_1', { edits: { period_to: '11302026' } });
   await press(button('Period, to check'));
-  expect(within(screen.getByTestId('sheet-panel')).getByRole('header', { name: 'Period' })).toBeTruthy();
+  expect(sheet().getByRole('header', { name: 'Period' })).toBeTruthy();
   expect(boxesShown()).toEqual(['period_from', 'period_to']);
+  // closing it gives TalkBack focus back to the row, which says its field (ruling T12-1)
+  focus.mockClear();
   await press(screen.getByLabelText('Close'));
+  expect(focusedNames()).toEqual([['Period, 10012026 – 11302026. Check: not one calendar quarter', 'focus']]);
   // and the totals' chip, its table's total row
   await show('bir2307_text_0', { edits: { ewt_total_tax: '10,000.00' } });
   await press(button('Totals, to check'));
-  expect(within(screen.getByTestId('sheet-panel')).getByRole('header', { name: 'Income payments' })).toBeTruthy();
+  expect(sheet().getByRole('header', { name: 'Income payments' })).toBeTruthy();
   expect(boxesShown()).toEqual(columns('ewt_total', TOTAL));
 });
 
@@ -281,20 +304,24 @@ test("the payor's match", async () => {
   expect(screen.getByText('Magsaysay Hardware')).toBeTruthy();
   // flagged: the bar and Check; the sub-line says why
   expect(within(screen.getByTestId('row-payor')).getByTestId('flag-bar')).toBeTruthy();
-  expect(button('Magsaysay Hardware, Not in your customers TIN 999-888-777-00000 · ZIP 3306. Check')).toBeTruthy();
+  expect(
+    button('Payor, Magsaysay Hardware, Not in your customers TIN 999-888-777-00000 · ZIP 3306. Check'),
+  ).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Payor (not in your customers), to check' })).toBeTruthy();
 
   // Santos Merchandise and Santos General Merchandise are both customers: an unsure match is shown as written, the
   // name that goes out, with the closest customer under it (a 2307's payor can't be chosen yet)
   await show('bir2307_text_0', { edits: { payor_name: 'Santos Merchandising', payor_tin: '99988877700000' } });
   expect(screen.getByText('Santos Merchandising')).toBeTruthy();
-  expect(button('Santos Merchandising, Closest match: Santos Merchandise TIN 999-888-777-00000 · ZIP 3306. Check')).toBeTruthy();
+  expect(
+    button('Payor, Santos Merchandising, Closest match: Santos Merchandise TIN 999-888-777-00000 · ZIP 3306. Check'),
+  ).toBeTruthy();
   expect(screen.queryByText(/Tap to compare/)).toBeNull();
   expect(screen.getByRole('button', { name: 'Payor (confirm the match), to check' })).toBeTruthy();
 
   // no payor written: never an invoice's walk-in
   await show('bir2307_text_0', { edits: { payor_name: '', payor_tin: '' } });
-  expect(button('blank, Not in your customers TIN — · ZIP 3306. Check')).toBeTruthy();
+  expect(button('Payor, blank, Not in your customers TIN — · ZIP 3306. Check')).toBeTruthy();
   expect(screen.queryByText(/VARIOUS|Walk-in/)).toBeNull();
   expect(screen.getByRole('button', { name: "Payor's TIN, to check" })).toBeTruthy();
 
@@ -374,7 +401,9 @@ test('eight payment rows and long values show in full', async () => {
     edits: { payee_name: name, ewt_total_tax: '12,345,678.90' },
     edit: (r) => {
       const row1 = r.reads.filter((b) => b.name.startsWith('ewt1_'));
-      for (let n = 3; n <= 8; n++) r.reads.push(...row1.map((b) => ({ ...b, name: b.name.replace('ewt1_', `ewt${n}_`) })));
+      for (let n = 3; n <= 8; n++) {
+        r.reads.push(...row1.map((b) => ({ ...b, name: b.name.replace('ewt1_', `ewt${n}_`) })));
+      }
     },
   });
   expect(header('Income payments · 8')).toBeTruthy();
