@@ -1,10 +1,12 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
-import { createRef } from 'react';
+import { createRef, type ReactNode, useEffect } from 'react';
 import {
   DeviceEventEmitter,
   Dimensions,
   FlatList,
   Keyboard,
+  Modal,
+  ScrollView,
   type ScrollViewInstance,
   StyleSheet,
   Text,
@@ -16,7 +18,7 @@ import { Button, type ButtonProps } from '../components/Buttons';
 import { Header } from '../components/Header';
 import { IconButton } from '../components/IconButton';
 import { ListIcon, SettingsIcon } from '../components/icons';
-import { Screen, useEndPadding, useKeyboardHeight, useScrollIntoView } from '../components/Screen';
+import { Screen, ScrollIntoViewScope, useEndPadding, useKeyboardHeight, useScrollIntoView } from '../components/Screen';
 import { colors, space, touch, type } from '../lib/theme';
 
 // Design B §5.6 and §8: the frame every screen is built from. The app is edge-to-edge, so the header pads by the
@@ -65,6 +67,30 @@ const retakeAnd = (save: string): ButtonProps[] => [
 /** Android reports the label's laid-out lines. */
 const labelLines = (label: string, lines: number) =>
   fireEvent(screen.getByText(label), 'textLayout', { nativeEvent: { lines: Array.from({ length: lines }, () => ({})) } });
+
+/** What a focused field at this spot calls (TextField's onFocus), as of its last render. */
+let scrollIntoView: ReturnType<typeof useScrollIntoView> = noop;
+function Field() {
+  const fromScope = useScrollIntoView();
+  useEffect(() => {
+    scrollIntoView = fromScope;
+  }, [fromScope]);
+  return null;
+}
+/** A field `y` dp down whatever it's measured against. */
+function fieldAt(y: number) {
+  const measureLayout = jest.fn((_relativeTo: unknown, onSuccess: (x: number, y: number, w: number, h: number) => void) =>
+    onSuccess(0, y, 360, 48),
+  );
+  return { field: { measureLayout } as unknown as ViewInstance, measureLayout };
+}
+/** jest's ScrollView has no layout: stand in its content view and record its scrolls. */
+function standIn(scrollView: ScrollViewInstance | null) {
+  const content = {} as ViewInstance;
+  const scrollTo = jest.fn();
+  Object.assign(scrollView!, { getInnerViewRef: () => content, scrollTo });
+  return { content, scrollTo };
+}
 
 beforeEach(() => {
   mockRouter = { back: jest.fn() };
@@ -258,26 +284,15 @@ test('useEndPadding: a screen with its own list pads it the same way', async () 
   await keyboard(0);
 });
 
-test('useScrollIntoView: scrolls a target to 24 dp under the top of the scroll; outside a Screen it does nothing', async () => {
-  let scrollIntoView: ReturnType<typeof useScrollIntoView> = noop;
-  function Probe() {
-    scrollIntoView = useScrollIntoView();
-    return null;
-  }
+test('useScrollIntoView: scrolls a target to 24 dp under the top of the scroll; outside any scope it does nothing', async () => {
   const scrollRef = createRef<ScrollViewInstance>();
   await render(
     <Screen header={<Header title="Settings" />} scrollRef={scrollRef}>
-      <Probe />
+      <Field />
     </Screen>,
   );
-  // jest's ScrollView has no layout: stand in its content view and record its scrolls.
-  const content = {} as ViewInstance;
-  const scrollTo = jest.fn();
-  Object.assign(scrollRef.current!, { getInnerViewRef: () => content, scrollTo });
-  const measureLayout = jest.fn((_relativeTo: unknown, onSuccess: (x: number, y: number, w: number, h: number) => void) =>
-    onSuccess(0, 300, 360, 48),
-  );
-  const field = { measureLayout } as unknown as ViewInstance;
+  const { content, scrollTo } = standIn(scrollRef.current);
+  const { field, measureLayout } = fieldAt(300);
 
   scrollIntoView(field);
   expect(measureLayout).toHaveBeenCalledWith(content, expect.any(Function));
@@ -290,11 +305,63 @@ test('useScrollIntoView: scrolls a target to 24 dp under the top of the scroll; 
   scrollIntoView(field);
   expect(scrollTo).toHaveBeenLastCalledWith({ y: 0, animated: true });
 
-  await screen.rerender(<Probe />); // outside a Screen (a sheet's own scroll, say)
+  await screen.rerender(<Field />); // outside any Screen or scope
   expect(scrollRef.current).toBeNull(); // the caller's ref let go of the ScrollView with the Screen
   scrollIntoView(field);
   expect(measureLayout).toHaveBeenCalledTimes(2);
   expect(scrollTo).toHaveBeenCalledTimes(2);
+});
+
+test("ScrollIntoViewScope: a field in a sheet's own scope scrolls the sheet, never the Screen behind it", async () => {
+  const screenScroll = createRef<ScrollViewInstance>();
+  const sheetScroll = createRef<ScrollViewInstance>();
+  await render(
+    <Screen header={<Header title="Scan" />} scrollRef={screenScroll}>
+      {/* A sheet, rendered from the screen's children: a Modal, which React context passes through. */}
+      <Modal visible transparent>
+        <ScrollView ref={sheetScroll}>
+          <ScrollIntoViewScope scrollRef={sheetScroll}>
+            <Field />
+          </ScrollIntoViewScope>
+        </ScrollView>
+      </Modal>
+    </Screen>,
+  );
+  const behind = standIn(screenScroll.current);
+  const sheet = standIn(sheetScroll.current);
+  const { field, measureLayout } = fieldAt(140);
+
+  scrollIntoView(field);
+  expect(measureLayout).toHaveBeenCalledWith(sheet.content, expect.any(Function));
+  expect(sheet.scrollTo).toHaveBeenCalledWith({ y: 140 - space.xl, animated: true });
+  expect(behind.scrollTo).not.toHaveBeenCalled();
+});
+
+test('ScrollIntoViewScope with no scroll: a field in a modal over a Screen scrolls nothing', async () => {
+  const screenScroll = createRef<ScrollViewInstance>();
+  const overScreen = (inModal: ReactNode) => (
+    <Screen header={<Header title="Scan" />} scrollRef={screenScroll}>
+      <Modal visible transparent>
+        {inModal}
+      </Modal>
+    </Screen>
+  );
+  await render(overScreen(<Field />));
+  const behind = standIn(screenScroll.current);
+  const { field, measureLayout } = fieldAt(140);
+  scrollIntoView(field); // with no scope of its own, the modal's field reaches the Screen behind it
+  expect(behind.scrollTo).toHaveBeenCalledTimes(1);
+
+  await screen.rerender(
+    overScreen(
+      <ScrollIntoViewScope scrollRef={null}>
+        <Field />
+      </ScrollIntoViewScope>,
+    ),
+  );
+  scrollIntoView(field);
+  expect(measureLayout).toHaveBeenCalledTimes(1); // not measured again
+  expect(behind.scrollTo).toHaveBeenCalledTimes(1);
 });
 
 test('BottomBar pads by the inset and sits on a hairline', async () => {

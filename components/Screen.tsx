@@ -26,12 +26,35 @@ import { colors, space } from '../lib/theme';
 // what's pinned under it outside the scroll (the Scan screen's status strip), the scroll, then the bottom bar (it takes
 // the navigation bar's inset). The app is edge-to-edge and Android no longer resizes the window for the keyboard, so
 // the end of the scroll clears the navigation bar when there's no bottom bar, and the open keyboard. A field that
-// takes focus asks the Screen around it to scroll it into view.
+// takes focus asks the nearest ScrollIntoViewScope to scroll it into view: the Screen's own, or a sheet's.
 
 type ScrollTarget = ViewInstance | TextInputInstance;
+type ScrollRef = RefObject<ScrollViewInstance | null>;
 
-/** Outside a Screen (a sheet's own scroll, say) there's nothing to scroll: a no-op. */
+/**
+ * The nearest ScrollIntoViewScope's scroll-into-view; outside every scope, a no-op. React context passes through a
+ * Modal, and a screen renders its sheets inside the Screen, so a sheet, menu or photo viewer opens a scope of its own
+ * (its own scroll, or none). Otherwise its fields would scroll the Screen behind it, by an offset measured across the
+ * modal.
+ */
 const ScrollIntoView = createContext<(target: ScrollTarget | null) => void>(() => {});
+
+/**
+ * Scroll-into-view for the fields inside it, in one ScrollView: a target is measured against the scroll's content and
+ * scrolled to 24 dp under its top, never past the top. With scrollRef null it gives a no-op, so a modal that doesn't
+ * scroll still cuts its fields off from the Screen behind it.
+ */
+export function ScrollIntoViewScope({ scrollRef, children }: { scrollRef: ScrollRef | null; children?: ReactNode }) {
+  const scrollIntoView = useCallback((target: ScrollTarget | null) => scrollIntoViewOf(scrollRef, target), [scrollRef]);
+  return <ScrollIntoView value={scrollIntoView}>{children}</ScrollIntoView>;
+}
+
+function scrollIntoViewOf(scrollRef: ScrollRef | null, target: ScrollTarget | null) {
+  const scrollView = scrollRef?.current;
+  const content = scrollView?.getInnerViewRef(); // where y is measured from: the top of the scroll's content
+  if (target == null || scrollView == null || content == null) return;
+  target.measureLayout(content, (_x, y) => scrollView.scrollTo({ y: Math.max(0, y - space.xl), animated: true }));
+}
 
 export function Screen({
   header,
@@ -55,15 +78,8 @@ export function Screen({
   useImperativeHandle<ScrollViewInstance | null, ScrollViewInstance | null>(scrollRef, () => scrollViewRef.current);
   const end = useEndPadding(Boolean(bottom));
 
-  const scrollIntoView = useCallback((target: ScrollTarget | null) => {
-    const scrollView = scrollViewRef.current;
-    const content = scrollView?.getInnerViewRef(); // where y is measured from: the top of the scroll's content
-    if (target == null || scrollView == null || content == null) return;
-    target.measureLayout(content, (_x, y) => scrollView.scrollTo({ y: Math.max(0, y - space.xl), animated: true }));
-  }, []);
-
   return (
-    <ScrollIntoView value={scrollIntoView}>
+    <ScrollIntoViewScope scrollRef={scroll ? scrollViewRef : null}>
       <View testID={testID} style={styles.screen}>
         {header}
         {pinned}
@@ -80,7 +96,7 @@ export function Screen({
         )}
         {bottom}
       </View>
-    </ScrollIntoView>
+    </ScrollIntoViewScope>
   );
 }
 
@@ -102,7 +118,10 @@ export function useKeyboardHeight(): number {
   return height;
 }
 
-/** Scrolls a focused field into view, 24 dp under the top of the Screen's scroll. A no-op outside a Screen. */
+/**
+ * Scrolls a focused field into view, 24 dp under the top of the nearest scope's scroll (the Screen's, or a sheet's).
+ * A no-op outside every scope, or in one with no scroll.
+ */
 export function useScrollIntoView(): (target: ViewInstance | TextInputInstance | null) => void {
   return useContext(ScrollIntoView);
 }
