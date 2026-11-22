@@ -295,7 +295,7 @@ test('the save sheet asks for the codes', async () => {
   expect(screen.getByLabelText('Client code').props.value).toBe(''); // none kept yet
   expect(screen.getByLabelText('Writer code').props.value).toBe('');
   expect(screen.getByText('Codes only, like C014 and W03. Never a name.')).toBeTruthy();
-  expect(screen.getByText('Use letters, digits and -, with at least one digit.')).toBeTruthy();
+  expect(screen.getByText('Start with a letter. Use letters, digits and -, with at least one digit.')).toBeTruthy();
   expect(screen.getByTestId('save-confirm')).toBeDisabled();
   await type('Client code', 'Juan');
   expect(screen.getByTestId('save-confirm')).toBeDisabled();
