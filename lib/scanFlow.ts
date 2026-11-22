@@ -48,15 +48,16 @@ function isPdf(name: string | null, type: string | null): boolean {
 }
 
 /**
- * A failure's words as a dialog's title and message (ruling T16-1): the reason, then what to do. The words are today's,
- * split at the colon after "Couldn't read that photo" (or PDF) or at the end of the first sentence, whichever comes
- * first. A full stop, "?" or "!" ends a sentence only when a space and more words follow, so a file's name never
- * splits. Android stops a dialog's title at two lines with an ellipsis, so one sentence goes whole into the message,
- * under an empty title.
+ * A failure's words as Alert.alert's arguments: the reason as the title, then what to do as the message (ruling
+ * T16-1), since Android stops a dialog's title at two lines with an ellipsis. The words are today's, split at the
+ * colon after "Couldn't read that photo" (or PDF) or at the end of the first sentence, whichever comes first. A full
+ * stop, "?" or "!" ends a sentence only when a space and more words follow, so a file's name never splits. Words that
+ * don't split are the title alone, exactly as one-argument Alert.alert sends them (ruling T16-1a): React Native shows
+ * an empty title on Android as a blank, focusable heading.
  */
-export function failureDialog(words: string): [title: string, message: string] {
+export function failureDialog(words: string): [title: string, message?: string] {
   const split = /: |[.?!] (?=\S)/.exec(words);
-  if (!split) return ['', words];
+  if (!split) return [words];
   const reasonEnd = split[0] === ': ' ? split.index : split.index + 1; // a sentence keeps its full stop; a colon goes
   return [words.slice(0, reasonEnd), words.slice(split.index + split[0].length)];
 }

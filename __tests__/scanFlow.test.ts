@@ -1,10 +1,11 @@
 import { failureDialog } from '../lib/scanFlow';
 
 // Ruling T16-1: a failure that stops a capture shows in a dialog with today's words, split in two. The reason is the
-// title, and what to do is the message. Android stops a dialog's title at two lines with an ellipsis, so a message of
-// one sentence goes whole into the message, under an empty title, and nothing that matters can be cut. None of today's
-// words has a decimal point or a "?". The nearest are the scanner's own messages after the colon: one has its own
-// colon, and one has a full stop inside a file name. Each stays whole.
+// title, and what to do is the message, since Android stops a dialog's title at two lines with an ellipsis. Ruling
+// T16-1a: words that don't split show as a title alone, as one-argument Alert.alert sends them. They never go under an
+// empty title: React Native still sends an empty title on Android, where it opens the dialog with a blank, focusable
+// heading. None of today's words has a decimal point or a "?". The nearest are the scanner's own messages after the
+// colon: one has its own colon, and one has a full stop inside a file name. Each stays whole.
 
 jest.mock('../modules/scanner', () => ({})); // the split needs nothing of the scanner
 
@@ -42,7 +43,7 @@ test("a colon: what couldn't be read, then why, whole", () => {
   ]);
 });
 
-test('one sentence: whole in the message, under an empty title', () => {
+test('one sentence: a title alone, never under an empty title', () => {
   for (const words of [
     "Couldn't open the photo.",
     "Couldn't open that photo.",
@@ -51,6 +52,6 @@ test('one sentence: whole in the message, under an empty title', () => {
     "That PDF's page is too big to read.",
     'Choose a PDF file.',
   ]) {
-    expect(failureDialog(words)).toEqual(['', words]);
+    expect(failureDialog(words)).toStrictEqual([words]); // what Alert.alert(words) sends: one argument
   }
 });

@@ -1142,6 +1142,6 @@ test('a retake shows the reading card for what it reads, and a read that fails s
   await show('inv_0007', { source: 'gallery' });
   mockLibrary.mockRejectedValueOnce(new Error('the picker failed'));
   await press(button('Retake'));
-  expect(alert.mock.calls).toEqual([['', "Couldn't open that photo."]]); // one sentence: whole in the message
+  expect(alert.mock.calls).toStrictEqual([["Couldn't open that photo."]]); // one sentence: a title alone
   expect(mockToast).not.toHaveBeenCalled();
 });
