@@ -1,19 +1,26 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { AppState, Linking } from 'react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import * as Haptics from 'expo-haptics';
+import { Alert, AppState, Linking, StyleSheet } from 'react-native';
 
 import CameraScreen from '../app/camera';
-import { CAMERA_ERRORS, statusText } from '../lib/cameraCopy';
+import { CAMERA_ERRORS, CAMERA_TEXT, PERMISSION_TEXT, statusText } from '../lib/cameraCopy';
 import { saveScan } from '../lib/saved';
 import { getScan } from '../lib/scans';
+import { colors, radius, touch, type } from '../lib/theme';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 
+// Design B §9.3: the camera. The preview, its outline, auto-capture and the checks are native. Over them: Close, with
+// no title, the Auto switch and the flashlight switch; the status pill; the gallery (an icon over its label) and the
+// shutter, which waits while the camera starts or takes the photo. A problem shows a panel in the picture's place. An
+// auto-captured photo gets one confirm haptic (§5.5), then the reading card (§9.4).
+
 let mockFocused = true;
 let mockParams: Record<string, string> = {};
+let mockTeam = false;
 const mockRouter = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
 const mockScanPhoto = jest.fn();
 const mockTakePhoto = jest.fn(async () => {});
-const mockToast = jest.fn();
 const mockGetPermission = jest.fn();
 const mockRequestPermission = jest.fn();
 const mockLibrary = jest.fn();
@@ -43,7 +50,12 @@ jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn(async () => ({ canceled: true })),
   launchImageLibraryAsync: () => mockLibrary(),
 }));
-jest.mock('../lib/toast', () => ({ toast: (message: string) => mockToast(message) }));
+jest.mock('expo-haptics');
+jest.mock('../lib/build', () => ({
+  get TEAM_BUILD() {
+    return mockTeam;
+  },
+}));
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
@@ -79,16 +91,22 @@ jest.mock('expo-file-system', () => ({
 const granted = { granted: true, canAskAgain: true, status: 'granted' };
 const refused = (canAskAgain: boolean) => ({ granted: false, canAskAgain, status: 'denied' });
 
+let alert: jest.SpyInstance;
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockFocused = true;
   mockParams = {};
+  mockTeam = false;
   mockDeleted.length = 0;
   mockGetPermission.mockResolvedValue(granted);
   mockRequestPermission.mockResolvedValue(granted);
   mockLibrary.mockResolvedValue({ canceled: true });
   mockScanPhoto.mockResolvedValue(parseScanResult(coreJson('inv_0007')));
+  alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 });
+
+afterEach(() => alert.mockRestore());
 
 async function settle() {
   for (let i = 0; i < 10; i++) await act(async () => {});
@@ -102,6 +120,15 @@ async function open() {
 
 const camera = () => screen.getByTestId('camera');
 const send = (event: string, nativeEvent: object) => act(async () => fireEvent(camera(), event, { nativeEvent }));
+const press = (el: Parameters<typeof fireEvent.press>[0]) => act(async () => fireEvent.press(el));
+const button = (name: string) => screen.getByRole('button', { name });
+const header = (name: string) => screen.getByRole('header', { name });
+const autoSwitch = () => screen.getByRole('switch', { name: 'Auto capture' });
+const shutter = () => button('Take the photo');
+type Instance = ReturnType<typeof screen.getByRole>;
+/** A host element's host children, in order (an icon's Svg, a Text, a View). */
+const kids = (el: Instance) => el.children.filter((child): child is Instance => typeof child !== 'string');
+const CAMERA_APP = "Use the phone's camera app instead";
 
 test('status copy', async () => {
   expect(statusText('starting', null)).toBe('Starting the camera…');
@@ -114,14 +141,33 @@ test('status copy', async () => {
   await open();
   expect(screen.getByText('Starting the camera…')).toBeTruthy();
   await send('status', { status: 'holding', form: 'service_invoice' });
-  expect(screen.getByText('Service Invoice · hold still')).toBeTruthy();
+  const words = screen.getByText('Service Invoice · hold still');
+  // white words on the pill, which wraps rather than running off the preview
+  expect(words).toHaveStyle({ ...type.body, color: colors.cameraText });
+  expect(words.props.numberOfLines).toBeUndefined();
+  expect(screen.getByTestId('status-pill')).toHaveStyle({
+    backgroundColor: colors.pill,
+    borderRadius: radius.pill,
+    maxWidth: '90%',
+  });
+});
+
+test('the copy: the panels, the errors; the raw start message is no longer in the words', () => {
+  expect(CAMERA_TEXT).toEqual({
+    allowTitle: 'Allow the camera',
+    offTitle: 'Camera access is off',
+    offBody: "Turn on the camera for MyBizMate Scan in the phone's settings.",
+    startTitle: "The camera couldn't start",
+  });
+  expect(CAMERA_ERRORS).toEqual({
+    capture: "Couldn't take the photo. Try the button again.",
+    keep: "Couldn't keep the photo. Try again.",
+    noCamera: 'This phone has no camera the scanner can use.',
+  });
+  expect(PERMISSION_TEXT).toBe('The scanner needs the camera to see the invoice. Nothing it sees leaves the phone.');
 });
 
 test('errors', async () => {
-  expect(CAMERA_ERRORS.start('boom')).toBe("The camera couldn't start: boom");
-  expect(CAMERA_ERRORS.start()).toBe("The camera couldn't start.");
-  expect(CAMERA_ERRORS.start('')).toBe("The camera couldn't start.");
-
   await open();
   await send('cameraError', { code: 'capture', message: 'x' });
   expect(screen.getByText("Couldn't take the photo. Try the button again.")).toBeTruthy();
@@ -129,21 +175,12 @@ test('errors', async () => {
   expect(screen.getByText("Couldn't keep the photo. Try again.")).toBeTruthy();
 
   await send('cameraError', { code: 'no_camera', message: '' });
-  expect(screen.getByText('This phone has no camera the scanner can use.')).toBeTruthy();
-  expect(screen.getByText('Choose from gallery')).toBeTruthy();
+  expect(header('This phone has no camera the scanner can use.')).toBeTruthy();
+  expect(button('Choose from gallery')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: CAMERA_APP })).toBeNull(); // no camera app either
   expect(screen.queryByText('Allow the camera')).toBeNull();
   expect(screen.queryByTestId('camera')).toBeNull();
-});
-
-test('a camera that fails to start can be tried again', async () => {
-  await open();
-  await send('cameraError', { code: 'start', message: 'boom' });
-  expect(screen.getByText("The camera couldn't start: boom")).toBeTruthy();
-  expect(screen.getByText("Use the phone's camera app instead")).toBeTruthy();
-  expect(screen.queryByTestId('camera')).toBeNull();
-  await act(async () => fireEvent.press(screen.getByText('Try again')));
-  expect(camera().props.active).toBe(true);
-  expect(screen.queryByText("The camera couldn't start: boom")).toBeNull();
+  expect(button('Gallery')).toBeTruthy(); // the bottom band's gallery stays
 });
 
 test('an error stays in the pill for 3 s, then the status shows again', async () => {
@@ -162,19 +199,148 @@ test('an error stays in the pill for 3 s, then the status shows again', async ()
   }
 });
 
+test('no title; Close, the Auto switch and the flashlight switch', async () => {
+  await open();
+  expect(screen.queryByText('Scan an invoice')).toBeNull();
+  expect(screen.queryByRole('header')).toBeNull();
+
+  // Close: a 48 dp icon button in the camera's tone
+  const close = button('Close');
+  expect(close).toHaveStyle({ width: touch.target, height: touch.target });
+  expect(kids(close)[0].props).toMatchObject({ width: touch.icon, stroke: colors.cameraText });
+  await press(close);
+  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+
+  // Auto: a switch, on at first, a pill holding AUTO and a dot (brand when on, a hollow ring when off)
+  expect(autoSwitch()).toBeChecked();
+  expect(autoSwitch().props.accessibilityHint).toBe('Takes the photo by itself when the form holds still');
+  expect(autoSwitch()).toHaveStyle({ borderRadius: radius.pill, borderWidth: 1, borderColor: colors.cameraMute });
+  expect(within(autoSwitch()).getByText('Auto')).toHaveStyle({ ...type.badge, color: colors.cameraText });
+  expect(screen.getByTestId('auto-dot')).toHaveStyle({ width: 8, height: 8, backgroundColor: colors.brand });
+  expect(camera().props.auto).toBe(true);
+  await press(autoSwitch());
+  expect(autoSwitch()).not.toBeChecked();
+  expect(autoSwitch().props.accessibilityHint).toBe('Take the photo with the round button');
+  expect(screen.getByTestId('auto-dot')).toHaveStyle({ borderWidth: 1, borderColor: colors.cameraMute });
+  expect(StyleSheet.flatten(screen.getByTestId('auto-dot').props.style).backgroundColor).toBeUndefined();
+  expect(camera().props.auto).toBe(false);
+  expect(screen.queryByText('Manual')).toBeNull();
+
+  // the flashlight: a switch, once the camera says it has a torch
+  expect(screen.queryByRole('switch', { name: 'Flashlight' })).toBeNull();
+  await send('ready', { hasTorch: true });
+  const flashlight = () => screen.getByRole('switch', { name: 'Flashlight' });
+  expect(flashlight()).not.toBeChecked();
+  expect(camera().props.torch).toBe(false);
+  await press(flashlight());
+  expect(flashlight()).toBeChecked();
+  expect(camera().props.torch).toBe(true);
+  await press(flashlight());
+  expect(flashlight()).not.toBeChecked();
+  expect(camera().props.torch).toBe(false);
+});
+
+test('Close goes back once, however fast it is tapped twice', async () => {
+  // router.back() queues one GO_BACK per call: a second would leave the screen under this one too
+  await open();
+  await act(async () => {
+    await fireEvent.press(button('Close'));
+    await fireEvent.press(button('Close'));
+  });
+  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+});
+
+test('the shutter is disabled while the camera starts', async () => {
+  await open();
+  expect(shutter()).toBeDisabled(); // starting
+  await press(shutter());
+  expect(mockTakePhoto).not.toHaveBeenCalled();
+  // 72 dp: a 3 dp brand ring around a white disc
+  expect(shutter()).toHaveStyle({
+    width: touch.shutter,
+    height: touch.shutter,
+    borderRadius: touch.shutter / 2,
+    borderWidth: 3,
+    borderColor: colors.brand,
+  });
+  expect(screen.getByTestId('shutter-disc')).toHaveStyle({ backgroundColor: colors.cameraText });
+
+  await send('status', { status: 'looking', form: null });
+  expect(shutter()).toBeEnabled();
+  await send('status', { status: 'capturing', form: 'sales_invoice' });
+  expect(shutter()).toBeDisabled(); // taking the photo
+  await send('status', { status: 'found', form: 'sales_invoice' });
+  expect(shutter()).toBeEnabled();
+
+  // and while the gallery is open
+  mockLibrary.mockImplementation(() => new Promise(() => {}));
+  await press(button('Gallery'));
+  expect(shutter()).toBeDisabled();
+});
+
+test("a start failure: The camera couldn't start and Try again; the raw message only in team builds", async () => {
+  await open();
+  await send('cameraError', { code: 'start', message: 'boom' });
+  expect(header(CAMERA_TEXT.startTitle)).toHaveStyle({ ...type.headline, color: colors.cameraText });
+  expect(screen.queryByText(/boom/)).toBeNull(); // a client never sees the raw message
+  expect(button(CAMERA_APP)).toBeTruthy();
+  expect(button('Gallery')).toBeTruthy();
+  expect(screen.queryByTestId('camera')).toBeNull();
+  expect(screen.queryByLabelText('Take the photo')).toBeNull();
+  await press(button('Try again'));
+  expect(camera().props.active).toBe(true);
+  expect(screen.queryByRole('header', { name: CAMERA_TEXT.startTitle })).toBeNull();
+  expect(shutter()).toBeDisabled(); // the new camera starts again
+
+  // a team build shows the raw message on its own line
+  mockTeam = true;
+  await send('cameraError', { code: 'start', message: 'boom' });
+  expect(header(CAMERA_TEXT.startTitle)).toBeTruthy();
+  expect(screen.getByText('boom')).toHaveStyle({ ...type.figureSmall, color: colors.cameraMute });
+});
+
+test('permission: Allow the camera, then Camera access is off with Open settings', async () => {
+  mockGetPermission.mockResolvedValue(refused(true));
+  mockRequestPermission.mockResolvedValue(refused(true));
+  await open();
+  // it can still ask: a panel on cameraPanel with the camera icon on top, why, and one clear action
+  const panel = screen.getByTestId('camera-panel');
+  expect(panel).toHaveStyle({ backgroundColor: colors.cameraPanel, borderRadius: radius.panel });
+  const [head] = kids(panel);
+  expect(kids(head)[0].props).toMatchObject({ width: touch.icon, stroke: colors.cameraText }); // the icon, on top
+  expect(header(CAMERA_TEXT.allowTitle)).toHaveStyle({ ...type.headline, color: colors.cameraText });
+  expect(screen.getByText(PERMISSION_TEXT)).toHaveStyle({ ...type.body, color: colors.cameraMute });
+  expect(button('Allow the camera')).toHaveStyle({ backgroundColor: colors.brand });
+  expect(screen.getByText(CAMERA_APP)).toHaveStyle({ color: colors.cameraText }); // a light label on the dark panel
+  expect(button('Gallery')).toBeTruthy();
+  expect(screen.queryByRole('switch', { name: 'Auto capture' })).toBeNull();
+  expect(screen.queryByLabelText('Take the photo')).toBeNull();
+  expect(screen.queryByTestId('camera')).toBeNull();
+
+  // refused again, for good this time: the settings are the way
+  mockRequestPermission.mockResolvedValue(refused(false));
+  await press(button('Allow the camera'));
+  expect(header(CAMERA_TEXT.offTitle)).toBeTruthy();
+  expect(screen.getByText(CAMERA_TEXT.offBody)).toHaveStyle({ ...type.body, color: colors.cameraMute });
+  expect(screen.queryByRole('button', { name: 'Allow the camera' })).toBeNull();
+  expect(button(CAMERA_APP)).toBeTruthy();
+  const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined);
+  await press(button('Open settings'));
+  expect(openSettings).toHaveBeenCalledTimes(1);
+  expect(mockRequestPermission).toHaveBeenCalledTimes(2); // on focus, and Allow the camera; never on Open settings
+});
+
 test('permission can be asked again', async () => {
   mockGetPermission.mockResolvedValue(refused(true));
   mockRequestPermission.mockResolvedValue(refused(true));
   await open();
   expect(mockRequestPermission).toHaveBeenCalledTimes(1); // asked once, on focus
-  expect(
-    screen.getByText('The scanner needs the camera to see the invoice. Nothing it sees leaves the phone.'),
-  ).toBeTruthy();
+  expect(screen.getByText(PERMISSION_TEXT)).toBeTruthy();
   expect(screen.queryByTestId('camera')).toBeNull();
   expect(screen.queryByLabelText('Take the photo')).toBeNull();
 
   mockRequestPermission.mockResolvedValue(granted);
-  await act(async () => fireEvent.press(screen.getByText('Allow the camera')));
+  await press(button('Allow the camera'));
   await settle();
   expect(mockRequestPermission).toHaveBeenCalledTimes(2);
   expect(camera().props.active).toBe(true);
@@ -185,7 +351,8 @@ test('permission refused for good', async () => {
   const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined);
   await open();
   expect(mockRequestPermission).not.toHaveBeenCalled();
-  await act(async () => fireEvent.press(screen.getByText('Allow the camera')));
+  expect(header(CAMERA_TEXT.offTitle)).toBeTruthy();
+  await press(button('Open settings'));
   expect(openSettings).toHaveBeenCalled();
   expect(mockRequestPermission).not.toHaveBeenCalled();
 });
@@ -209,35 +376,29 @@ test('camera app needs the permission too', async () => {
   mockGetPermission.mockResolvedValue(refused(false));
   mockRequestPermission.mockResolvedValue(refused(false));
   await open();
-  await act(async () => fireEvent.press(screen.getByText("Use the phone's camera app instead")));
+  await press(button(CAMERA_APP));
   await settle();
-  expect(mockToast).toHaveBeenCalledWith(
+  expect(alert).toHaveBeenCalledWith(
     'The camera app needs the camera permission too. Choose a photo from the gallery instead.',
   );
 });
 
-test('torch', async () => {
-  await open();
-  expect(screen.queryByLabelText('Turn the flashlight on')).toBeNull();
-  await send('ready', { hasTorch: true });
-  expect(camera().props.torch).toBe(false);
-  await act(async () => fireEvent.press(screen.getByLabelText('Turn the flashlight on')));
-  expect(camera().props.torch).toBe(true);
-  expect(screen.getByLabelText('Turn the flashlight off')).toBeTruthy();
-});
-
-test('auto and manual', async () => {
-  await open();
-  expect(camera().props.auto).toBe(true);
-  await act(async () => fireEvent.press(screen.getByText('Auto')));
-  expect(screen.getByText('Manual')).toBeTruthy();
-  expect(camera().props.auto).toBe(false);
-});
-
 test('shutter', async () => {
   await open();
-  await act(async () => fireEvent.press(screen.getByLabelText('Take the photo')));
+  await send('status', { status: 'looking', form: null });
+  await press(shutter());
   expect(mockTakePhoto).toHaveBeenCalled();
+});
+
+test('the gallery: an icon over its label', async () => {
+  await open();
+  const gallery = button('Gallery');
+  const [icon, label] = kids(gallery);
+  expect(icon.props).toMatchObject({ width: touch.icon, stroke: colors.cameraText });
+  expect(label).toBe(within(gallery).getByText('Gallery'));
+  expect(label).toHaveStyle({ ...type.label, color: colors.cameraMute });
+  expect(StyleSheet.flatten(gallery.props.style).flexDirection ?? 'column').toBe('column');
+  expect(gallery).toHaveStyle({ minWidth: touch.target, minHeight: touch.target });
 });
 
 test('a photo is read', async () => {
@@ -248,9 +409,49 @@ test('a photo is read', async () => {
   await send('photo', { uri: 'file:///cache/camera/capture_1.jpg' });
   expect(mockScanPhoto).toHaveBeenCalledWith('file:///cache/camera/capture_1.jpg', { deletePhoto: true });
   expect(camera().props.active).toBe(false);
-  expect(screen.getByText('Reading the invoice…')).toBeTruthy();
+  expect(screen.getByText('Reading…')).toBeTruthy();
+  expect(screen.getByText('Straightening the photo and reading every box')).toBeTruthy();
   await act(async () => finish(parseScanResult(coreJson('inv_0007'))));
   expect(mockRouter.replace).toHaveBeenCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
+});
+
+test('auto-capture confirms with one haptic; a shutter photo has none', async () => {
+  // jest runs as iOS, so the haptic is the success notification; on Android it's the engine's Confirm (haptics.test)
+  const haptic = jest.mocked(Haptics.notificationAsync);
+  let cardUp: boolean | null = null; // whether the reading card showed as the haptic came
+  haptic.mockImplementationOnce(async () => {
+    cardUp = screen.queryByText('Reading…') !== null;
+  });
+  await open();
+  await send('status', { status: 'found', form: 'sales_invoice' });
+  await send('photo', { uri: 'file:///cache/camera/auto_1.jpg' }); // Auto took it: no shutter press
+  expect(haptic.mock.calls).toEqual([[Haptics.NotificationFeedbackType.Success]]);
+  // the haptic, then the reading card: it comes before the read starts
+  expect(cardUp).toBe(false);
+  expect(haptic.mock.invocationCallOrder[0]).toBeLessThan(mockScanPhoto.mock.invocationCallOrder[0]);
+
+  // the shutter took it, with Auto on: none
+  await press(shutter());
+  await send('photo', { uri: 'file:///cache/camera/shutter_1.jpg' });
+  expect(mockScanPhoto).toHaveBeenCalledTimes(2);
+  expect(haptic).toHaveBeenCalledTimes(1);
+  // the press counted for its own photo only: the next one Auto takes confirms again
+  await send('photo', { uri: 'file:///cache/camera/auto_2.jpg' });
+  expect(haptic).toHaveBeenCalledTimes(2);
+
+  // a capture that failed leaves no press behind either
+  await press(shutter());
+  await send('cameraError', { code: 'capture', message: 'x' });
+  await send('photo', { uri: 'file:///cache/camera/auto_3.jpg' });
+  expect(haptic).toHaveBeenCalledTimes(3);
+
+  // Manual: the shutter's photos only, so none
+  await press(autoSwitch());
+  await press(shutter());
+  await send('photo', { uri: 'file:///cache/camera/shutter_2.jpg' });
+  expect(mockScanPhoto).toHaveBeenCalledTimes(5);
+  expect(haptic).toHaveBeenCalledTimes(3);
+  expect(Haptics.performAndroidHapticsAsync).not.toHaveBeenCalled();
 });
 
 test('a photo that arrives after leaving is not scanned, and is deleted', async () => {
@@ -261,6 +462,7 @@ test('a photo that arrives after leaving is not scanned, and is deleted', async 
   await send('photo', { uri: 'file:///cache/camera/late.jpg' });
   expect(mockScanPhoto).not.toHaveBeenCalled();
   expect(mockDeleted).toEqual(['file:///cache/camera/late.jpg']);
+  expect(Haptics.notificationAsync).not.toHaveBeenCalled(); // nothing to confirm: it's thrown away
 });
 
 test("leaving while a photo is read keeps the scan but doesn't open its result", async () => {
@@ -278,7 +480,7 @@ test('the camera stops while the gallery is open, and looks again when it closes
   let close: (v: unknown) => void = () => {};
   mockLibrary.mockImplementation(() => new Promise((resolve) => (close = resolve)));
   await open();
-  await act(async () => fireEvent.press(screen.getByLabelText('Choose a photo from the gallery instead')));
+  await press(button('Gallery'));
   expect(camera().props.active).toBe(false);
   await act(async () => close({ canceled: true }));
   expect(camera().props.active).toBe(true);
@@ -287,7 +489,7 @@ test('the camera stops while the gallery is open, and looks again when it closes
 test('a photo that arrives while the gallery is open is deleted, not read', async () => {
   mockLibrary.mockImplementation(() => new Promise(() => {}));
   await open();
-  await act(async () => fireEvent.press(screen.getByLabelText('Choose a photo from the gallery instead')));
+  await press(button('Gallery'));
   await send('photo', { uri: 'file:///cache/camera/racing.jpg' });
   expect(mockScanPhoto).not.toHaveBeenCalled();
   expect(mockDeleted).toEqual(['file:///cache/camera/racing.jpg']);

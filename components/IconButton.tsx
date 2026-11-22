@@ -7,7 +7,7 @@ import { Tap } from './Tap';
 // Design B §5.3 and §5.6: an icon-only control is a 48 dp target with a 24 dp icon, and its label is what TalkBack
 // says. On light surfaces the icon is ink, with the theme's borderless icon ripple; on the camera and the photo viewer
 // it's cameraText, with the camera's. Its focus ring is a circle, like the ripple. As a switch (the flashlight), it
-// carries its checked state.
+// carries its checked state: off unless it's given checked.
 
 export function IconButton({
   icon: Icon,
@@ -36,7 +36,7 @@ export function IconButton({
       accessibilityRole={accessibilityRole}
       accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
-      accessibilityState={accessibilityRole === 'switch' ? { checked } : undefined}
+      accessibilityState={accessibilityRole === 'switch' ? { checked: !!checked } : undefined}
       testID={testID}
       disabled={disabled}
       onPress={onPress}

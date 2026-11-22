@@ -382,7 +382,7 @@ export default function Result() {
           onClose={() => setMenuOpen(false)}
         />
       ) : null}
-      <ReadingOverlay visible={flow.reading} />
+      <ReadingOverlay visible={flow.reading} what={flow.readingWhat ?? 'photo'} />
     </View>
   );
 }

@@ -2,11 +2,11 @@ import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import { Alert } from 'react-native';
 
 import { displayName, readPdf, releaseAccess, scanPhoto, type ScanResult } from '../modules/scanner';
 import { SAMPLES, sampleUri } from './samples';
 import { addScan, type ScanSource, type StoredScan } from './scans';
-import { toast } from './toast';
 
 // testImage: a photo from the camera's test hook (development builds), kept marked so it never becomes training data
 type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean; testImage?: boolean };
@@ -58,13 +58,15 @@ function deleteCopy(file: File): void {
 
 /**
  * Getting a photo or a PDF read: from the camera, the phone's camera app, the gallery, a sample or the file picker,
- * then on to its result. One at a time: while one is being picked or read (busy), another does nothing.
+ * then on to its result. One at a time: while one is being picked or read (busy), another does nothing. While one is
+ * read, readingWhat says what it is (a photo, a sample's too, or a PDF), for the reading card. A failure that stops a
+ * capture is said in a dialog, in today's words (design B §9.2, the plan's call 16).
  */
 export function useScanFlow() {
   const router = useRouter();
   const busyRef = useRef(false);
   const [busy, setBusy] = useState(false);
-  const [reading, setReading] = useState(false);
+  const [readingWhat, setReading] = useState<'photo' | 'pdf' | null>(null);
   // false once the screen is left: a read that ends after that is kept in Recent scans, and nothing opens.
   const focused = useIsFocused();
   const here = useRef(true);
@@ -86,7 +88,7 @@ export function useScanFlow() {
     try {
       await task();
     } finally {
-      setReading(false);
+      setReading(null);
       setBusy(false);
       busyRef.current = false;
     }
@@ -99,8 +101,9 @@ export function useScanFlow() {
     scan: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'testImage'>,
     replace: boolean | undefined,
     failed: (e: unknown) => string,
+    what: 'photo' | 'pdf',
   ): Promise<void> {
-    setReading(true);
+    setReading(what);
     try {
       const result = await read();
       const id = addScan({ ...scan, result });
@@ -109,7 +112,7 @@ export function useScanFlow() {
       if (replace) router.replace(target);
       else router.push(target);
     } catch (e: unknown) {
-      toast(failed(e));
+      Alert.alert(failed(e));
     }
   }
 
@@ -121,7 +124,7 @@ export function useScanFlow() {
       try {
         uri = await getUri();
       } catch {
-        toast(openError);
+        Alert.alert(openError);
         return;
       }
       if (!uri) return;
@@ -131,6 +134,7 @@ export function useScanFlow() {
         { label, source, sampleId: opts.sampleId, testImage: opts.testImage },
         opts.replace,
         photoFailed,
+        'photo',
       );
     });
   }
@@ -158,7 +162,7 @@ export function useScanFlow() {
       async () => {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
-          toast('The camera app needs the camera permission too. Choose a photo from the gallery instead.');
+          Alert.alert('The camera app needs the camera permission too. Choose a photo from the gallery instead.');
           return null;
         }
         const taken = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
@@ -191,11 +195,11 @@ export function useScanFlow() {
         // the name its app gives: a link's own last segment can be an id (Android's Downloads: …/document/msf%3A54)
         const name = await displayName(file.uri).catch(() => null);
         if (!isPdf(name, file.type)) {
-          toast('Choose a PDF file.');
+          Alert.alert('Choose a PDF file.');
           return;
         }
         const scan = { label: name ? `PDF: ${name}` : 'PDF', source: 'pdf' } as const;
-        await readAndOpen(() => readPdf(file.uri), scan, opts.replace, pdfFailed);
+        await readAndOpen(() => readPdf(file.uri), scan, opts.replace, pdfFailed, 'pdf');
       } finally {
         // giving up the access is no part of the read: nothing waits for it, and its failure changes nothing
         if (file.uri.startsWith('file://')) deleteCopy(file);
@@ -222,5 +226,6 @@ export function useScanFlow() {
     return fromGallery({ replace: true });
   }
 
-  return { busy, reading, scanUri, fromGallery, fromCameraApp, fromSample, fromPdf, retake };
+  const reading = readingWhat !== null;
+  return { busy, reading, readingWhat, scanUri, fromGallery, fromCameraApp, fromSample, fromPdf, retake };
 }

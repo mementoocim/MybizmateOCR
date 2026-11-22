@@ -31,7 +31,8 @@ test('every glyph is a Lucide stroke icon', async () => {
 });
 
 test('the dropped glyphs are gone', () => {
-  for (const name of ['FlashOn', 'FlashOff', 'ArrowBack', 'DocumentIcon', 'CheckCircle', 'ErrorCircle']) {
+  // Bolt went with the camera's old Auto control (§5.4), which read as flash next to the torch
+  for (const name of ['Bolt', 'FlashOn', 'FlashOff', 'ArrowBack', 'DocumentIcon', 'CheckCircle', 'ErrorCircle']) {
     expect(icons).not.toHaveProperty(name);
   }
 });

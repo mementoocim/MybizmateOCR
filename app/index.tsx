@@ -167,7 +167,7 @@ export default function Home() {
         </Pressable>
       </Modal>
 
-      <ReadingOverlay visible={flow.reading} />
+      <ReadingOverlay visible={flow.reading} what={flow.readingWhat ?? 'photo'} />
     </View>
   );
 }

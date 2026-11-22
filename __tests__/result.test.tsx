@@ -1119,3 +1119,29 @@ test('retake', async () => {
   expect(getScan(mockRouter.replace.mock.calls.at(-1)![0].params.id)?.label).toBe('PDF: sales_text_1.pdf');
   expect(mockRelease).toHaveBeenCalledWith(uri); // the picker's lasting access to it, given up once read
 });
+
+test('a retake shows the reading card for what it reads, and a read that fails says why in a dialog', async () => {
+  // a PDF: the card says Reading the PDF while it reads; a refusal leaves this scan where it is
+  await show('sales_text_0', { source: 'pdf' });
+  const uri = 'content://com.android.providers.downloads.documents/document/msf%3A72';
+  let refuse: (e: unknown) => void = () => {};
+  mockPick.mockResolvedValueOnce({ canceled: false, result: { uri, name: 'msf:72', type: 'application/pdf' } });
+  mockDisplayName.mockResolvedValueOnce('locked.pdf');
+  mockReadPdf.mockImplementationOnce(() => new Promise((_, reject) => (refuse = reject)));
+  await press(button('Retake'));
+  expect(screen.getByText('Reading…')).toBeOnTheScreen();
+  expect(screen.getByText('Reading the PDF')).toBeOnTheScreen();
+  await act(async () => refuse(Object.assign(new Error('refused'), { code: 'pdf_password' })));
+  expect(alert.mock.calls).toEqual([['That PDF has a password. Save a copy without one, then import it.']]);
+  expect(screen.queryByText('Reading…')).toBeNull();
+  expect(mockRouter.replace).not.toHaveBeenCalled();
+  expect(mockToast).not.toHaveBeenCalled(); // a dialog, not the snackbar
+
+  // a photo that can't be opened: today's words, in a dialog too
+  alert.mockClear();
+  await show('inv_0007', { source: 'gallery' });
+  mockLibrary.mockRejectedValueOnce(new Error('the picker failed'));
+  await press(button('Retake'));
+  expect(alert.mock.calls).toEqual([["Couldn't open that photo."]]);
+  expect(mockToast).not.toHaveBeenCalled();
+});

@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 
 import Home from '../app/index';
 import { loadSaved } from '../lib/saved';
@@ -13,6 +14,7 @@ const mockPush = jest.fn();
 const mockScanPhoto = jest.fn();
 const mockLibrary = jest.fn();
 const mockPick = jest.fn();
+const mockReadPdf = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
@@ -21,13 +23,15 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('../modules/scanner', () => ({
   scanPhoto: (uri: string, options: object) => mockScanPhoto(uri, options),
+  readPdf: (uri: string) => mockReadPdf(uri),
+  displayName: async () => 'locked.pdf',
+  releaseAccess: async () => undefined,
 }));
 jest.mock('../lib/build', () => ({
   get TEAM_BUILD() {
     return mockTeam;
   },
 }));
-jest.mock('../lib/toast', () => ({ toast: jest.fn() }));
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: () => mockLibrary(),
   requestCameraPermissionsAsync: jest.fn(),
@@ -49,12 +53,17 @@ afterAll(() => {
   jest.useRealTimers();
 });
 
+let alert: jest.SpyInstance;
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockTeam = false;
   mockLibrary.mockResolvedValue({ canceled: false, assets: [{ uri: 'content://media/1' }] });
   mockScanPhoto.mockResolvedValue(parseScanResult(coreJson('inv_0007')));
+  alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 });
+
+afterEach(() => alert.mockRestore());
 
 test('the title, the description and the 3 tips', async () => {
   await render(<Home />);
@@ -102,8 +111,22 @@ test('two quick presses scan once', async () => {
     fireEvent.press(screen.getByText('Choose from gallery'));
   });
   expect(mockScanPhoto).toHaveBeenCalledTimes(1);
-  expect(screen.getByText('Reading the invoice…')).toBeTruthy();
+  expect(screen.getByText('Reading…')).toBeTruthy();
+  expect(screen.getByText('Straightening the photo and reading every box')).toBeTruthy();
   await act(async () => finish(parseScanResult(coreJson('inv_0007'))));
+});
+
+test('a refused PDF says why in a dialog', async () => {
+  const file = 'content://com.android.externalstorage.documents/document/primary%3ADownload%2Flocked.pdf';
+  const result = { uri: file, name: 'locked.pdf', type: 'application/pdf' };
+  mockPick.mockResolvedValueOnce({ canceled: false, result });
+  mockReadPdf.mockRejectedValueOnce(Object.assign(new Error('refused'), { code: 'pdf_password' }));
+  await render(<Home />);
+  await act(async () => fireEvent.press(screen.getByText('Import PDF')));
+  expect(alert).toHaveBeenCalledWith('That PDF has a password. Save a copy without one, then import it.');
+  expect(alert).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText('Reading…')).toBeNull();
+  expect(mockPush).not.toHaveBeenCalled();
 });
 
 test('the samples sheet', async () => {

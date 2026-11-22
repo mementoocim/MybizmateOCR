@@ -3,16 +3,20 @@ import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PrimaryButton } from '../components/Buttons';
-import { Bolt, Close, Flashlight, FlashlightOff, ImageIcon } from '../components/icons';
+import { Button, type ButtonProps } from '../components/Buttons';
+import { IconButton } from '../components/IconButton';
+import { Camera, Close, Flashlight, FlashlightOff, ImageIcon } from '../components/icons';
 import { ReadingOverlay } from '../components/ReadingOverlay';
-import { CAMERA_ERRORS, PERMISSION_TEXT, statusText } from '../lib/cameraCopy';
+import { Tap } from '../components/Tap';
+import { TEAM_BUILD } from '../lib/build';
+import { CAMERA_ERRORS, CAMERA_TEXT, PERMISSION_TEXT, statusText } from '../lib/cameraCopy';
+import { confirmHaptic } from '../lib/haptics';
 import { sampleUri } from '../lib/samples';
 import { useScanFlow } from '../lib/scanFlow';
-import { bold, colors } from '../lib/theme';
+import { colors, radius, space, touch, type } from '../lib/theme';
 import {
   type CameraErrorCode,
   type CameraStatus,
@@ -21,17 +25,32 @@ import {
   type ScannerCameraRef,
 } from '../modules/scanner';
 
-// The scanner camera (the test app's activity_camera.xml and CameraActivity.java): the live picture with the form's
-// outline, a status pill, Auto/Manual, the torch, the gallery and the shutter. A problem (no permission, no camera,
-// a camera that won't start) shows in a panel in place of the picture.
+// Design B §9.3, on the test app's layout (activity_camera.xml and CameraActivity.java). The live picture, its form's
+// outline, auto-capture and the checks are the native view's. Over the picture's top band: Close, with no title (the
+// pill names the form once it's found), the Auto switch and the flashlight switch. At its foot, the status pill. Under
+// it, the gallery (an icon over its label) and the shutter, which waits while the camera starts or takes the photo. A
+// problem (no permission, no camera, a camera that won't start) shows a panel in the picture's place, and the gallery
+// stays. A photo Auto took gets one confirm haptic (§5.5), then the reading card.
 
 type Permission = 'checking' | 'granted' | 'ask' | 'settings'; // ask: refused, may ask again; settings: refused for good
 type Status = { status: CameraStatus | 'starting'; form: FormName | null };
 type Problem = { code: Exclude<CameraErrorCode, 'capture' | 'keep'>; message: string };
+type Panel = 'ask' | 'settings' | Problem['code'];
 
 const STARTING: Status = { status: 'starting', form: null };
 const ERROR_MS = 3000; // how long a capture error stays in the pill
-const WHITE = '#FFFFFF';
+const DOT = 8; // dp: the Auto switch's dot
+const RING = 3; // dp: the shutter's brand ring
+const DISC = touch.shutter - 2 * (RING + space.xs); // the shutter's white disc, a little inside its ring
+const SLOP = (touch.target - touch.chip) / 2; // the Auto pill's hitSlop, above and below, to a 48 dp target
+const CAMERA_APP = "Use the phone's camera app instead";
+
+const TITLE: Record<Panel, string> = {
+  ask: CAMERA_TEXT.allowTitle,
+  settings: CAMERA_TEXT.offTitle,
+  no_camera: CAMERA_ERRORS.noCamera,
+  start: CAMERA_TEXT.startTitle,
+};
 
 function toPermission(p: ImagePicker.CameraPermissionResponse): Permission {
   return p.granted ? 'granted' : p.canAskAgain ? 'ask' : 'settings';
@@ -65,6 +84,8 @@ export default function CameraScreen() {
   const [hasTorch, setHasTorch] = useState(false);
   const [torch, setTorch] = useState(false);
   const camera = useRef<ScannerCameraRef>(null);
+  const shutterPressed = useRef(false); // the photo on its way is the shutter's, not one Auto took
+  const closing = useRef(false);
 
   // The permission: checked each time the screen is shown and when the app comes back (from the settings, say),
   // and asked for once.
@@ -111,11 +132,14 @@ export default function CameraScreen() {
 
   useEffect(() => () => clearTimeout(errorTimer.current), []);
 
+  /** Back, once: router.back() queues a GO_BACK per call, so a fast double tap would leave the next screen too. */
+  function close() {
+    if (closing.current) return;
+    closing.current = true;
+    router.back();
+  }
+
   async function allow() {
-    if (permission === 'settings') {
-      await Linking.openSettings();
-      return;
-    }
     setPermission(toPermission(await ImagePicker.requestCameraPermissionsAsync()));
   }
 
@@ -126,6 +150,11 @@ export default function CameraScreen() {
     setMount((m) => m + 1);
   }
 
+  function takePhoto() {
+    shutterPressed.current = true;
+    void camera.current?.takePhoto();
+  }
+
   function showError(text: string) {
     clearTimeout(errorTimer.current);
     setPillError(text);
@@ -133,6 +162,7 @@ export default function CameraScreen() {
   }
 
   function onCameraError(code: CameraErrorCode, message: string) {
+    if (code === 'capture' || code === 'keep') shutterPressed.current = false; // no photo comes for that press
     if (code === 'capture') showError(CAMERA_ERRORS.capture);
     else if (code === 'keep') showError(CAMERA_ERRORS.keep);
     else setProblem({ code, message });
@@ -148,58 +178,62 @@ export default function CameraScreen() {
   }
 
   function onPhoto(uri: string) {
+    const byAuto = auto && !shutterPressed.current; // the person's eyes are on the paper, not the screen
+    shutterPressed.current = false;
     if (!focusedRef.current) {
       discard(uri); // taken as the screen was left
       return;
     }
+    if (byAuto) confirmHaptic(); // before the reading card
     // taken just as the gallery opened: the scan flow is busy and doesn't take it
     void flow
       .scanUri(uri, 'Camera photo', 'camera', { deletePhoto: true, replace: true, testImage: testParam !== null })
       .then((taken) => taken || discard(uri));
   }
 
-  const panel: 'permission' | Problem['code'] | null =
-    !testParam && (permission === 'ask' || permission === 'settings') ? 'permission' : (problem?.code ?? null);
+  const panel: Panel | null =
+    !testParam && (permission === 'ask' || permission === 'settings') ? permission : (problem?.code ?? null);
   const ready = testParam ? testImage !== null : permission === 'granted';
-  const panelText =
-    panel === 'permission'
-      ? PERMISSION_TEXT
-      : panel === 'no_camera'
-        ? CAMERA_ERRORS.noCamera
-        : CAMERA_ERRORS.start(problem?.message);
+  const shutterOff = status.status === 'starting' || status.status === 'capturing' || flow.busy;
+  const action: Record<Panel, Pick<ButtonProps, 'label' | 'onPress'>> = {
+    ask: { label: 'Allow the camera', onPress: allow },
+    settings: { label: 'Open settings', onPress: () => Linking.openSettings() },
+    no_camera: { label: 'Choose from gallery', onPress: () => flow.fromGallery({ replace: true }) },
+    start: { label: 'Try again', onPress: tryAgain },
+  };
 
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <View style={[styles.top, { marginTop: insets.top }]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close the camera"
-          style={styles.iconButton}
-          onPress={() => router.back()}>
-          <Close color={WHITE} />
-        </Pressable>
-        <Text style={styles.title}>Scan an invoice</Text>
+      <View style={[styles.top, { paddingTop: insets.top + space.xs }]}>
+        <IconButton icon={Close} label="Close" tone="camera" onPress={close} />
+        <View style={styles.grow} />
         {!panel && (
-          <Pressable
-            accessibilityRole="button"
+          <Tap
+            accessibilityRole="switch"
+            accessibilityLabel="Auto capture"
+            accessibilityState={{ checked: auto }}
             accessibilityHint={
               auto ? 'Takes the photo by itself when the form holds still' : 'Take the photo with the round button'
             }
-            style={styles.auto}
-            onPress={() => setAuto((a) => !a)}>
-            <Bolt size={18} color={colors.coral} />
-            <Text style={styles.autoText}>{auto ? 'Auto' : 'Manual'}</Text>
-          </Pressable>
+            ripple="camera"
+            focusRadius={radius.pill}
+            hitSlop={{ top: SLOP, bottom: SLOP }}
+            onPress={() => setAuto((a) => !a)}
+            style={styles.auto}>
+            <View testID="auto-dot" style={[styles.dot, auto ? styles.dotOn : styles.dotOff]} />
+            <Text style={[type.badge, styles.autoText]}>Auto</Text>
+          </Tap>
         )}
         {!panel && hasTorch && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={torch ? 'Turn the flashlight off' : 'Turn the flashlight on'}
-            style={styles.iconButton}
-            onPress={() => setTorch((t) => !t)}>
-            {torch ? <Flashlight color={WHITE} /> : <FlashlightOff color={WHITE} />}
-          </Pressable>
+          <IconButton
+            icon={torch ? Flashlight : FlashlightOff}
+            label="Flashlight"
+            tone="camera"
+            accessibilityRole="switch"
+            checked={torch}
+            onPress={() => setTorch((t) => !t)}
+          />
         )}
       </View>
 
@@ -221,93 +255,133 @@ export default function CameraScreen() {
         )}
         {!panel && (
           <View style={styles.pillRow}>
-            <View style={styles.pill}>
-              <Text style={styles.pillText}>{pillError ?? statusText(status.status, status.form)}</Text>
+            <View testID="status-pill" style={styles.pill}>
+              <Text style={[type.body, styles.pillText]}>{pillError ?? statusText(status.status, status.form)}</Text>
             </View>
           </View>
         )}
         {panel && (
-          <View style={styles.panelArea}>
-            <View style={styles.panel}>
-              <Text style={styles.panelText}>{panelText}</Text>
-              {panel === 'permission' && <PrimaryButton label="Allow the camera" onPress={() => void allow()} />}
-              {panel === 'start' && <PrimaryButton label="Try again" onPress={tryAgain} />}
-              {panel === 'no_camera' && (
-                <PrimaryButton label="Choose from gallery" onPress={() => void flow.fromGallery({ replace: true })} />
-              )}
-              {panel !== 'no_camera' && (
-                <Pressable
-                  accessibilityRole="button"
-                  style={({ pressed }) => [styles.link, pressed && styles.pressed]}
-                  onPress={() => void flow.fromCameraApp({ replace: true })}>
-                  <Text style={styles.linkText}>{"Use the phone's camera app instead"}</Text>
-                </Pressable>
-              )}
+          // It scrolls when large text makes it taller than the picture.
+          <ScrollView style={StyleSheet.absoluteFill} contentContainerStyle={styles.panelArea}>
+            <View testID="camera-panel" style={styles.panel}>
+              <View style={styles.panelHead}>
+                <Camera size={touch.icon} color={colors.cameraText} />
+                <Text accessibilityRole="header" style={[type.headline, styles.panelTitle]}>
+                  {TITLE[panel]}
+                </Text>
+                {panel === 'ask' && <Text style={[type.body, styles.panelBody]}>{PERMISSION_TEXT}</Text>}
+                {panel === 'settings' && <Text style={[type.body, styles.panelBody]}>{CAMERA_TEXT.offBody}</Text>}
+                {/* the camera's own words, for the team: a client never sees them */}
+                {panel === 'start' && TEAM_BUILD && problem?.message ? (
+                  <Text style={[type.figureSmall, styles.panelBody]}>{problem.message}</Text>
+                ) : null}
+              </View>
+              <View style={styles.panelActions}>
+                <Button {...action[panel]} />
+                {panel !== 'no_camera' && (
+                  <Button
+                    label={CAMERA_APP}
+                    variant="text"
+                    tone="camera"
+                    onPress={() => flow.fromCameraApp({ replace: true })}
+                  />
+                )}
+              </View>
             </View>
-          </View>
+          </ScrollView>
         )}
       </View>
 
-      <View style={[styles.bottom, { marginBottom: insets.bottom }]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Choose a photo from the gallery instead"
-          style={styles.gallery}
-          onPress={() => void flow.fromGallery({ replace: true })}>
-          <ImageIcon color={WHITE} />
-        </Pressable>
-        {!panel && (
-          <Pressable
+      <View style={[styles.bottom, { paddingBottom: space.xl + insets.bottom }]}>
+        <View style={styles.side}>
+          <Tap
             accessibilityRole="button"
-            accessibilityLabel="Take the photo"
-            style={({ pressed }) => [styles.shutter, pressed && styles.pressed]}
-            onPress={() => void camera.current?.takePhoto()}>
-            <View style={styles.shutterDisc} />
-          </Pressable>
-        )}
+            accessibilityLabel="Gallery"
+            ripple="camera"
+            onPress={() => void flow.fromGallery({ replace: true })}
+            style={styles.gallery}>
+            <ImageIcon size={touch.icon} color={colors.cameraText} />
+            <Text style={[type.label, styles.galleryText]}>Gallery</Text>
+          </Tap>
+        </View>
+        <View style={styles.shutterSlot}>
+          {!panel && (
+            <Tap
+              accessibilityRole="button"
+              accessibilityLabel="Take the photo"
+              disabled={shutterOff}
+              ripple="camera"
+              focusRadius={touch.shutter / 2}
+              onPress={takePhoto}
+              style={styles.shutter}>
+              <View testID="shutter-disc" style={styles.disc} />
+            </Tap>
+          )}
+        </View>
+        <View style={styles.side} />
       </View>
 
-      <ReadingOverlay visible={flow.reading} />
+      <ReadingOverlay visible={flow.reading} what={flow.readingWhat ?? 'photo'} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#000000' },
-  top: { height: 56, flexDirection: 'row', alignItems: 'center', paddingStart: 4, paddingEnd: 8 },
-  iconButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  title: { ...bold, flex: 1, marginStart: 8, fontSize: 18, color: WHITE },
-  auto: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10 },
-  autoText: { ...bold, fontSize: 15, color: colors.coral },
+  screen: { flex: 1, backgroundColor: colors.camera },
+  top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.xs, paddingBottom: space.xs },
+  grow: { flex: 1 },
+  auto: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.s,
+    minHeight: touch.chip,
+    paddingHorizontal: space.m,
+    marginHorizontal: space.m,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.cameraMute,
+  },
+  dot: { width: DOT, height: DOT, borderRadius: DOT / 2 },
+  dotOn: { backgroundColor: colors.brand },
+  dotOff: { borderWidth: 1, borderColor: colors.cameraMute },
+  autoText: { color: colors.cameraText },
   picture: { flex: 1 },
   fill: { flex: 1 },
-  pillRow: { position: 'absolute', left: 0, right: 0, bottom: 16, alignItems: 'center', pointerEvents: 'none' },
-  pill: { backgroundColor: colors.pill, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 },
-  pillText: { fontSize: 15, color: WHITE },
-  panelArea: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, justifyContent: 'center', padding: 24 },
-  panel: { backgroundColor: colors.pill, borderRadius: 20, padding: 20, gap: 16 },
-  panelText: { fontSize: 16, lineHeight: 22, color: WHITE, textAlign: 'center' },
-  link: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 12, marginTop: -12 },
-  linkText: { ...bold, fontSize: 15, color: colors.coral },
-  bottom: { height: 128, alignItems: 'center', justifyContent: 'center' },
+  pillRow: { position: 'absolute', left: 0, right: 0, bottom: space.l, alignItems: 'center', pointerEvents: 'none' },
+  pill: {
+    maxWidth: '90%',
+    backgroundColor: colors.pill,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.l,
+    paddingVertical: space.s,
+  },
+  pillText: { color: colors.cameraText, textAlign: 'center' },
+  panelArea: { flexGrow: 1, justifyContent: 'center', padding: space.xl },
+  panel: { backgroundColor: colors.cameraPanel, borderRadius: radius.panel, padding: space.xl, gap: space.l },
+  panelHead: { alignItems: 'center', gap: space.s },
+  panelTitle: { color: colors.cameraText, textAlign: 'center' },
+  panelBody: { color: colors.cameraMute, textAlign: 'center' },
+  panelActions: { gap: space.xs },
+  bottom: { flexDirection: 'row', alignItems: 'center', paddingTop: space.xl, paddingHorizontal: space.xl },
+  side: { flex: 1, alignItems: 'flex-start' },
   gallery: {
-    position: 'absolute',
-    left: 40,
-    top: 36,
-    width: 56,
-    height: 56,
+    minWidth: touch.target,
+    minHeight: touch.target,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: space.xs,
+    borderRadius: radius.button,
   },
+  galleryText: { color: colors.cameraMute },
+  shutterSlot: { width: touch.shutter, height: touch.shutter },
   shutter: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 4,
-    borderColor: colors.coral,
+    width: touch.shutter,
+    height: touch.shutter,
+    borderRadius: touch.shutter / 2,
+    borderWidth: RING,
+    borderColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  shutterDisc: { width: 62, height: 62, borderRadius: 31, backgroundColor: WHITE },
-  pressed: { opacity: 0.6 },
+  disc: { width: DISC, height: DISC, borderRadius: DISC / 2, backgroundColor: colors.cameraText },
 });

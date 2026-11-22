@@ -112,13 +112,3 @@ export const TriangleAlert = lucide(
   <Path d="M12 9v4" />,
   <Path d="M12 17h.01" />,
 );
-
-/** Today's filled Material bolt, for the camera's Auto switch until design B's camera replaces that control. */
-export const Bolt: IconComponent = ({ size = 24, color }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24">
-    <Path
-      d="M11,21h-1l1,-7H7.5c-0.88,0 -0.33,-0.75 -0.31,-0.78C8.48,10.94 10.42,7.54 13.01,3h1l-1,7h3.51c0.4,0 0.62,0.19 0.4,0.66C12.97,17.55 11,21 11,21z"
-      fill={color}
-    />
-  </Svg>
-);

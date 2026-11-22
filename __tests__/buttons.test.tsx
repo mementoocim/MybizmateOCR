@@ -1,11 +1,11 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { Platform, processColor, Text } from 'react-native';
 
 import { Button, OutlinedButton, PrimaryButton, TextButton } from '../components/Buttons';
 import { IconButton } from '../components/IconButton';
 import { Flashlight, SettingsIcon } from '../components/icons';
 import { Tap } from '../components/Tap';
-import { colors, radius, type } from '../lib/theme';
+import { colors, radius, ripple, type } from '../lib/theme';
 
 // Design B §5.5 and §5.6: one pressable (Tap) with the Android ripple and a keyboard focus ring; the Button's
 // variants, sizes and states; and the 48 dp IconButton. The ripple itself is native, so these tests read the styles,
@@ -142,6 +142,43 @@ test('IconButton is a labelled 48 dp target, and a switch carries its state', as
   const flashlight = screen.getByRole('switch', { name: 'Flashlight' });
   expect(flashlight.props.accessibilityState).toMatchObject({ checked: true });
   expect(glyphOf(flashlight)?.props).toMatchObject({ width: 24, stroke: colors.cameraText });
+});
+
+test('a switch IconButton given no checked state says it is off, never undefined', async () => {
+  await render(<IconButton icon={Flashlight} label="Flashlight" accessibilityRole="switch" onPress={noop} />);
+  const flashlight = screen.getByRole('switch', { name: 'Flashlight' });
+  expect(flashlight.props.accessibilityState).toEqual({ checked: false });
+  expect(flashlight).not.toBeChecked();
+});
+
+test("a text button on the camera: a light label and the camera's white ripple", async () => {
+  // Android draws the ripple from the pressable's nativeBackgroundAndroid; jest runs as iOS, which has none.
+  const os = jest.replaceProperty(Platform, 'OS', 'android');
+  try {
+    await render(
+      <>
+        <Button label="Use the phone's camera app instead" variant="text" tone="camera" onPress={noop} />
+        <Button label="Allow the camera" tone="camera" onPress={noop} />
+        <Button label="Which columns?" variant="text" onPress={noop} />
+      </>,
+    );
+    const rippleOf = (name: string) => button(name).props.nativeBackgroundAndroid;
+    expect(screen.getByText("Use the phone's camera app instead")).toHaveStyle({ color: colors.cameraText });
+    expect(rippleOf("Use the phone's camera app instead")).toMatchObject({
+      color: processColor(ripple.camera.color),
+      borderless: false,
+    });
+    expect(button("Use the phone's camera app instead")).toHaveStyle({ backgroundColor: undefined, minHeight: 48 });
+    // the primary keeps its brand fill, ink label and ripple on the camera's panels
+    expect(button('Allow the camera')).toHaveStyle({ backgroundColor: colors.brand });
+    expect(screen.getByText('Allow the camera')).toHaveStyle({ color: colors.ink });
+    expect(rippleOf('Allow the camera')).toMatchObject({ color: processColor(ripple.brand.color) });
+    // on light surfaces, as before
+    expect(screen.getByText('Which columns?')).toHaveStyle({ color: colors.brandText });
+    expect(rippleOf('Which columns?')).toMatchObject({ color: processColor(ripple.light.color) });
+  } finally {
+    os.restore();
+  }
 });
 
 test('Tap shows a 2 dp focus ring while focused', async () => {
