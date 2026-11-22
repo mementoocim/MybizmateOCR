@@ -141,6 +141,22 @@ test('a scan saved before PDFs opens as a photo', async () => {
   expect(scan!.result.reads.every((b) => b.fromText === false)).toBe(true);
 });
 
+test('a scan saved before boxes could be checked opens with none checked', async () => {
+  const first = load();
+  const id = cameraScan(first);
+  await first.saved.saveScan(id, DETAILS);
+  // its scan.json as milestones 3 and 5 wrote it: no confirmed boxes
+  const file = `file:///docs/saved/${id}/scan.json`;
+  const kept = JSON.parse(memoryFs.files.get(file) as string);
+  delete kept.confirmed;
+  memoryFs.files.set(file, JSON.stringify(kept));
+  jest.resetModules();
+  const again = load();
+  await again.saved.loadSaved();
+  const scan = await again.saved.openSaved(id);
+  expect(scan!.confirmed).toEqual([]);
+});
+
 test('the account used becomes the default', async () => {
   const m = load();
   const id = cameraScan(m);

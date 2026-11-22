@@ -1,3 +1,4 @@
+import { TEAM_BUILD } from './build';
 import { readJson, writeJson } from './jsonFile';
 
 // The export defaults, kept on the phone: whether the business is VAT-registered, the accounts the imports need (as
@@ -38,6 +39,15 @@ const changed = () => listeners.forEach((listener) => listener());
 
 export function settings(): Settings {
   return current;
+}
+
+/**
+ * Whether annotation mode is on: the setting, in a team build. A phone moved from a team build to a client build keeps
+ * the setting in settings.json, where its switch is hidden, so the build decides too. Everything annotation mode
+ * changes asks this.
+ */
+export function annotationOn(): boolean {
+  return TEAM_BUILD && current.annotation;
 }
 
 export function subscribeSettings(listener: () => void): () => void {

@@ -5,6 +5,7 @@ import Result from '../app/result';
 import { peso, qty } from '../lib/format';
 import { addScan, getScan, loadRecent, setEdit } from '../lib/scans';
 import type { ScanSource } from '../lib/scans';
+import { updateSettings } from '../lib/settings';
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
@@ -75,10 +76,11 @@ async function show(
 
 const press = (el: Parameters<typeof fireEvent.press>[0]) => act(async () => fireEvent.press(el));
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
   memoryFs.reset();
   mockTeam = false;
+  await updateSettings({ annotation: false });
 });
 
 test('ready to post', async () => {
@@ -125,6 +127,53 @@ test('an empty box can be filled', async () => {
   await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), '100.00'));
   await press(screen.getByTestId('box-save'));
   expect(screen.getByText('₱100.00')).toBeTruthy();
+});
+
+test('the editor confirms a box in annotation mode', async () => {
+  const STATES = /^(Checked|Corrected|Not checked yet)$/;
+  // annotation mode is the setting in a team build: a client build never shows it, though the setting is kept
+  for (const [team, annotation] of [
+    [true, false],
+    [false, true],
+  ] as const) {
+    mockTeam = team;
+    await act(async () => updateSettings({ annotation }));
+    await show('inv_0007');
+    await press(screen.getByText('Date'));
+    expect(screen.queryByText(STATES)).toBeNull();
+    await press(screen.getByTestId('fix-date'));
+    expect(screen.queryByTestId('box-confirm')).toBeNull();
+  }
+
+  mockTeam = true;
+  await act(async () => updateSettings({ annotation: true }));
+  const id = await show('inv_0007');
+  await press(screen.getByText('Date'));
+  expect(screen.getByText('Not checked yet')).toBeTruthy();
+  await press(screen.getByTestId('fix-date'));
+  await press(screen.getByTestId('box-confirm'));
+  expect(screen.queryByLabelText('What the box says')).toBeNull(); // back to the box list
+  expect(screen.getByText('Checked')).toBeTruthy();
+  expect(getScan(id)!.confirmed).toEqual(['date']);
+  // a correction takes the check's place
+  await press(screen.getByTestId('fix-date'));
+  await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), '9/20/2026'));
+  await press(screen.getByTestId('box-save'));
+  expect(screen.getByText('Corrected')).toBeTruthy();
+  expect(screen.getByText('You changed it to “9/20/2026”.')).toBeTruthy();
+  await press(screen.getByLabelText('Close'));
+
+  // the customer's boxes never become training data, so they have no state
+  await press(screen.getByText('Customer'));
+  expect(screen.getByText('TIN')).toBeTruthy();
+  expect(screen.queryByText(STATES)).toBeNull();
+  await press(screen.getByLabelText('Close'));
+
+  // an empty box has no reading to confirm
+  await show('svc_0000');
+  await press(screen.getByText('Total due'));
+  await press(screen.getByTestId('fix-zero_rated'));
+  expect(screen.queryByTestId('box-confirm')).toBeNull();
 });
 
 test('terms', async () => {

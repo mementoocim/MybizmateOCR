@@ -27,15 +27,17 @@ test('keeps the newest 6, newest first', () => {
   expect(getScan(ids[6])?.label).toBe('Scan 7');
 });
 
-test('edits, terms, kind and party are kept, and come back after a restart', async () => {
+test('edits, checked boxes, terms, kind and party are kept, and come back after a restart', async () => {
   const first = require('../lib/scans');
   const listener = jest.fn();
   first.subscribeRecent(listener);
   const id = first.addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a') });
-  expect(first.getScan(id)).toMatchObject({ edits: {}, terms: null, kind: 'sale', party: null, saved: null });
+  expect(first.getScan(id)).toMatchObject({ edits: {}, confirmed: [], terms: null, kind: 'sale', party: null, saved: null });
   first.setEdit(id, 'date', ' 10/21/2026 ');
+  first.confirmBox(id, 'invoice_no');
+  first.confirmBox(id, 'invoice_no'); // already checked: no change
   first.updateScan(id, { terms: 'cash', kind: 'purchase', party: { name: 'Isabela Wholesale Trading' } });
-  expect(listener).toHaveBeenCalledTimes(3);
+  expect(listener).toHaveBeenCalledTimes(4);
   await flush();
   memoryFs.dirs.add('file:///s/a');
   jest.resetModules();
@@ -43,6 +45,7 @@ test('edits, terms, kind and party are kept, and come back after a restart', asy
   await second.loadRecent();
   expect(second.getScan(id)).toMatchObject({
     edits: { date: '10/21/2026' },
+    confirmed: ['invoice_no'],
     terms: 'cash',
     kind: 'purchase',
     party: { name: 'Isabela Wholesale Trading' },
@@ -50,13 +53,25 @@ test('edits, terms, kind and party are kept, and come back after a restart', asy
   });
 });
 
-test('a scan saved by milestone 2 loads with no edits, as a sale', async () => {
+test('an edit takes the box out of the checked ones', () => {
+  const { addScan, confirmBox, getScan, setEdit } = require('../lib/scans');
+  const id = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a') });
+  confirmBox(id, 'date');
+  confirmBox(id, 'invoice_no');
+  setEdit(id, 'date', '10/21/2026');
+  expect(getScan(id).confirmed).toEqual(['invoice_no']);
+  confirmBox(id, 'date');
+  setEdit(id, 'date', 'Sep 20, 2026'); // the edit taken back
+  expect(getScan(id)).toMatchObject({ edits: {}, confirmed: ['invoice_no'] });
+});
+
+test('a scan saved by milestone 2 loads with no edits or checked boxes, as a sale', async () => {
   const old = { id: 'old-1', label: 'Photo from gallery', source: 'gallery', at: '2026-11-20T01:00:00.000Z', result: result('/s/old') };
   memoryFs.files.set('file:///docs/recent.json', JSON.stringify([old]));
   memoryFs.dirs.add('file:///s/old');
   const { loadRecent, getScan } = require('../lib/scans');
   await loadRecent();
-  expect(getScan('old-1')).toMatchObject({ edits: {}, terms: null, kind: 'sale', party: null, saved: null });
+  expect(getScan('old-1')).toMatchObject({ edits: {}, confirmed: [], terms: null, kind: 'sale', party: null, saved: null });
 });
 
 test('a scan kept before PDFs loads as a photo', async () => {

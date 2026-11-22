@@ -140,12 +140,16 @@ async function moveToSaved(scan: StoredScan): Promise<ScanResult> {
   };
 }
 
-/** A saved scan as scan.json keeps it; one saved before PDFs gets their fields (a photo's). */
+/**
+ * A saved scan as scan.json keeps it; one saved before PDFs gets their fields (a photo's), and one saved before boxes
+ * could be checked (milestones 3 and 5) has none checked.
+ */
 async function readScan(id: string): Promise<StoredScan | null> {
   const saved = await readJson<Omit<StoredScan, 'at' | 'result'> & { at: string; result: KeptResult }>(
     `saved/${id}/scan.json`,
   );
-  return saved ? { ...saved, at: new Date(saved.at), result: withPdfFields(saved.result) } : null;
+  if (!saved) return null;
+  return { ...saved, confirmed: saved.confirmed ?? [], at: new Date(saved.at), result: withPdfFields(saved.result) };
 }
 
 /** At start: the summaries, plus any saved scan whose summary a kill cut short. */
