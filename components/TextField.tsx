@@ -19,7 +19,8 @@ import { useKeyboardHeight, useScrollIntoView } from './Screen';
 // the padding gives the extra 1 dp back, so nothing inside moves. mono sets the text in the figure style. Under it,
 // one note: the error (danger, with an icon), else the warning (warning, with an icon), else the helper (mute); it's
 // also what TalkBack hears as the field's hint. Autocorrect is always off: an edit means "the box says this". A search
-// field leads with its icon, and ends with a clear button while there's text.
+// field leads with its icon, and ends with a clear button while there's text, which gives the field the focus as it
+// goes.
 // Taking focus, the field asks the nearest ScrollIntoViewScope (the Screen's, or a sheet's) to scroll it into view.
 // The keyboard opens after that, and the end of the scroll grows with it, so the field asks again whenever the
 // keyboard grows while it has focus (ruling T5-2).
@@ -124,7 +125,14 @@ export function TextField({
         />
         {clearLabel !== undefined && value !== '' ? (
           <View style={styles.clear}>
-            <IconButton icon={Close} label={clearLabel} onPress={() => onChangeText('')} />
+            <IconButton
+              icon={Close}
+              label={clearLabel}
+              onPress={() => {
+                onChangeText('');
+                input.current?.focus(); // the button goes with the text, focus and all: typing goes on in the field
+              }}
+            />
           </View>
         ) : null}
       </View>

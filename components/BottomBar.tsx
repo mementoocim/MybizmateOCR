@@ -9,17 +9,19 @@ import { Button, type ButtonProps, type ButtonVariant } from './Buttons';
 // Design B §5.6 and §8: the fixed bar under Scan and Saved, and the button row it holds (sheets' action rows and
 // Home's capture row use the row too). The bar is a panel on a hairline, padded 12 and by the navigation bar's inset,
 // with an optional line (a saved line, say) above its buttons. In the row, buttons sit side by side: primary 1,
-// secondary and destructive 0.8, text buttons at their own width. When any label wraps (large text, a narrow phone),
-// they stack full width in the given order, which puts the primary last. A row that stacked stays stacked for those
-// labels at that width and font size: once full width the labels fit on one line, and flipping back would loop.
-// While it's mounted, the bar reports its height, so the snackbar sits above it (lib/snackbar).
+// secondary and destructive 0.8, text buttons at their own width. A button that's the only one to grow, alone or
+// beside text buttons, fills what they leave, as a primary does (the supplier sheet's Use this name, beside Add to
+// your suppliers). When any label wraps (large text, a narrow phone), they stack full width in the given order, which
+// puts the primary last. A row that stacked stays stacked for those labels at that width and font size: once full
+// width the labels fit on one line, and flipping back would loop. While it's mounted, the bar reports its height, so
+// the snackbar sits above it (lib/snackbar).
 
 export function ButtonRow({ buttons }: { buttons: readonly ButtonProps[] }) {
   const { width, fontScale } = useWindowDimensions();
   const key = `${buttons.map((b) => b.label).join('|')}|${width}|${fontScale}`;
   const [stackedKeys, setStackedKeys] = useState<ReadonlySet<string>>(() => new Set());
   const stacked = stackedKeys.has(key);
-  const lone = buttons.length === 1;
+  const lone = buttons.filter((b) => !isText(b.variant ?? 'primary')).length === 1; // text buttons don't grow
 
   const onLines = (lines: number) => {
     if (lines > 1) setStackedKeys((keys) => (keys.has(key) ? keys : new Set(keys).add(key)));
@@ -57,9 +59,17 @@ export function BottomBar({ buttons, children }: { buttons: readonly ButtonProps
   );
 }
 
-/** A button's share of the row. Alone, a secondary or destructive button fills it, as a primary does. */
+/** A text button keeps its own width: it never grows. */
+function isText(variant: ButtonVariant): boolean {
+  return variant === 'text' || variant === 'destructiveText';
+}
+
+/**
+ * A button's share of the row. The only one that grows (lone), a secondary or destructive button fills what the text
+ * buttons leave, as a primary does.
+ */
 function flexOf(variant: ButtonVariant, lone: boolean) {
-  if (variant === 'text' || variant === 'destructiveText') return styles.natural;
+  if (isText(variant)) return styles.natural;
   return variant === 'primary' || lone ? styles.primary : styles.secondary;
 }
 

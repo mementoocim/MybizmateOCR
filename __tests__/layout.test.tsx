@@ -452,6 +452,29 @@ test('ButtonRow: text buttons keep their width, destructive is 0.8, and a lone b
   expect(kids(screen.getByTestId('button-row'))[0]).toHaveStyle({ flex: 1 });
 });
 
+test('ButtonRow: "lone" counts the buttons that grow, so text buttons beside one leave it the whole row', async () => {
+  // The supplier sheet's row: Use this name (secondary) and Add to your suppliers (text). The secondary is the one
+  // button that grows, so it fills what the text button leaves, with no gap at the end.
+  const use: ButtonProps = { label: 'Use this name', variant: 'secondary', onPress: noop };
+  const add: ButtonProps = { label: 'Add to your suppliers', variant: 'text', onPress: noop };
+  await render(<ButtonRow buttons={[use, add]} />);
+  const shares = () => kids(screen.getByTestId('button-row')).map((child) => StyleSheet.flatten(child.props.style));
+  expect(shares()).toEqual([{ flex: 1 }, { flexShrink: 1 }]);
+  await screen.rerender(<ButtonRow buttons={[add, use]} />); // whatever the order
+  expect(shares()).toEqual([{ flexShrink: 1 }, { flex: 1 }]);
+  const remove: ButtonProps = { label: 'Delete', variant: 'destructive', onPress: noop };
+  const keep: ButtonProps = { label: 'Keep it', variant: 'destructiveText', onPress: noop };
+  await screen.rerender(<ButtonRow buttons={[keep, remove]} />); // a destructive one too
+  expect(shares()).toEqual([{ flexShrink: 1 }, { flex: 1 }]);
+
+  // Two that grow share the row as before: secondary 0.8, primary 1, the text button at its own width.
+  await screen.rerender(<ButtonRow buttons={[add, use, { label: 'Save', onPress: noop }]} />);
+  expect(shares()).toEqual([{ flexShrink: 1 }, { flex: 0.8 }, { flex: 1 }]);
+  // Only text buttons: none grows.
+  await screen.rerender(<ButtonRow buttons={[add, { label: 'Cancel', variant: 'text', onPress: noop }]} />);
+  expect(shares()).toEqual([{ flexShrink: 1 }, { flexShrink: 1 }]);
+});
+
 test("Button reports its label's lines", async () => {
   const onLabelLines = jest.fn();
   await render(<Button label="Save purchase" onPress={noop} onLabelLines={onLabelLines} />);

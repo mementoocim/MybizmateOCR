@@ -14,7 +14,7 @@ import {
 import { BottomBar } from '../components/BottomBar';
 import { BoxSheet } from '../components/BoxSheet';
 import { Button, type ButtonProps } from '../components/Buttons';
-import { certSections } from '../components/CertificateSections';
+import { certSections, payorLine } from '../components/CertificateSections';
 import { Header } from '../components/Header';
 import { IconButton } from '../components/IconButton';
 import { More } from '../components/icons';
@@ -77,10 +77,11 @@ const PHOTO_HEIGHT = 240;
 type BoxesOpen = Extract<LedgerOpen, { kind: 'boxes' }>;
 /**
  * What a sheet opens with: a row's (LedgerOpen), the boxes annotation mode still needs checked (always a list, as
- * milestone 4 had it: ruling T13-5), or the save sheet; n counts the openings, so each starts fresh.
+ * milestone 4 had it: ruling T13-5), or the save sheet; n counts the openings, so each starts fresh, and rowKey is the
+ * row it opened from, by its lib/flagTargets key (a 2307's payor row's sheet has the payor's line).
  */
 type SheetOpen = Exclude<LedgerOpen, BoxesOpen> | (BoxesOpen & { alwaysList?: boolean }) | { kind: 'save' };
-type Opening = SheetOpen & { n: number };
+type Opening = SheetOpen & { n: number; rowKey?: string };
 
 const dayOf = (iso: string) => monthDay(localIsoDate(new Date(iso)));
 
@@ -154,7 +155,7 @@ export default function Result() {
   const flaggedKeys = new Set(rows.filter((row) => row.flagged).map((row) => row.key));
 
   /** Opens a sheet, once: a second tap while one is open (or opening) does nothing. */
-  function openSheet(sheet: SheetOpen, opener: ViewInstance | null) {
+  function openSheet(sheet: SheetOpen, opener: ViewInstance | null, rowKey?: string) {
     if (sheetUp.current) return;
     sheetUp.current = true;
     if (sheet.kind === 'boxes') boxesOpener.current = opener;
@@ -162,7 +163,7 @@ export default function Result() {
     else if (sheet.kind === 'customer') customerOpener.current = opener;
     else if (sheet.kind === 'supplier') supplierOpener.current = opener;
     openings.current += 1;
-    setOpen({ ...sheet, n: openings.current });
+    setOpen({ ...sheet, n: openings.current, rowKey });
   }
   function closeSheet() {
     sheetUp.current = false;
@@ -192,7 +193,7 @@ export default function Result() {
     if (!row?.open) return;
     const view = rowRefs.get(row.key) ?? null;
     scrollIntoViewOf(scrollRef, view);
-    openSheet(row.open, view);
+    openSheet(row.open, view, row.key);
   }
 
   /**
@@ -292,7 +293,7 @@ export default function Result() {
               sections={sections}
               rowRefs={rowRefs}
               onOpen={(row, view) => {
-                if (row.open) openSheet(row.open, view);
+                if (row.open) openSheet(row.open, view, row.key);
               }}
             />
           </>
@@ -317,6 +318,10 @@ export default function Result() {
           }}
           returnFocus={boxesOpener}>
           {boxes.row !== undefined && sale ? <NewItem scan={scan} sale={sale} row={boxes.row} /> : null}
+          {boxes.rowKey === 'payor' && cert ? (
+            // §9.5: read-only, whether the payor is in the customers and as which; there's no payor chooser
+            <Text style={[type.label, styles.payorLine]}>{payorLine(cert.payor)}</Text>
+          ) : null}
         </BoxSheet>
       ) : null}
       {terms ? (
@@ -538,6 +543,7 @@ const styles = StyleSheet.create({
   numberedLine: { flex: 1, color: colors.ink },
   footnote: { paddingHorizontal: space.l, paddingTop: space.l, gap: space.xs },
   newItem: { paddingHorizontal: space.l, paddingTop: space.s },
+  payorLine: { paddingHorizontal: space.l, paddingTop: space.m, color: colors.mute }, // under the full-bleed box rows
   ink: { color: colors.ink },
   mute: { color: colors.mute },
   warning: { color: colors.warning },

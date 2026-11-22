@@ -330,6 +330,62 @@ test("the payor's match", async () => {
   expect(screen.getByText('TIN 211-305-418-00000 · ZIP 3305')).toBeTruthy();
 });
 
+test('the payor sheet shows its read-only line', async () => {
+  // Design B §9.5: the payor's boxes, and under them a line saying whether the payor is in your customers, and as
+  // which. There's no payor chooser (a feature still open from M5). The box list is full-bleed, so the line pads itself
+  // onto the gutter.
+  await addPackCustomers();
+  /** bir2307_text_0's payor sheet (its payor: the pack's Reyes Sari-Sari Store), some of its boxes changed first. */
+  async function payorSheet(edits: Record<string, string> = {}) {
+    await show('bir2307_text_0', { edits });
+    await press(screen.getByTestId('row-payor'));
+    expect(sheet().getByRole('header', { name: 'Payor' })).toBeTruthy();
+    expect(boxesShown()).toEqual(columns('payor', ['tin', 'name', 'address', 'zip']));
+  }
+  /** The sheet's buttons but its box rows: nothing to choose, search or add. */
+  const buttonsBesideBoxes = () =>
+    sheet()
+      .getAllByRole('button')
+      .filter((b) => !String(b.props.testID).startsWith('box-'))
+      .map((b) => b.props.accessibilityLabel);
+
+  await payorSheet();
+  expect(sheet().getByText('In your customers · TIN 456-789-012-00000')).toHaveStyle({
+    ...type.label,
+    color: colors.mute,
+    paddingHorizontal: space.l,
+  });
+  expect(buttonsBesideBoxes()).toEqual(['Close', 'Done']);
+  expect(sheet().queryByLabelText(/^Search/)).toBeNull();
+  await press(screen.getByLabelText('Close'));
+
+  // from the payor's flag chip too, which opens the row's sheet
+  await show('bir2307_text_0', { edits: { payor_name: 'Magsaysay Hardware', payor_tin: '99988877700000' } });
+  await press(button('Payor (not in your customers), to check'));
+  expect(sheet().getByRole('header', { name: 'Payor' })).toBeTruthy();
+  expect(sheet().getByText('Not in your customers')).toBeTruthy();
+  expect(buttonsBesideBoxes()).toEqual(['Close', 'Done']);
+  await press(screen.getByLabelText('Close'));
+  // the closest match is only named: the payor goes out as written
+  await payorSheet({ payor_name: 'Santos Merchandising', payor_tin: '99988877700000' });
+  expect(sheet().getByText('Closest match in your customers: Santos Merchandise')).toBeTruthy();
+  expect(buttonsBesideBoxes()).toEqual(['Close', 'Done']);
+  await press(screen.getByLabelText('Close'));
+  await payorSheet({ payor_name: '', payor_tin: '' }); // no payor written
+  expect(sheet().getByText('Not in your customers')).toBeTruthy();
+  await press(screen.getByLabelText('Close'));
+  // no customers to check it against
+  await act(async () => clearParties('customer'));
+  await payorSheet();
+  expect(sheet().getByText('Add your customers in Your lists to check names')).toBeTruthy();
+  await press(screen.getByLabelText('Close'));
+
+  // only the payor's sheet: the payee isn't matched
+  await press(screen.getByTestId('row-payee'));
+  expect(sheet().getByRole('header', { name: 'Payee' })).toBeTruthy();
+  expect(sheet().queryByText(/customers/)).toBeNull();
+});
+
 test('the photo checks: a photo or a PDF read from its page, never a page read from its text', async () => {
   const blurry = (r: ScanResult) => {
     r.sharpness = 0.1; // the 2307's minimum is 0.5
