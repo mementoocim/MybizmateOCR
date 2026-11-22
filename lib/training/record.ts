@@ -50,30 +50,35 @@ export type TrainingScan = {
 };
 
 /**
- * A scan as training data, or null unless it's saved, saved in annotation mode, not a sample or a camera test image,
- * with its form found and at least one training box. Only then is the install ID asked for: it throws until it's
- * loaded.
+ * Whether a scan is training data: saved, saved in annotation mode, not a sample or a camera test image, with its form
+ * found and at least one training box. It needs no install ID, so the training screen counts with it.
+ */
+export function isTrainingScan(scan: StoredScan): boolean {
+  if (!scan.saved || !scan.annotated || scan.source === 'sample' || scan.testImage) return false;
+  return (isInvoice(scan) || is2307(scan)) && trainingBoxes(scan).length > 0;
+}
+
+/**
+ * A scan as training data, or null unless it is one (isTrainingScan). Only then is the install ID asked for: it throws
+ * until it's loaded.
  */
 export function trainingRecord(scan: StoredScan, lists: Lists, settings: Settings): TrainingScan | null {
-  const form = isInvoice(scan) || is2307(scan) ? scan.result.form : null;
-  if (!scan.saved || !scan.annotated || scan.source === 'sample' || scan.testImage || form === null) return null;
-  const boxes = trainingBoxes(scan);
-  if (boxes.length === 0) return null;
+  if (!isTrainingScan(scan)) return null;
   const install = installId();
   const used = usedValues(scan, lists, settings);
   const r = scan.result;
   return {
     id: scan.id,
-    form,
+    form: r.form!, // found: isTrainingScan
     source: r.source,
-    annotated: scan.annotated,
+    annotated: true, // saved in annotation mode: isTrainingScan
     tag: scan.tag ?? null,
     installId: install,
     app: scan.made?.app ?? null,
     model: scan.made?.model ?? null,
     photo: { sharpness: r.sharpness, sharpMin: r.sharpMin, light: r.light, darkMax: r.darkMax, turned: r.turned },
     flags: isInvoice(scan) ? saleOf(scan, lists, settings).final.flags : certOf(scan, lists, settings).cert.flags,
-    boxes: boxes.map((read) => {
+    boxes: trainingBoxes(scan).map((read) => {
       const state = boxState(scan, read.name);
       return {
         name: read.name,

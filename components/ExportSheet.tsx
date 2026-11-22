@@ -1,6 +1,5 @@
-import * as Sharing from 'expo-sharing';
 import { useMemo, useState, useSyncExternalStore } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import {
   type ExportRange,
@@ -14,8 +13,8 @@ import { peso } from '../lib/format';
 import { lists, markPartiesExported, newParties, subscribeLists } from '../lib/lists';
 import { markExported, savedList, subscribeSaved } from '../lib/saved';
 import type { Kind } from '../lib/scans';
+import { shareThenAsk, type Wording } from '../lib/share';
 import { colors } from '../lib/theme';
-import { toast } from '../lib/toast';
 import { PrimaryButton, TextButton } from './Buttons';
 import { Chips } from './Chips';
 import { Sheet } from './Sheet';
@@ -33,47 +32,12 @@ const PARTY_RANGES = [
   { value: 'all', label: 'All added from scans' },
 ] as const;
 
-type Wording = { one: string; many: string; next: string };
-
 /** Each kind's export: its sheet's title, the import it's in, and how its saved ones are counted. */
 const EXPORTS: Record<Kind, Wording & { title: string; format: string }> = {
   sale: { title: 'Export sales', format: 'Sales', one: 'sale', many: 'sales', next: 'next export' },
   purchase: { title: 'Export purchases', format: 'Purchases', one: 'purchase', many: 'purchases', next: 'next export' },
   '2307': { title: 'Export 2307s', format: '2307-CWT', one: '2307', many: '2307s', next: 'next export' },
 };
-
-/**
- * Writes the file and opens the share sheet. The share sheet can't tell whether the file was sent, so the person says
- * so before what went in it is marked as exported.
- */
-async function shareThenAsk(write: (now: Date) => Promise<string>, n: number, words: Wording, mark: (now: Date) => Promise<void>) {
-  if (!(await Sharing.isAvailableAsync())) {
-    toast("This phone can't share files.");
-    return;
-  }
-  try {
-    const now = new Date();
-    const uri = await write(now);
-    await Sharing.shareAsync(uri, { mimeType: XLSX_MIME, dialogTitle: 'Send the file' });
-    Alert.alert(
-      'Did the file go where you wanted?',
-      n === 1
-        ? `Mark this ${words.one} as exported, so the ${words.next} leaves it out.`
-        : `Mark these ${n} ${words.many} as exported, so the ${words.next} leaves them out.`,
-      [
-        { text: 'Not yet', style: 'cancel' },
-        {
-          text: 'Mark as exported',
-          onPress: () => {
-            void mark(now).then(() => toast(`Marked ${n} ${n === 1 ? words.one : words.many} as exported.`));
-          },
-        },
-      ],
-    );
-  } catch {
-    toast("Couldn't make the file.");
-  }
-}
 
 function exportedBefore(k: number): string {
   return k === 1
@@ -107,6 +71,7 @@ function InvoicesExport({ visible, kind, onClose }: { visible: boolean; kind: Ki
     setBusy(true);
     await shareThenAsk(
       (now) => writeExport(kind, rows, now),
+      XLSX_MIME,
       rows.length,
       words,
       (now) => markExported(rows.map((r) => r.id), now),
@@ -150,6 +115,7 @@ function PartiesExport({ visible, onClose }: { visible: boolean; onClose: () => 
     setBusy(true);
     await shareThenAsk(
       (now) => writePartiesExport(parties, now),
+      XLSX_MIME,
       parties.length,
       { one: 'party', many: 'parties', next: 'next file' },
       (now) => markPartiesExported(parties.map((p) => p.id), now),

@@ -26,7 +26,7 @@ import { cleanTag } from './training/codes';
 // Saved invoices: the scans the person saved as a sale, a purchase or a 2307, each as import rows (an invoice's one
 // row, a 2307's one per payment). A saved scan's folder moves from the scanner's scans/ (which keeps only its newest 6)
 // to saved/<id>/, with the whole scan in scan.json; saved.json holds one summary per saved scan, with its rows and when
-// it was exported.
+// it was exported: in an import file, and apart from that in the team's training export.
 
 type SummaryBase = {
   id: string;
@@ -36,7 +36,9 @@ type SummaryBase = {
   date: string; // the invoice's date; a 2307's period's last day
   listed: boolean; // the party column is a list party's code, or a VARIOUS-* party
   savedAt: string;
-  exportedAt: string | null;
+  exportedAt: string | null; // when it went out in an import file
+  // when it went out in a training export (team builds); a summary kept before milestone 4 has none, and loads as null
+  trainingExportedAt?: string | null;
 };
 /** A saved sale or purchase: its row of the Sales or Purchases import. */
 export type InvoiceSummary = SummaryBase & { kind: InvoiceKind; gross: number; row: ExportRow };
@@ -82,9 +84,14 @@ function checksOf(scan: StoredScan): SaleView | CertView | null {
   return isInvoice(scan) ? saleOf(scan, lists(), settings()) : null;
 }
 
-function summaryOf(scan: StoredScan, exportedAt: string | null): SavedSummary {
+/**
+ * A saved scan's summary, with the marks of the one it replaces: when it went out in an import file, and in a training
+ * export.
+ */
+function summaryOf(scan: StoredScan, before?: SavedSummary): SavedSummary {
   const { savedAt, details } = scan.saved!;
-  const base = { id: scan.id, label: scan.label, savedAt, exportedAt };
+  const marks = { exportedAt: before?.exportedAt ?? null, trainingExportedAt: before?.trainingExportedAt ?? null };
+  const base = { id: scan.id, label: scan.label, savedAt, ...marks };
   if (is2307(scan)) {
     const view = certOf(scan, lists(), settings());
     const { cert, payor } = view;
@@ -118,7 +125,7 @@ function summaryOf(scan: StoredScan, exportedAt: string | null): SavedSummary {
 
 /** A saved scan's import rows as it stands now: its boxes, its party or its kind may have changed since it was saved. */
 export function rowsNow(scan: StoredScan): readonly ExportRow[] {
-  return summaryRows(summaryOf(scan, null));
+  return summaryRows(summaryOf(scan));
 }
 
 /** Moves a scan's folder out of the scanner's scans/ to saved/<id>/, and points every file of its result there. */
@@ -143,10 +150,11 @@ async function moveToSaved(scan: StoredScan): Promise<ScanResult> {
 }
 
 /**
- * A saved scan as scan.json keeps it; one saved before PDFs gets their fields (a photo's), and one saved before
- * milestone 4 (milestones 3 and 5) has no boxes checked, wasn't saved in annotation mode and isn't a test image.
+ * A saved scan as scan.json keeps it, as it was last saved: changes made since live only in the app's memory (see
+ * openSaved). One saved before PDFs gets their fields (a photo's), and one saved before milestone 4 (milestones 3 and
+ * 5) has no boxes checked, wasn't saved in annotation mode and isn't a test image.
  */
-async function readScan(id: string): Promise<StoredScan | null> {
+export async function readScan(id: string): Promise<StoredScan | null> {
   const saved = await readJson<Omit<StoredScan, 'at' | 'result'> & { at: string; result: KeptResult }>(
     `saved/${id}/scan.json`,
   );
@@ -162,9 +170,13 @@ async function readScan(id: string): Promise<StoredScan | null> {
   };
 }
 
-/** At start: the summaries, plus any saved scan whose summary a kill cut short. */
+/**
+ * At start: the summaries (one kept before milestone 4 hasn't gone out in a training export), plus any saved scan whose
+ * summary a kill cut short.
+ */
 export async function loadSaved(): Promise<void> {
-  const index = (await readJson<SavedSummary[]>(INDEX)) ?? [];
+  const kept = (await readJson<SavedSummary[]>(INDEX)) ?? [];
+  const index = kept.map((s) => ({ ...s, trainingExportedAt: s.trainingExportedAt ?? null }));
   const known = new Set(index.map((s) => s.id));
   const found: SavedSummary[] = [];
   const root = new Directory(Paths.document, 'saved');
@@ -172,7 +184,7 @@ export async function loadSaved(): Promise<void> {
     for (const entry of root.list()) {
       if (!(entry instanceof Directory) || known.has(entry.name)) continue;
       const scan = await readScan(entry.name);
-      if (scan?.saved) found.push(summaryOf(scan, null));
+      if (scan?.saved) found.push(summaryOf(scan));
     }
   }
   summaries = newestFirst([...index, ...found]);
@@ -205,7 +217,7 @@ export async function saveScan(id: string, details: SaveDetails, tag: SourceTag 
   const saved = { savedAt: new Date().toISOString(), details };
   const scan = updateScan(id, { result, saved, annotated: annotation, tag: codes })!;
   await writeJson(`saved/${id}/scan.json`, { ...scan, at: scan.at.toISOString() });
-  const summary = summaryOf(scan, savedSummary(id)?.exportedAt ?? null);
+  const summary = summaryOf(scan, savedSummary(id));
   summaries = newestFirst([summary, ...summaries.filter((s) => s.id !== id)]);
   changed();
   await writeJson(INDEX, summaries);
@@ -232,6 +244,14 @@ export async function deleteSaved(id: string): Promise<void> {
 export async function markExported(ids: readonly string[], at: Date): Promise<void> {
   const when = at.toISOString();
   summaries = summaries.map((s) => (ids.includes(s.id) ? { ...s, exportedAt: when } : s));
+  changed();
+  await writeJson(INDEX, summaries);
+}
+
+/** Marks saved scans as sent in a training export, so the next one leaves them out; the import files' mark stays. */
+export async function markTrainingExported(ids: readonly string[], at: Date): Promise<void> {
+  const when = at.toISOString();
+  summaries = summaries.map((s) => (ids.includes(s.id) ? { ...s, trainingExportedAt: when } : s));
   changed();
   await writeJson(INDEX, summaries);
 }
