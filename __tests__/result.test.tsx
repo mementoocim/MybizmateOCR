@@ -2,10 +2,15 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import type { ReactElement } from 'react';
 
 import Result from '../app/result';
+import { RecentRow } from '../components/RecentRow';
+import { certOf } from '../lib/cert';
+import { blockWords, saveBlock } from '../lib/exportRows';
 import { peso, qty } from '../lib/format';
-import { addScan, getScan, loadRecent, setEdit } from '../lib/scans';
+import { lists } from '../lib/lists';
+import { addScan, confirmBox, getScan, loadRecent, setEdit } from '../lib/scans';
 import type { ScanSource } from '../lib/scans';
-import { updateSettings } from '../lib/settings';
+import { settings, updateSettings } from '../lib/settings';
+import { uncheckedBoxes } from '../lib/training/boxes';
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
@@ -213,6 +218,78 @@ test("Looks right is only for the box's value as it stands", async () => {
   expect(confirmButton()).toBeTruthy();
   await press(screen.getByText('24,377'));
   expect(confirmButton()).toBeNull();
+});
+
+test('annotation mode blocks an unchecked save', async () => {
+  mockTeam = true;
+  await act(async () => updateSettings({ annotation: true }));
+  // A 2307 photo, with words alone in row 2's payment box: words alone don't make a payment row, so no section shows
+  // that box. Its 14 boxes that can become training data, and this one.
+  const id = await show('bir2307_photo_0', {
+    source: 'camera',
+    edit: (r) => {
+      const at = r.reads.findIndex((b) => b.name === 'ewt1_tax') + 1;
+      const next = r.reads[at - 1];
+      const cropUri = next.cropUri!.replace('ewt1_tax', 'ewt2_payment');
+      r.reads.splice(at, 0, { ...next, name: 'ewt2_payment', text: 'Rent', alts: [], cropUri });
+    },
+  });
+  const scan = () => getScan(id)!;
+  const blockNow = (annotation?: boolean) =>
+    saveBlock(scan(), certOf(scan(), lists(), settings()), annotation === undefined ? undefined : { annotation });
+  expect(uncheckedBoxes(scan())).toHaveLength(15);
+  expect(blockNow(true)).toBe('unchecked');
+  expect(blockNow(false)).toBeNull();
+  expect(blockNow()).toBeNull();
+  expect(blockWords('unchecked', scan())).toBe('Check every box first: 15 left.');
+  expect(screen.getByText('Check every box first: 15 left')).toBeTruthy(); // the card's title, without the full stop
+  expect(screen.queryByText('Ready to save')).toBeNull();
+  // what the paper itself needs comes first
+  await act(async () => setEdit(id, 'period_to', ''));
+  expect(blockNow(true)).toBe('no_period');
+  await act(async () => setEdit(id, 'period_to', '12312025')); // the reading again: no edit, and not checked
+  expect(blockNow(true)).toBe('unchecked');
+
+  // every box checked or corrected but three
+  const left = ['period_from', 'ewt1_tax', 'ewt2_payment'];
+  await act(async () => {
+    setEdit(id, 'ewt1_payment', 'Office supplies and paper');
+    uncheckedBoxes(scan())
+      .filter((box) => !left.includes(box))
+      .forEach((box) => confirmBox(id, box));
+  });
+  expect(screen.getByText('Check every box first: 3 left')).toBeTruthy();
+
+  // Save opens the list of exactly the boxes not checked yet, the one no section shows too
+  await press(screen.getByTestId('save-open'));
+  expect(mockToast).not.toHaveBeenCalled();
+  expect(screen.queryByTestId('save-confirm')).toBeNull();
+  expect(screen.getByText('Check every box first')).toBeTruthy();
+  expect(screen.getAllByTestId(/^fix-/).map((b) => b.props.testID)).toEqual(left.map((box) => `fix-${box}`));
+  expect(screen.getAllByText('Not checked yet')).toHaveLength(3);
+  for (const box of ['ewt2_payment', 'ewt1_tax']) {
+    await press(screen.getByTestId(`fix-${box}`));
+    await press(screen.getByTestId('box-confirm'));
+  }
+  expect(screen.getAllByText('Checked')).toHaveLength(2);
+  expect(screen.getAllByTestId(/^fix-/)).toHaveLength(3); // the list stays as it opened
+  expect(screen.getByText('Check every box first: 1 left')).toBeTruthy();
+  expect(blockWords('unchecked', scan())).toBe('Check every box first: 1 left.');
+  await press(screen.getByLabelText('Close'));
+
+  // the Recent row says it as the card does
+  await render(<RecentRow scan={scan()} onPress={() => {}} />);
+  expect(screen.getByText(/^Check every box first: 1 left · 0 ms · \d{1,2}:\d{2} (AM|PM)$/)).toBeTruthy();
+
+  // once every box is checked, Save opens the save sheet
+  await act(async () => confirmBox(id, 'period_from'));
+  expect(blockNow(true)).toBeNull();
+  mockParams = { id };
+  await render(<Result />);
+  expect(screen.getByText('Ready to save')).toBeTruthy();
+  await press(screen.getByTestId('save-open'));
+  expect(screen.getByTestId('save-confirm')).toBeTruthy();
+  expect(screen.getByLabelText('Client code')).toBeTruthy();
 });
 
 test('terms', async () => {

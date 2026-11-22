@@ -8,7 +8,8 @@ import { SAMPLES, sampleUri } from './samples';
 import { addScan, type ScanSource, type StoredScan } from './scans';
 import { toast } from './toast';
 
-type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean };
+// testImage: a photo from the camera's test hook (development builds), kept marked so it never becomes training data
+type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean; testImage?: boolean };
 
 const codeOf = (e: unknown) => (e as { code?: string } | null)?.code ?? '';
 
@@ -95,7 +96,7 @@ export function useScanFlow() {
   /** Reads it, keeps it in Recent scans and opens its result. A failure is told in its own words. */
   async function readAndOpen(
     read: () => Promise<ScanResult>,
-    scan: Pick<StoredScan, 'label' | 'source' | 'sampleId'>,
+    scan: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'testImage'>,
     replace: boolean | undefined,
     failed: (e: unknown) => string,
   ): Promise<void> {
@@ -127,7 +128,7 @@ export function useScanFlow() {
       const photo = uri;
       await readAndOpen(
         () => scanPhoto(photo, { deletePhoto: opts.deletePhoto ?? false }),
-        { label, source, sampleId: opts.sampleId },
+        { label, source, sampleId: opts.sampleId, testImage: opts.testImage },
         opts.replace,
         photoFailed,
       );

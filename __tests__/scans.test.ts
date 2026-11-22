@@ -6,6 +6,18 @@ import { memoryFs } from '../test-utils/memoryFs';
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 
 const flush = () => new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
+/** A scan as it starts, before the person does anything to it. */
+const UNTOUCHED = {
+  edits: {},
+  confirmed: [],
+  terms: null,
+  kind: 'sale',
+  party: null,
+  saved: null,
+  annotated: false,
+  tag: null,
+  testImage: false,
+};
 
 function result(dir: string): ScanResult {
   return parseScanResult(coreJson('inv_0007', dir));
@@ -32,7 +44,7 @@ test('edits, checked boxes, terms, kind and party are kept, and come back after 
   const listener = jest.fn();
   first.subscribeRecent(listener);
   const id = first.addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a') });
-  expect(first.getScan(id)).toMatchObject({ edits: {}, confirmed: [], terms: null, kind: 'sale', party: null, saved: null });
+  expect(first.getScan(id)).toMatchObject(UNTOUCHED);
   first.setEdit(id, 'date', ' 10/21/2026 ');
   first.confirmBox(id, 'invoice_no');
   first.confirmBox(id, 'invoice_no'); // already checked: no change
@@ -79,7 +91,7 @@ test('a scan saved by milestone 2 loads with no edits or checked boxes, as a sal
   memoryFs.dirs.add('file:///s/old');
   const { loadRecent, getScan } = require('../lib/scans');
   await loadRecent();
-  expect(getScan('old-1')).toMatchObject({ edits: {}, confirmed: [], terms: null, kind: 'sale', party: null, saved: null });
+  expect(getScan('old-1')).toMatchObject(UNTOUCHED);
 });
 
 test('a scan kept before PDFs loads as a photo', async () => {

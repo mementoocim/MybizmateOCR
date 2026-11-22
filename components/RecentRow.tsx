@@ -7,7 +7,7 @@ import { formatClock, formatMs } from '../lib/format';
 import { lists, subscribeLists } from '../lib/lists';
 import { isInvoice, saleOf } from '../lib/sale';
 import type { StoredScan } from '../lib/scans';
-import { settings, subscribeSettings } from '../lib/settings';
+import { annotationOn, settings, subscribeSettings } from '../lib/settings';
 import { bold, colors } from '../lib/theme';
 import { CheckCircle, ChevronRight, ErrorCircle } from './icons';
 
@@ -21,14 +21,17 @@ export function RecentRow({ scan, onPress }: { scan: StoredScan; onPress: () => 
   const r = scan.result;
   const theLists = useSyncExternalStore(subscribeLists, lists);
   const theSettings = useSyncExternalStore(subscribeSettings, settings);
+  const annotation = useSyncExternalStore(subscribeSettings, annotationOn);
   const certificate = is2307(scan);
   const checked = useMemo(
     () =>
       isInvoice(scan) ? saleOf(scan, theLists, theSettings) : is2307(scan) ? certOf(scan, theLists, theSettings) : null,
     [scan, theLists, theSettings],
   );
-  // as the scan's card says it (a 2307 with no payments read, say), without the sentence's full stop
-  const blocked = checked === null ? null : blockWords(saveBlock(scan, checked))?.replace(/\.$/, '') ?? null;
+  // as the scan's card says it (a 2307 with no payments read, or boxes not checked yet in annotation mode, say),
+  // without the sentence's full stop
+  const blocked =
+    checked === null ? null : (blockWords(saveBlock(scan, checked, { annotation }), scan)?.replace(/\.$/, '') ?? null);
   const status =
     checked === null
       ? 'Form not found'

@@ -2,9 +2,13 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
 
 import Result from '../app/result';
-import { addParty, clearParties } from '../lib/lists';
-import { addScan, setEdit, type StoredScan } from '../lib/scans';
-import { settings, updateSettings } from '../lib/settings';
+import { saveBlock } from '../lib/exportRows';
+import { addParty, clearParties, lists } from '../lib/lists';
+import { saleOf } from '../lib/sale';
+import { addScan, confirmBox, getScan, setEdit, type StoredScan } from '../lib/scans';
+import { annotationOn, settings, updateSettings } from '../lib/settings';
+import { uncheckedBoxes } from '../lib/training/boxes';
+import { cleanCode } from '../lib/training/codes';
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
@@ -13,6 +17,7 @@ import { PACK_LISTS } from '../test-utils/packLists';
 import { pinToday } from '../test-utils/today';
 
 let mockParams: { id?: string; from?: string } = {};
+let mockTeam = false;
 const mockToast = jest.fn();
 
 jest.mock('expo-router', () => ({
@@ -30,6 +35,11 @@ jest.mock('../modules/scanner', () => ({
   scanPhoto: jest.fn(),
 }));
 jest.mock('../lib/toast', () => ({ toast: (m: string) => mockToast(m) }));
+jest.mock('../lib/build', () => ({
+  get TEAM_BUILD() {
+    return mockTeam;
+  },
+}));
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
   requestCameraPermissionsAsync: jest.fn(),
@@ -52,6 +62,10 @@ async function show(
 
 const press = (el: Parameters<typeof fireEvent.press>[0]) => act(async () => fireEvent.press(el));
 const type = (label: string, text: string) => act(async () => fireEvent.changeText(screen.getByLabelText(label), text));
+/** Checks every box that can become training data, as "Looks right" does. */
+const checkEveryBox = (id: string) =>
+  act(async () => uncheckedBoxes(getScan(id)!).forEach((box) => confirmBox(id, box)));
+const keptScan = (id: string) => JSON.parse(memoryFs.files.get(`file:///docs/saved/${id}/scan.json`) as string);
 
 beforeAll(() => pinToday(new Date(2026, 10, 18, 10, 0)));
 afterAll(() => jest.useRealTimers());
@@ -59,7 +73,17 @@ afterAll(() => jest.useRealTimers());
 beforeEach(async () => {
   jest.clearAllMocks();
   memoryFs.reset();
-  await updateSettings({ vatRegistered: null, revenueAccount: '', expenseAccount: '', atc: '', offsetAccount: '' });
+  mockTeam = false;
+  await updateSettings({
+    vatRegistered: null,
+    revenueAccount: '',
+    expenseAccount: '',
+    atc: '',
+    offsetAccount: '',
+    annotation: false,
+    clientCode: '',
+    writerCode: '',
+  });
 });
 
 test('the first sale asks whether the business is VAT-registered', async () => {
@@ -243,4 +267,106 @@ test('a 2307 needs its payments first, and its card says so', async () => {
   await press(screen.getByTestId('save-open'));
   expect(mockToast).toHaveBeenCalledWith('No income payments were read.');
   expect(screen.queryByLabelText('Offset account')).toBeNull();
+});
+
+// Annotation mode (Settings › Team tools, team builds only): each scan is saved with a source tag, a client's and a
+// writer's code.
+
+test('codes are codes', () => {
+  expect(cleanCode('c014')).toBe('C014');
+  expect(cleanCode('W-03')).toBe('W-03');
+  expect(cleanCode(' w03 ')).toBe('W03');
+  expect(cleanCode('C01234567890')).toBe('C01234567890'); // 12 characters
+  // a name, nothing, a space inside, 13 characters, a letter outside A-Z, no digit at all
+  for (const text of ['Juan', '', 'C 014', 'C012345678901', 'ñ1', 'WC-']) expect(cleanCode(text)).toBeNull();
+});
+
+test('the save sheet asks for the codes', async () => {
+  mockTeam = true;
+  await updateSettings({ annotation: true });
+  const first = await show('inv_0007');
+  await checkEveryBox(first);
+  await press(screen.getByTestId('save-open'));
+  await press(screen.getByText('Not VAT-registered'));
+  await type('Revenue account', '4010');
+  expect(screen.getByLabelText('Client code').props.value).toBe(''); // none kept yet
+  expect(screen.getByLabelText('Writer code').props.value).toBe('');
+  expect(screen.getByText('Codes only, like C014 and W03. Never a name.')).toBeTruthy();
+  expect(screen.getByText('Use letters, digits and -, with at least one digit.')).toBeTruthy();
+  expect(screen.getByTestId('save-confirm')).toBeDisabled();
+  await type('Client code', 'Juan');
+  expect(screen.getByTestId('save-confirm')).toBeDisabled();
+  await type('Client code', 'c014');
+  expect(screen.getByLabelText('Client code').props.value).toBe('C014');
+  expect(screen.getByTestId('save-confirm')).toBeDisabled(); // the writer's is still missing
+  await type('Writer code', 'W 03');
+  expect(screen.getByTestId('save-confirm')).toBeDisabled();
+  await type('Writer code', 'w-03');
+  expect(screen.getByTestId('save-confirm')).toBeEnabled();
+  await press(screen.getByTestId('save-confirm'));
+  expect(mockToast).toHaveBeenCalledWith('Saved. Export it from Saved invoices.');
+  const tag = { client: 'C014', writer: 'W-03' };
+  expect(getScan(first)).toMatchObject({ annotated: true, tag });
+  expect(keptScan(first)).toMatchObject({ annotated: true, tag });
+  expect(settings()).toMatchObject({ clientCode: 'C014', writerCode: 'W-03' });
+
+  // the next scan starts from the codes kept in Settings
+  const next = await show('inv_0007');
+  await checkEveryBox(next);
+  await press(screen.getByTestId('save-open'));
+  expect(screen.getByLabelText('Client code').props.value).toBe('C014');
+  expect(screen.getByLabelText('Writer code').props.value).toBe('W-03');
+  expect(screen.getByTestId('save-confirm')).toBeEnabled();
+  await type('Client code', 'C015');
+  await press(screen.getByTestId('save-confirm'));
+  expect(getScan(next)).toMatchObject({ annotated: true, tag: { client: 'C015', writer: 'W-03' } });
+  expect(settings()).toMatchObject({ clientCode: 'C015', writerCode: 'W-03' });
+
+  // a saved scan's own codes stay its own when it's saved again
+  mockParams = { id: first };
+  await render(<Result />);
+  await press(screen.getByTestId('save-open'));
+  expect(screen.getByLabelText('Client code').props.value).toBe('C014');
+  await press(screen.getByTestId('save-confirm'));
+  expect(getScan(first)).toMatchObject({ annotated: true, tag });
+
+  // a 2307 is asked for them too (a text PDF's boxes are its text's, so none waits to be checked)
+  const cert = await show('bir2307_text_1', { source: 'pdf' });
+  await press(screen.getByTestId('save-open'));
+  expect(screen.getByLabelText('Client code').props.value).toBe('C014');
+  await type('Offset account', '1205');
+  await type('Client code', 'Maria');
+  expect(screen.getByTestId('save-confirm')).toBeDisabled();
+  await type('Client code', 'C016');
+  await press(screen.getByTestId('save-confirm'));
+  expect(getScan(cert)).toMatchObject({ annotated: true, tag: { client: 'C016', writer: 'W-03' } });
+  expect(keptScan(cert)).toMatchObject({ annotated: true, tag: { client: 'C016', writer: 'W-03' } });
+});
+
+test('without annotation mode nothing changes', async () => {
+  await updateSettings({ clientCode: 'C014', writerCode: 'W03' });
+  // annotation mode is the setting in a team build: a phone moved to a client build keeps the setting, and only that
+  for (const [team, annotation] of [
+    [true, false],
+    [false, true],
+  ] as const) {
+    mockTeam = team;
+    await act(async () => updateSettings({ annotation }));
+    const id = await show('inv_0007'); // none of its boxes checked
+    const scan = getScan(id)!;
+    expect(uncheckedBoxes(scan).length).toBeGreaterThan(0);
+    expect(saveBlock(scan, saleOf(scan, lists(), settings()), { annotation: annotationOn() })).toBeNull();
+    expect(screen.getByText('Ready to post')).toBeTruthy();
+    await press(screen.getByTestId('save-open'));
+    expect(screen.getByText('Save as a sale')).toBeTruthy();
+    expect(screen.queryByLabelText('Client code')).toBeNull();
+    expect(screen.queryByLabelText('Writer code')).toBeNull();
+    expect(screen.queryByText('Codes only, like C014 and W03. Never a name.')).toBeNull();
+    if (settings().vatRegistered === null) await press(screen.getByText('Not VAT-registered'));
+    await type('Revenue account', '4010');
+    await press(screen.getByTestId('save-confirm'));
+    expect(getScan(id)).toMatchObject({ annotated: false, tag: null });
+    expect(keptScan(id)).toMatchObject({ annotated: false, tag: null });
+  }
+  expect(settings()).toMatchObject({ clientCode: 'C014', writerCode: 'W03' });
 });
