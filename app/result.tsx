@@ -14,7 +14,7 @@ import {
 import { BottomBar } from '../components/BottomBar';
 import { BoxSheet } from '../components/BoxSheet';
 import { Button, type ButtonProps } from '../components/Buttons';
-import { CertificateSections } from '../components/CertificateSections';
+import { certSections } from '../components/CertificateSections';
 import { Header } from '../components/Header';
 import { IconButton } from '../components/IconButton';
 import { More } from '../components/icons';
@@ -51,9 +51,9 @@ import type { ScanResult } from '../modules/scanner';
 
 // Design B §9.5: the Scan screen. The header names the form, with the photo behind its thumbnail (and ⋮ for a saved
 // scan); the status strip is pinned under it, with a flag chip per thing to check. The scroll holds the saved line, the
-// kind switch, the invoice as a ledger (a 2307's sections until Task 12) and the footnote; the bottom bar holds Retake
-// and the save. Every row opens what the camera saw in its boxes, each box fixable, and the checks run again. When
-// the form wasn't found, the photo and how to retake it take the strip's and the ledger's place.
+// kind switch (invoices only), the invoice or the 2307 as a ledger, and the footnote; the bottom bar holds Retake and
+// the save. Every row opens what the camera saw in its boxes, each box fixable, and the checks run again. When the
+// form wasn't found, the photo and how to retake it take the strip's and the ledger's place.
 
 const KINDS = [
   { value: 'sale', label: 'Sale' },
@@ -103,7 +103,11 @@ export default function Result() {
   const stripRef = useRef<ViewInstance>(null);
   const moreRef = useRef<ViewInstance>(null);
   const [rowRefs] = useState(() => new Map<string, ViewInstance | null>());
-  const sections = useMemo(() => (scan && sale ? invoiceSections(scan, sale) : []), [scan, sale]);
+  // the invoice's rows or the 2307's, which the ledger draws and the flag chips find by key
+  const sections = useMemo(
+    () => (scan && sale ? invoiceSections(scan, sale) : scan && cert ? certSections(scan, cert) : []),
+    [scan, sale, cert],
+  );
   // Each sheet stays mounted with what it last showed, so it can slide away; its key changes at each opening.
   const boxes = useLingering(open?.kind === 'boxes' ? open : null);
   const terms = useLingering(open?.kind === 'terms' ? open : null);
@@ -274,25 +278,13 @@ export default function Result() {
                 <Text style={[type.label, styles.mute]}>{KIND_CAPTION[scan.kind === 'purchase' ? 'purchase' : 'sale']}</Text>
               </View>
             ) : null}
-            {sale ? (
-              <Ledger
-                sections={sections}
-                rowRefs={rowRefs}
-                onOpen={(row, view) => {
-                  if (row.open) openSheet(row.open, view);
-                }}
-              />
-            ) : null}
-            {cert ? (
-              // until Task 12 makes the 2307 a ledger too
-              <View style={styles.cert}>
-                <CertificateSections
-                  scan={scan}
-                  view={cert}
-                  openBoxes={(boxTitle, names) => openSheet({ kind: 'boxes', title: boxTitle, boxes: names }, null)}
-                />
-              </View>
-            ) : null}
+            <Ledger
+              sections={sections}
+              rowRefs={rowRefs}
+              onOpen={(row, view) => {
+                if (row.open) openSheet(row.open, view);
+              }}
+            />
           </>
         ) : (
           <NotFound result={r} onPhoto={() => setViewing(true)} />
@@ -516,7 +508,6 @@ const styles = StyleSheet.create({
   unchangedLine: { backgroundColor: colors.sand },
   changedLine: { backgroundColor: colors.warningTint },
   kind: { padding: space.l, gap: space.s },
-  cert: { paddingHorizontal: space.l, paddingTop: space.l },
   notFound: { padding: space.l, gap: space.m },
   photo: { width: '100%', height: PHOTO_HEIGHT, backgroundColor: colors.crop, borderRadius: radius.field },
   numbered: { flexDirection: 'row', gap: space.m },
