@@ -105,7 +105,7 @@ test('the first sale asks whether the business is VAT-registered', async () => {
   expect(screen.getByText('Your business is')).toBeTruthy();
   await press(screen.getByText('Not VAT-registered'));
   expect(settings().vatRegistered).toBe(false);
-  expect(screen.getByRole('button', { name: 'Non-VAT', selected: true })).toBeTruthy();
+  expect(screen.getByRole('radio', { name: 'Non-VAT', checked: true })).toBeTruthy();
   expect(screen.queryByText('Your business is')).toBeNull();
 });
 
@@ -120,7 +120,7 @@ test('Save stays off until the account and the terms are set', async () => {
   expect(screen.getByTestId('save-confirm')).toBeDisabled();
   await type('Revenue account', '4010');
   expect(screen.getByTestId('save-confirm')).toBeDisabled();
-  await press(screen.getByRole('button', { name: 'Cash' }));
+  await press(screen.getByRole('radio', { name: 'Cash' }));
   expect(screen.getByTestId('save-confirm')).toBeEnabled();
 });
 

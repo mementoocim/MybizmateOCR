@@ -149,7 +149,7 @@ export default function ListsScreen() {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Segmented options={options} value={tab} onChange={setTab} />
+            <Segmented label="List" options={options} value={tab} onChange={setTab} />
             <Text style={styles.intro}>{INTRO[tab]}</Text>
             <OutlinedButton label="Import CSV" onPress={() => void importCsv()} />
             <View style={styles.columnsButton}>

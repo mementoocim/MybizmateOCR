@@ -2,7 +2,7 @@ import { type Href, useRouter } from 'expo-router';
 import { useState, useSyncExternalStore } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
-import { Chips } from '../components/Chips';
+import { ChoiceChips } from '../components/ChoiceChips';
 import { ChevronRight } from '../components/icons';
 import { VAT_STATUS } from '../components/SaveSheet';
 import { TextField } from '../components/TextField';
@@ -28,7 +28,7 @@ export default function SettingsScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Text style={sectionLabel}>EXPORTS TO MYBIZMATE</Text>
-      <Chips
+      <ChoiceChips
         label="Your business is"
         options={VAT_STATUS}
         value={s.vatRegistered === null ? null : s.vatRegistered ? 'yes' : 'no'}

@@ -36,7 +36,7 @@ test('the settings show what the phone keeps', async () => {
   await render(<SettingsScreen />);
   expect(screen.getByText('EXPORTS TO MYBIZMATE')).toBeTruthy();
   expect(screen.getByLabelText('Revenue account for sales').props.value).toBe('4010');
-  expect(screen.getByRole('button', { name: 'VAT-registered', selected: true })).toBeTruthy();
+  expect(screen.getByRole('radio', { name: 'VAT-registered', checked: true })).toBeTruthy();
   expect(
     screen.getByText(
       "These fill in what MyBizMate's import needs that isn't on the paper. You can change them on each invoice when you save it.",

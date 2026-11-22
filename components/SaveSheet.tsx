@@ -12,7 +12,7 @@ import { bold, colors } from '../lib/theme';
 import { toast } from '../lib/toast';
 import { cleanTag } from '../lib/training/codes';
 import { PrimaryButton, TextButton } from './Buttons';
-import { Chips } from './Chips';
+import { ChoiceChips } from './ChoiceChips';
 import { Sheet } from './Sheet';
 import { TextField } from './TextField';
 
@@ -100,21 +100,21 @@ export function SaveSheet({
         {sale.discount !== null && <Line label="Discount" value={peso(sale.discount)} />}
       </View>
       {askVat && (
-        <Chips
+        <ChoiceChips
           label="Your business is"
           options={VAT_STATUS}
           value={null}
           onChange={(v) => void updateSettings({ vatRegistered: v === 'yes' })}
         />
       )}
-      <Chips label="Tax type" options={TAX_TYPES} value={taxType} onChange={setChosenType} />
+      <ChoiceChips label="Tax type" options={TAX_TYPES} value={taxType} onChange={setChosenType} />
       <TextField
         label={isSale ? 'Revenue account' : 'Expense account'}
         placeholder="Code or name, as in MyBizMate"
         value={account}
         onChangeText={setAccount}
       />
-      <Chips label="Terms" options={TERMS} value={terms} onChange={setTerms} />
+      <ChoiceChips label="Terms" options={TERMS} value={terms} onChange={setTerms} />
       {sale.withholding !== null && (
         <>
           <TextField

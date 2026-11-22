@@ -16,7 +16,7 @@ import type { Kind } from '../lib/scans';
 import { shareThenAsk, type Wording } from '../lib/share';
 import { colors } from '../lib/theme';
 import { PrimaryButton, TextButton } from './Buttons';
-import { Chips } from './Chips';
+import { ChoiceChips } from './ChoiceChips';
 import { Sheet } from './Sheet';
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -84,7 +84,7 @@ function InvoicesExport({ visible, kind, onClose }: { visible: boolean; kind: Ki
       title={words.title}
       subtitle={`A file in MyBizMate's ${words.format} import format, to import at mybizmate.io.`}
       onClose={onClose}>
-      <Chips label="Which ones" options={RANGES} value={range} onChange={setRange} />
+      <ChoiceChips label="Which ones" options={RANGES} value={range} onChange={setRange} />
       <Text style={styles.summary}>
         {rows.length === 0
           ? 'Nothing to export for this choice.'
@@ -128,7 +128,7 @@ function PartiesExport({ visible, onClose }: { visible: boolean; onClose: () => 
       title="Export new customers and suppliers"
       subtitle="A file in MyBizMate's Parties import format, with the customers and suppliers you added from scans."
       onClose={onClose}>
-      <Chips label="Which ones" options={PARTY_RANGES} value={range} onChange={setRange} />
+      <ChoiceChips label="Which ones" options={PARTY_RANGES} value={range} onChange={setRange} />
       <Text style={styles.summary}>
         {parties.length === 0
           ? 'Nothing to export for this choice.'

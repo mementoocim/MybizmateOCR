@@ -260,7 +260,7 @@ test('Export 2307s', async () => {
   await press(screen.getByText('Export 2307s'));
   expect(screen.getByText("A file in MyBizMate's 2307-CWT import format, to import at mybizmate.io.")).toBeTruthy();
   for (const range of ['Not exported yet', 'This month', 'Last month', 'All']) {
-    expect(screen.getByRole('button', { name: range })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: range })).toBeTruthy();
   }
   expect(screen.getByText('1 2307 · tax ₱57,400.54')).toBeTruthy();
   expect(screen.getByText('Check that these are in MyBizMate before you import: Castillo Eatery.')).toBeTruthy();

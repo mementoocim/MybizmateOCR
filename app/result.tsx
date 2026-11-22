@@ -281,6 +281,7 @@ function SaleSections({ scan, sale, open }: { scan: StoredScan; sale: SaleView; 
       <Text style={sectionLabel}>THIS INVOICE IS</Text>
       <View style={styles.kind}>
         <Segmented
+          label="This invoice is"
           options={KINDS}
           value={scan.kind}
           // the party chosen for one is never the other's: a sale's customer didn't issue the invoice

@@ -1,37 +1,88 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { bold, colors } from '../lib/theme';
+import { colors, radius, space, touch, type } from '../lib/theme';
+import { Tap } from './Tap';
 
-/** A choice of a few options side by side, the chosen one in coral (the scan view's toggle). */
+// Design B §5.6 and §7: a choice of a few options side by side (the kind switch, the lists' tabs, the photo viewer's
+// views). TalkBack hears a radio group named by `label`, then each option as a radio button, checked or not. An
+// outline border holds the options, and the chosen one is filled ink with a paper label (§5.1: selection is ink).
+// Options are at least 48 dp tall, and their labels wrap at large text. Dark, on the photo viewer: the chosen one is
+// a cameraText fill with an ink label, and the others are cameraText on the viewer.
+
+const BORDER = 1;
+/** How far inside the outline the selection sits (optical). */
+const INSET = 2;
+/** The selection's corner, concentric with the group's inside its border and inset. */
+const OPTION_RADIUS = radius.field - BORDER - INSET;
+
 export function Segmented<T extends string>({
   options,
   value,
   onChange,
+  label,
+  tone = 'light',
 }: {
   options: readonly { value: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
+  label: string; // the radio group's spoken name
+  tone?: 'light' | 'dark'; // dark: the photo viewer
 }) {
+  const dark = tone === 'dark';
   return (
-    <View style={styles.toggle}>
-      {options.map((o) => (
-        <Pressable
-          key={o.value}
-          accessibilityRole="button"
-          accessibilityState={{ selected: value === o.value }}
-          onPress={() => onChange(o.value)}
-          style={[styles.option, value === o.value && styles.chosen]}>
-          <Text style={[styles.optionText, value === o.value && styles.chosenText]}>{o.label}</Text>
-        </Pressable>
-      ))}
+    <View
+      accessible
+      accessibilityRole="radiogroup"
+      accessibilityLabel={label}
+      style={[styles.group, !dark && styles.light]}>
+      {options.map((o) => {
+        const checked = o.value === value;
+        return (
+          <Tap
+            key={o.value}
+            accessibilityRole="radio"
+            accessibilityLabel={o.label}
+            accessibilityState={{ checked }}
+            onPress={() => onChange(o.value)}
+            ripple={dark ? 'camera' : 'light'}
+            // the options sit edge to edge inside the outline, so the ring goes on the option's own edge
+            focusRing="inside"
+            focusRadius={OPTION_RADIUS}
+            style={[styles.option, checked && (dark ? styles.chosenDark : styles.chosen)]}>
+            <Text style={[type.button, styles.text, { color: LABEL[tone][checked ? 'chosen' : 'other'] }]}>
+              {o.label}
+            </Text>
+          </Tap>
+        );
+      })}
     </View>
   );
 }
 
+const LABEL = {
+  light: { chosen: colors.paper, other: colors.ink },
+  dark: { chosen: colors.ink, other: colors.cameraText },
+} as const;
+
 const styles = StyleSheet.create({
-  toggle: { flexDirection: 'row', backgroundColor: colors.panel, borderRadius: 12, padding: 2, borderWidth: 1, borderColor: colors.line },
-  option: { flex: 1, height: 40, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
-  chosen: { backgroundColor: colors.coralTint },
-  optionText: { fontSize: 14, color: colors.mute },
-  chosenText: { ...bold, color: colors.coralText },
+  group: {
+    flexDirection: 'row',
+    borderWidth: BORDER,
+    borderColor: colors.outline,
+    borderRadius: radius.field,
+    padding: INSET,
+  },
+  light: { backgroundColor: colors.panel },
+  option: {
+    flex: 1,
+    minHeight: touch.target,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.s,
+    paddingVertical: space.xs,
+    borderRadius: OPTION_RADIUS,
+  },
+  chosen: { backgroundColor: colors.ink },
+  chosenDark: { backgroundColor: colors.cameraText },
+  text: { textAlign: 'center' },
 });
