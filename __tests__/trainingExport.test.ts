@@ -233,9 +233,11 @@ test("a training export's mark is its own", async () => {
   });
   // and they don't take a scan out of the training export
   expect(ids(await m.exp.pendingTraining())).toEqual([cert]);
-  // saved again, in annotation mode, it keeps both marks
+  // saved again with the mode off, it keeps both marks; it's no longer annotated, so it isn't training data either way
+  await m.settings.updateSettings({ annotation: false });
   m.scans.setEdit(sale, 'item1_qty', '3');
-  await m.saved.saveScan(sale, DETAILS, TAG);
+  await m.saved.saveScan(sale, DETAILS);
+  expect(m.scans.getScan(sale)).toMatchObject({ annotated: false, tag: null });
   expect(m.saved.savedSummary(sale)).toMatchObject({
     trainingExportedAt: AT.toISOString(),
     exportedAt: SALES_DAY.toISOString(),
@@ -243,14 +245,51 @@ test("a training export's mark is its own", async () => {
   expect(ids(await m.exp.pendingTraining())).toEqual([cert]);
 
   // a summary kept before milestone 4 has no training mark: it loads as not sent
+  await m.saved.markTrainingExported([cert], AT);
+  expect(await m.exp.pendingTraining()).toEqual([]);
   const index = JSON.parse(memoryFs.files.get(INDEX) as string);
   for (const s of index) delete s.trainingExportedAt;
   memoryFs.files.set(INDEX, JSON.stringify(index));
   jest.resetModules();
   const again = load();
   await again.saved.loadSaved();
-  expect(again.saved.savedSummary(sale)).toMatchObject({ trainingExportedAt: null, exportedAt: SALES_DAY.toISOString() });
-  expect(sorted(ids(await again.exp.pendingTraining()))).toEqual(sorted([sale, cert]));
+  for (const id of [sale, cert]) {
+    expect(again.saved.savedSummary(id)).toMatchObject({ trainingExportedAt: null, exportedAt: SALES_DAY.toISOString() });
+  }
+  expect(ids(await again.exp.pendingTraining())).toEqual([cert]);
+});
+
+test('a save in annotation mode sends the scan again, with its labels as now checked', async () => {
+  const first = await annotationMode();
+  const sale = await saveAnnotated(first, 'inv_0051');
+  const cert = await saveAnnotated(first, 'bir2307_photo_0');
+  const SALES_DAY = new Date(2026, 10, 19, 9, 0);
+  await first.saved.markTrainingExported([sale, cert], AT);
+  await first.saved.markExported([sale], SALES_DAY);
+  expect(await first.exp.pendingTraining()).toEqual([]);
+
+  // later: the sale opened from Saved invoices, a box corrected, and saved again in annotation mode
+  jest.resetModules();
+  const m = load();
+  await m.settings.loadSettings();
+  await m.install.loadInstall();
+  await m.saved.loadSaved();
+  expect([m.settings.annotationOn(), m.scans.getScan(sale)]).toEqual([true, undefined]);
+  await m.saved.openSaved(sale);
+  m.scans.setEdit(sale, 'item1_qty', '3'); // read 2
+  await m.saved.saveScan(sale, DETAILS, TAG);
+  // its training mark goes, so the next export sends it again; the import file's mark stays
+  expect(m.saved.savedSummary(sale)).toMatchObject({ trainingExportedAt: null, exportedAt: SALES_DAY.toISOString() });
+  const pairs = await pendingPairs(m);
+  expect(pairs.map((p) => p.scan.id)).toEqual([sale]);
+  expect(pairs[0].record.boxes.find((b) => b.name === 'item1_qty')).toMatchObject({
+    reading: '2',
+    label: '3',
+    edited: true,
+    confirmed: true,
+  });
+  // the other scan stays sent
+  expect(m.saved.savedSummary(cert)).toMatchObject({ trainingExportedAt: AT.toISOString() });
 });
 
 test('a missing crop is left out and counted', async () => {

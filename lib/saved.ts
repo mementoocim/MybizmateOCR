@@ -202,8 +202,9 @@ function defaultsFrom(kind: Kind, details: SaveDetails): Partial<Settings> {
 /**
  * Saves a scan as its kind's import rows (again, after changes): an invoice with its tax type, account, terms and ATC,
  * a 2307 with its offset account. In annotation mode it's saved annotated, with its source tag, whose codes become the
- * next save's; a save outside annotation mode isn't annotated, and has no tag. Throws a SaveBlock's name when it can't
- * be, and no_tag when annotation mode's two codes aren't both codes.
+ * next save's, and the next training export sends it (again) with its labels as now checked; a save outside annotation
+ * mode isn't annotated, has no tag, and keeps its marks. Throws a SaveBlock's name when it can't be, and no_tag when
+ * annotation mode's two codes aren't both codes.
  */
 export async function saveScan(id: string, details: SaveDetails, tag: SourceTag | null = null): Promise<void> {
   const before = getScan(id);
@@ -217,7 +218,8 @@ export async function saveScan(id: string, details: SaveDetails, tag: SourceTag 
   const saved = { savedAt: new Date().toISOString(), details };
   const scan = updateScan(id, { result, saved, annotated: annotation, tag: codes })!;
   await writeJson(`saved/${id}/scan.json`, { ...scan, at: scan.at.toISOString() });
-  const summary = summaryOf(scan, savedSummary(id));
+  const last = savedSummary(id); // its marks are kept, apart from a training export's after an annotated save
+  const summary = summaryOf(scan, last && annotation ? { ...last, trainingExportedAt: null } : last);
   summaries = newestFirst([summary, ...summaries.filter((s) => s.id !== id)]);
   changed();
   await writeJson(INDEX, summaries);
