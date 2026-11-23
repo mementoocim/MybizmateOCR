@@ -1,15 +1,15 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
-import { AccessibilityInfo, Animated, StyleSheet } from 'react-native';
+import { Animated, StyleSheet } from 'react-native';
 
 import { BrandSplash } from '../components/BrandSplash';
 import { colors, type } from '../lib/theme';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §9.1 and §12 A11: the brand while the scanner gets ready (the model, what the phone keeps, a warm-up read),
-// for at least half a second so it doesn't flash, then a 300 ms fade. The logo sits where the phone's own splash drew
-// it. A start that fails says so in plain words, as a polite live region, with Try again: it runs the start again,
-// once per tap (Review Focus 3). The raw message shows in team builds only. Animations in jest end at once
-// (test-utils/jestSetup.ts), so fake timers carry the floor and the fade.
+// for at least half a second so it doesn't flash, then a 300 ms fade; nothing else moves (§5.5). The logo sits where
+// the phone's own splash drew it. A start that fails says so in plain words, each a polite live region, with Try again
+// outside them: it runs the start again, once per tap (Review Focus 3). The raw message shows in team builds only.
+// Animations in jest end at once (test-utils/jestSetup.ts), so fake timers carry the floor and the fade.
 
 const mockPreload = jest.fn();
 const mockScan = jest.fn();
@@ -42,7 +42,9 @@ const kids = (el: Instance) => el.children.filter((child): child is Instance => 
 const press = (el: Instance) => act(async () => fireEvent.press(el));
 const button = (name: string) => screen.getByRole('button', { name });
 const splash = () => screen.getByTestId('splash');
-const words = () => screen.getByTestId('splash-words');
+/** The live region a node is in: itself or the nearest view above it that is one; null when it's in none. */
+const liveRegionOf = (node: Instance | null): Instance | null =>
+  node === null || (node.props.accessibilityLiveRegion ?? 'none') !== 'none' ? node : liveRegionOf(node.parent);
 
 beforeEach(() => {
   jest.useFakeTimers();
@@ -228,38 +230,30 @@ test('the failure is announced', async () => {
   mockPreload.mockRejectedValue(new Error('boom'));
   await render(<BrandSplash onReady={jest.fn()} />);
   await settle();
-  // A polite live region, so TalkBack reads it out as it shows (whether it does for a region that mounts already
-  // holding its words is Task 26's device check: ruling T8-2).
-  const block = screen.getByTestId('splash-failure');
-  expect(block).toHaveProp('accessibilityLiveRegion', 'polite');
-  expect(within(block).getByRole('header', { name: HEADLINE })).toBeOnTheScreen();
-  expect(within(block).getByText(AGAIN)).toBeOnTheScreen();
-  expect(within(block).getByText('boom')).toBeOnTheScreen();
-  // a region, not one stop: Try again stays a button of its own
-  expect(block.props.accessible).toBeFalsy();
-  expect(within(block).getByRole('button', { name: 'Try again' })).toBeEnabled();
+  // Its words are polite live regions, so TalkBack reads them out as they show (whether it does for one that mounts
+  // already holding its words is Task 26's device check: ruling T8-2).
+  for (const words of [screen.getByRole('header', { name: HEADLINE }), screen.getByText(AGAIN), screen.getByText('boom')]) {
+    expect(liveRegionOf(words)).toHaveProp('accessibilityLiveRegion', 'polite');
+  }
 });
 
-test('the words rise in as they fade in; with reduced motion they only fade', async () => {
-  const timing = jest.spyOn(Animated, 'timing').mockReturnValue(still); // every animation holds its first frame
-  const reduceMotion = jest.mocked(AccessibilityInfo.isReduceMotionEnabled);
+test("Try again isn't in the live region, so its spinner doesn't read the failure out again", async () => {
+  mockPreload.mockRejectedValueOnce(new Error('boom')).mockReturnValue(new Promise(() => {})); // the retry runs on
+  await render(<BrandSplash onReady={jest.fn()} />);
+  await settle();
+  expect(liveRegionOf(button('Try again'))).toBeNull();
+  await press(button('Try again'));
+  expect(button('Try again')).toBeBusy(); // its spinner shows
+  expect(liveRegionOf(button('Try again'))).toBeNull();
+  expect(liveRegionOf(screen.getByRole('header', { name: HEADLINE }))).toHaveProp('accessibilityLiveRegion', 'polite');
+});
+
+test('the words under the logo show at once: nothing moves in (design §5.5)', async () => {
+  jest.spyOn(Animated, 'timing').mockReturnValue(still); // every animation holds its first frame
   mockPreload.mockReturnValue(new Promise(() => {}));
   await render(<BrandSplash onReady={jest.fn()} />);
-  await settle(); // the phone answers: motion
-  expect(words()).toHaveStyle({ opacity: 0, transform: [{ translateY: 12 }] });
-  expect(timing).toHaveBeenCalledWith(expect.anything(), { toValue: 1, duration: 450, useNativeDriver: true });
-  await screen.unmount();
-
-  reduceMotion.mockResolvedValue(true); // the phone asks for less motion (every hook hears the same answer)
-  await render(<BrandSplash onReady={jest.fn()} />);
   await settle();
-  expect(words()).toHaveStyle({ opacity: 0 }); // they still fade in
-  expect(StyleSheet.flatten(words().props.style).transform).toBeUndefined(); // with no rise
-  await screen.unmount();
-
-  // and then no longer, so the last answer heard is motion again, as the other tests expect
-  reduceMotion.mockResolvedValue(false);
-  await render(<BrandSplash onReady={jest.fn()} />);
-  await settle();
-  expect(words()).toHaveStyle({ transform: [{ translateY: 12 }] });
+  expect(screen.getByText('mybizmate.io')).toBeVisible();
+  expect(screen.getByText(TAGLINE)).toBeVisible();
 });
+

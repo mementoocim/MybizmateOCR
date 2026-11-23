@@ -4,7 +4,6 @@ import { Animated, Image, ScrollView, StyleSheet, Text, View } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TEAM_BUILD } from '../lib/build';
-import { useReducedMotion } from '../lib/motion';
 import { sampleUri } from '../lib/samples';
 import { loadAppData } from '../lib/startup';
 import { colors, space, type } from '../lib/theme';
@@ -14,16 +13,15 @@ import { LoadingBar } from './ReadingOverlay';
 
 // Design B §9.1 and §12 A11: the brand while the scanner gets ready. The model loads, what the app keeps on the phone
 // comes back (recent scans, saved scans, lists, settings), and one sample is read once so the first real scan is quick.
-// It shows for half a second at least, so it doesn't flash, then fades out and calls onReady. The logo sits where the
-// phone's own splash drew it (104 dp, centred), so it doesn't jump; the words under it fade in, and rise unless the
-// phone asks for less motion. A start that fails says so in plain words, as a polite live region, with Try again: it
-// runs the whole start again, which is safe, as each piece reads its files again and replaces what it holds. The
-// button loads until that start has finished, so a double tap runs once. The raw message shows in team builds only.
+// It shows for half a second at least, so it doesn't flash, then fades out and calls onReady; nothing else on it moves
+// (§5.5). The logo sits where the phone's own splash drew it (104 dp, centred), so it doesn't jump, with the words
+// under it. A start that fails says so in plain words, each a polite live region, with Try again outside them, so its
+// spinner doesn't read them out again. Try again runs the whole start again, which is safe, as each piece reads its
+// files again and replaces what it holds. The button loads until that start has finished, so a double tap runs once.
+// The raw message shows in team builds only.
 
 const MIN_MS = 500; // the splash shows at least this long
 const FADE_MS = 300;
-const WORDS_MS = 450; // the words under the logo fade in
-const RISE = 12; // dp: and rise this far as they do
 const LOGO = 104; // dp: as the phone's splash draws it (app.json's imageWidth)
 const BAR = 140; // dp: the loading bar's width
 const LOADING_BOTTOM = 72; // dp: the loading line's place, above the screen's bottom edge
@@ -32,9 +30,7 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
 
 export function BrandSplash({ onReady }: { onReady: () => void }) {
   const insets = useSafeAreaInsets();
-  const reduced = useReducedMotion();
   const [failure, setFailure] = useState<string | null>(null); // the last start's raw message, when it failed
-  const [wordsIn] = useState(() => new Animated.Value(0));
   const [out] = useState(() => new Animated.Value(1));
   const runs = useRef(0); // a start goes on only while it's the newest one, and the splash is still there
 
@@ -64,30 +60,21 @@ export function BrandSplash({ onReady }: { onReady: () => void }) {
   }, [out, onReady]);
 
   useEffect(() => {
-    const words = Animated.timing(wordsIn, { toValue: 1, duration: WORDS_MS, useNativeDriver: true });
-    words.start();
-    return () => words.stop();
-  }, [wordsIn]);
-
-  useEffect(() => {
     void start();
     return () => {
       runs.current += 1; // gone: the start under way goes no further
     };
   }, [start]);
 
-  const rise = wordsIn.interpolate({ inputRange: [0, 1], outputRange: [RISE, 0] });
   const brand = (
     <>
       <Image testID="splash-logo" source={require('../assets/brand/logo_mark.png')} style={styles.logo} />
-      <Animated.View
-        testID="splash-words"
-        style={[styles.words, { opacity: wordsIn }, !reduced && { transform: [{ translateY: rise }] }]}>
+      <View style={styles.words}>
         <Text style={[type.title, styles.ink, styles.center]}>
           mybizmate<Text style={styles.io}>.io</Text>
         </Text>
         <Text style={[type.body, styles.mute, styles.center]}>Scan invoices. Even offline.</Text>
-      </Animated.View>
+      </View>
     </>
   );
 
@@ -118,19 +105,24 @@ export function BrandSplash({ onReady }: { onReady: () => void }) {
           <View testID="splash-brand" style={styles.brandAbove}>
             {brand}
           </View>
-          <View testID="splash-failure" accessibilityLiveRegion="polite" style={styles.failure}>
+          <View testID="splash-failure" style={styles.failure}>
             <View style={styles.why}>
-              <Text accessibilityRole="header" style={[type.headline, styles.ink, styles.center]}>
+              <Text
+                accessibilityRole="header"
+                accessibilityLiveRegion="polite"
+                style={[type.headline, styles.ink, styles.center]}>
                 {"The scanner couldn't start"}
               </Text>
-              <Text style={[type.body, styles.mute, styles.center]}>
+              <Text accessibilityLiveRegion="polite" style={[type.body, styles.mute, styles.center]}>
                 Try again. If it keeps happening, close the app and open it again.
               </Text>
             </View>
             <Button label="Try again" onPress={start} />
             {/* the scanner's own words, for the team: a client never sees them */}
             {TEAM_BUILD && failure !== '' ? (
-              <Text style={[type.figureSmall, styles.mute, styles.center]}>{failure}</Text>
+              <Text accessibilityLiveRegion="polite" style={[type.figureSmall, styles.mute, styles.center]}>
+                {failure}
+              </Text>
             ) : null}
           </View>
         </ScrollView>
