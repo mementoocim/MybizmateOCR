@@ -129,6 +129,7 @@ test('a customer added on the Scan screen over an empty Saved: the same', async 
   expect(bars()).toHaveLength(2);
   await layout('Export…', SAVED_BAR);
   // the message shows in the sheet (Review Focus 1); once the sheet has gone, in the root host, over the Scan screen
+  expect(within(screen.getByTestId('sheet-panel')).getByText('Added to your customers.')).toBeOnTheScreen();
   await press(screen.getByLabelText('Close'));
   expect(screen.queryByTestId('sheet-panel')).toBeNull();
   expect(within(snackbar()).getByText('Added to your customers.')).toBeOnTheScreen();
