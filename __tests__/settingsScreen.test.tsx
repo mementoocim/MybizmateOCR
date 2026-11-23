@@ -234,8 +234,8 @@ test('the ATC hint warns without blocking, and the value saves as typed', async 
   expect(screen.queryByText(ATC_WARNING)).toBeNull();
 
   // one kept from before in another shape warns when the screen opens
-  await updateSettings({ atc: 'WI01' });
   await screen.unmount();
+  await updateSettings({ atc: 'WI01' });
   await render(<SettingsScreen />);
   expect(atc().props.value).toBe('WI01');
   expect(screen.getByText(ATC_WARNING)).toBeOnTheScreen();
