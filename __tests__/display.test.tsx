@@ -513,3 +513,22 @@ test('EmptyState: a title, its body, and its actions', async () => {
   expect(screen.getByText('No purchases saved')).toBeOnTheScreen();
   expect(screen.queryByRole('button')).toBeNull();
 });
+
+test("EmptyState gives an action's ref its button's pressable", async () => {
+  // How to import opens a sheet, and a closing sheet gives TalkBack focus back to the button that opened it (§7).
+  const howTo = createRef<ViewInstance>();
+  await render(
+    <EmptyState
+      title="No customers yet"
+      actions={[
+        { label: 'Import CSV', onPress: noop },
+        { label: 'How to import', onPress: noop, variant: 'text', ref: howTo },
+      ]}
+    />,
+  );
+  // (jest-expo renders host views as mocks; a ref holds the mock, whose props are the view's)
+  expect((howTo.current as unknown as { props: object }).props).toMatchObject({
+    accessibilityRole: 'button',
+    accessibilityLabel: 'How to import',
+  });
+});
