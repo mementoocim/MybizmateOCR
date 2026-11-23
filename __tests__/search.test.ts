@@ -71,6 +71,27 @@ test('a TIN matches with or without dashes', () => {
   expect(matchesParty(party({ id: 'p3', registeredName: 'Flores Grocery' }), '123')).toBe(false);
 });
 
+test('a code beside a TIN: a query with letters in it looks at the words alone', () => {
+  // Ruling T14-5: branch codes are 00000, so "C0" by its digits would find every party with a TIN. Only digits, spaces
+  // and dashes are a TIN typed.
+  const parties = [
+    party({ id: 'p1', registeredName: 'Peña Hardware', code: 'C017', tin: '123-456-789-00000' }),
+    party({ id: 'p2', registeredName: 'Isabela Wholesale Trading', code: 'S001', tin: '900-000-001-00000' }),
+    party({ id: 'p3', registeredName: 'Flores Grocery', code: 'C020' }), // no TIN
+  ];
+  const found = (query: string) => parties.filter((p) => matchesParty(p, query)).map((p) => p.id);
+  expect(found('C0')).toEqual(['p1', 'p3']);
+  expect(found('c017')).toEqual(['p1']);
+  expect(found('S00')).toEqual(['p2']);
+  expect(found('C0 9')).toEqual([]); // letters, so not the TIN's digits
+  expect(found('pena 123')).toEqual([]);
+  // digits, spaces and dashes alone still look in the TIN, and in the words too
+  expect(found('00000')).toEqual(['p1', 'p2']);
+  expect(found('123-456')).toEqual(['p1']);
+  expect(found(' 900 000 001 ')).toEqual(['p2']);
+  expect(found('020')).toEqual(['p3']); // its code
+});
+
 test('items match by name', () => {
   const coffee: ListItem = { id: 'i1', name: 'Café de Lipa 250g', unit: 'pack', price: 120 };
   for (const query of ['cafe', 'CAFÉ', ' de lipa ', '250G']) {

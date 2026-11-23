@@ -30,11 +30,20 @@ function withoutAccents(s: string): string {
 
 const digitsOf = (s: string) => s.replace(/\D/g, '');
 
-/** Whether what's typed finds a party: in its name, trade name or code, folded; or in its TIN, by the digits. */
+/**
+ * A TIN as it's typed: digits, spaces and dashes only. With a letter in it, a query is words (ruling T14-5): branch
+ * codes are 00000, so "C0" by its digits would find every party with a TIN.
+ */
+const TIN_TYPED = /^[\d\s-]+$/;
+
+/**
+ * Whether what's typed finds a party: in its name, trade name or code, folded; or, when it's typed as a TIN, in its
+ * TIN, by the digits.
+ */
 export function matchesParty(p: Party, query: string): boolean {
   const text = fold(query);
   if (text === '') return true;
-  const digits = digitsOf(query);
+  const digits = TIN_TYPED.test(text) ? digitsOf(text) : '';
   return (
     [partyName(p), p.tradeName, p.code].some((words) => fold(words).includes(text)) ||
     (digits !== '' && digitsOf(p.tin).includes(digits))
