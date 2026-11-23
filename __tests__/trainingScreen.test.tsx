@@ -6,12 +6,14 @@ import { installId } from '../lib/install';
 import { loadSaved, saveScan, savedSummary } from '../lib/saved';
 import { addScan, confirmBox, getScan } from '../lib/scans';
 import { updateSettings } from '../lib/settings';
+import { colors } from '../lib/theme';
 import { uncheckedBoxes } from '../lib/training/boxes';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 import { fixedCrypto } from '../test-utils/fixedCrypto';
 import { memoryFs } from '../test-utils/memoryFs';
 import { pinToday } from '../test-utils/today';
+import { typeStylesOf } from '../test-utils/typeStyles';
 import { unzipStored } from '../test-utils/unzip';
 
 const mockToast = jest.fn();
@@ -38,7 +40,8 @@ jest.mock('expo-crypto', () => require('../test-utils/fixedCrypto').fixedCrypto.
 jest.mock('../lib/build', () => ({ TEAM_BUILD: true }));
 
 // Training data, in a team build: the count of annotated scans not sent yet, the zip shared, and the scans marked once
-// the person says it went where they wanted.
+// the person says it went where they wanted. In the design's tokens and components, with milestone 4's behaviour
+// (§9.11).
 
 const DETAILS = { taxType: 'VAT', account: 'Sales Revenue', terms: 'account', atc: 'WC158' } as const;
 const NOW = new Date(2026, 10, 18, 10, 0);
@@ -98,7 +101,12 @@ test('the training screen exports and marks', async () => {
   await updateSettings({ annotation: false });
   await saveScan(scanned('inv_0007'), DETAILS); // not annotated: not counted
   await render(<TrainingScreen />);
+  expect(screen.getByRole('header', { name: 'Training data' })).toBeOnTheScreen();
   expect(screen.getByText('2 annotated scans not exported yet.')).toBeTruthy();
+  expect(typeStylesOf(screen.getByText('2 annotated scans not exported yet.'))).toEqual(['body']);
+  expect(screen.getByText('2 annotated scans not exported yet.')).toHaveStyle({ color: colors.ink });
+  // the primary button
+  expect(screen.getByRole('button', { name: 'Export training data' })).toHaveStyle({ backgroundColor: colors.brand });
 
   // the ID still can't be made: no file
   fixedCrypto.module.randomUUID.mockImplementationOnce(() => {
@@ -178,6 +186,7 @@ test('each export takes the oldest 50, and marks exactly those', async () => {
   await act(saveNext);
   expect(screen.getByText('51 annotated scans not exported yet.')).toBeTruthy();
   expect(screen.getByText('Each export takes the oldest 50.')).toBeTruthy();
+  expect(typeStylesOf(screen.getByText('Each export takes the oldest 50.'))).toEqual(['body']);
 
   // the zip holds the oldest 50, the question counts them, and only they are marked
   await press(screen.getByRole('button', { name: 'Export training data' }));
@@ -214,4 +223,28 @@ test('a scan with no training record stops the export, and nothing is marked', a
   expect(alertSpy).not.toHaveBeenCalled();
   for (const id of [sale, cert]) expect(savedSummary(id)).toMatchObject({ trainingExportedAt: null });
   expect(screen.getByText('2 annotated scans not exported yet.')).toBeTruthy();
+});
+
+test('Export training data shares once on a double tap', async () => {
+  // Review Focus 3: the second tap comes while the share sheet is still open
+  await saveAnnotated('inv_0051');
+  let closeShareSheet = () => {};
+  mockShare.mockImplementationOnce(() => new Promise<void>((resolve) => (closeShareSheet = resolve)));
+  await render(<TrainingScreen />);
+  // A fast double tap: inside one act() scope, nothing re-renders between the two taps.
+  await act(async () => {
+    await fireEvent.press(screen.getByRole('button', { name: 'Export training data' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Export training data' }));
+  });
+  expect(mockShare).toHaveBeenCalledTimes(1);
+  // it loads while the file is shared, and a tap then does nothing either
+  expect(screen.getByRole('button', { name: 'Export training data' })).toBeBusy();
+  await press(screen.getByRole('button', { name: 'Export training data' }));
+  expect(mockShare).toHaveBeenCalledTimes(1);
+
+  // the question comes once the share sheet has closed, once
+  await act(async () => closeShareSheet());
+  expect(mockShare).toHaveBeenCalledTimes(1);
+  expect(alertSpy).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: 'Export training data' })).not.toBeBusy();
 });
