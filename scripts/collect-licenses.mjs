@@ -10,14 +10,16 @@
 //   LICENSE and every file in its licenses/ (each ABI has the same ones);
 // - for nlohmann/json, which the scanner core compiles in, a text built from the vendored json.hpp itself (ruling
 //   T21-3): the MIT license with json.hpp's copyright, then the notices json.hpp carries for the code it takes from
-//   others, quoted from its comments;
+//   others, quoted from its comments, with the Apache-2.0 text after the Abseil-derived code's (ruling T21-5);
 // - the fonts' OFL texts, beside the fonts in assets/fonts.
 // A source is read as UTF-8, or as Latin-1 where it isn't valid UTF-8 (PDFium's licenses/freetype.txt), so no
-// character turns into U+FFFD. An entry with more than one source has them one after another: each after the first
-// under a "_____" line and its file's name, the way ONNX Runtime's own notices part theirs. Line endings become \n.
+// character turns into U+FFFD; each source read as Latin-1 is named on stdout. An entry with more than one source has
+// them one after another: each after the first under a "_____" line and its file's name, the way ONNX Runtime's own
+// notices part theirs. Line endings become \n.
 // Every source is checked, and every text built, before anything is written: a missing source, or a notice json.hpp
 // no longer has, is named, and the script exits 1.
 // Usage: npm run licenses   (after a dependency changes; then commit what changed in assets/licenses)
+//        node scripts/collect-licenses.mjs [folder]   (writes the texts into that folder instead: a test's scratch one)
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,9 +27,15 @@ import { fileURLToPath } from 'node:url';
 import { PDFIUM_DIR } from './fetch-pdfium.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = path.join(ROOT, 'assets', 'licenses');
+const OUT_NAME = process.argv[2] ?? 'assets/licenses';
+const OUT = process.argv[2] ? path.resolve(process.argv[2]) : path.join(ROOT, 'assets', 'licenses');
+
+/** A file as the messages name it: from the repo's root when it's in the repo, else in full (pdfium's cache). */
+const shown = (file) => (file.startsWith(ROOT + path.sep) ? path.relative(ROOT, file) : file);
 
 const utf8 = new TextDecoder('utf-8', { fatal: true });
+/** The sources read as Latin-1, each named once on stdout: one stray byte sends a whole file there. */
+const latin1 = new Set();
 
 /**
  * A file's text: UTF-8, or Latin-1 where it isn't valid UTF-8 (FreeType's notice, whose © is the one byte A9); with \n
@@ -40,6 +48,8 @@ function textOf(file) {
     text = utf8.decode(bytes);
   } catch {
     text = bytes.toString('latin1');
+    if (!latin1.has(file)) console.log(`collect-licenses: read ${shown(file)} as Latin-1: it isn't UTF-8`);
+    latin1.add(file);
   }
   return text
     .replace(/\r\n?/g, '\n')
@@ -80,8 +90,10 @@ const JSON_HPP = 'modules/scanner/cpp/third_party/nlohmann/json.hpp';
 const MIT_TEXT = 'node_modules/react/LICENSE';
 
 /**
- * The code json.hpp takes from others (ruling T21-3): the holder its SPDX copyright line names, and the comment that
- * says what the code is, from the line holding `from` to the next one holding `to`.
+ * The code json.hpp takes from others (ruling T21-3): the holder its SPDX copyright line names, then its comment's
+ * words on what the code is or where it's from, from the line holding `from` to the next one holding `to`, after any
+ * copyright line of the comment's own (the SPDX line gives it already). Code under another license than the MIT one
+ * above it has that license's text after its notice, so the entry stands alone (ruling T21-5).
  */
 const JSON_NOTICES = [
   { title: 'Hedley', holder: 'Evan Nemerson', from: '/* Hedley - ', to: 'Created by Evan Nemerson' },
@@ -90,11 +102,12 @@ const JSON_NOTICES = [
     holder: 'The Abseil Authors',
     from: 'The following code is taken from https://github.com/abseil/',
     to: 'licensed under the Apache License 2.0.',
+    license: APACHE_2_0,
   },
   {
     title: "Björn Hoehrmann's UTF-8 decoder",
     holder: 'Hoehrmann',
-    from: '@copyright Copyright (c) 2008-2009 Bjoern Hoehrmann',
+    from: '@sa http://bjoern.hoehrmann.de/', // the line under its @copyright line
     to: '@sa http://bjoern.hoehrmann.de/',
   },
   {
@@ -125,7 +138,10 @@ function commentIn(lines, { title, from, to }) {
     .join('\n');
 }
 
-/** nlohmann/json's: the MIT license with json.hpp's own copyright, then each notice json.hpp carries. */
+/**
+ * nlohmann/json's: the MIT license with json.hpp's own copyright, then each notice json.hpp carries, with its license's
+ * text where it has one of its own.
+ */
 function nlohmannJson() {
   const [hppFile, mitFile] = [JSON_HPP, MIT_TEXT].map((file) => path.resolve(ROOT, file));
   const text = () => {
@@ -136,11 +152,13 @@ function nlohmannJson() {
     const license = `MIT License\n\n${copyrightIn(lines, 'Niels Lohmann')}\n\n${mit.slice(permission)}`;
     const notices = JSON_NOTICES.map((notice) => {
       const quoted = [copyrightIn(lines, notice.holder), commentIn(lines, notice)];
+      if (notice.license) quoted.push(notice.license.text());
       return ['_____', `${notice.title}, in json.hpp`, ...quoted].join('\n\n');
     });
     return [license, ...notices].join('\n\n');
   };
-  return [{ files: [hppFile, mitFile], title: 'json.hpp', text }];
+  const licenses = JSON_NOTICES.flatMap((notice) => notice.license?.files ?? []);
+  return [{ files: [hppFile, mitFile, ...licenses], title: 'json.hpp', text }];
 }
 
 // lib/licenses.ts's entries, in its order: each one's file, and where its text comes from.
@@ -166,10 +184,7 @@ const missing = ENTRIES.flatMap(([, sources]) => sources)
   .flatMap(({ files }) => files)
   .filter((file) => !existsSync(file) || !statSync(file).isFile());
 if (missing.length > 0) {
-  for (const file of missing) {
-    const shown = file.startsWith(ROOT + path.sep) ? path.relative(ROOT, file) : file;
-    console.error(`collect-licenses: can't find ${shown}`);
-  }
+  for (const file of missing) console.error(`collect-licenses: can't find ${shown(file)}`);
   if (missing.some((file) => file.startsWith(PDFIUM_DIR))) {
     console.error('collect-licenses: pdfium comes from its cache: run node scripts/fetch-pdfium.mjs first');
   }
@@ -187,4 +202,4 @@ try {
   process.exit(1);
 }
 for (const [slug, text] of texts) writeFileSync(path.join(OUT, `${slug}.txt`), `${text}\n`);
-console.log(`collect-licenses: wrote ${texts.length} files into assets/licenses`);
+console.log(`collect-licenses: wrote ${texts.length} files into ${OUT_NAME}`);

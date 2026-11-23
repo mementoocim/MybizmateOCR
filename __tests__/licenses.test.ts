@@ -13,10 +13,22 @@ const CAMERAX = 'CameraX (AndroidX)';
 const JSON_LIBRARY = 'nlohmann/json';
 /** The scanner module's build.gradle: its native libraries and their versions. */
 const GRADLE: string = fs.readFileSync('modules/scanner/android/build.gradle', 'utf8');
+/** A Gradle dependency the app ships: implementation, api or runtimeOnly, then its "group:artifact:…" in either quotes. */
+const SHIPS = /^\s*(?:implementation|api|runtimeOnly)\s*\(?\s*["']([^"':]+:[^"':]+):/gm;
 /** The C++ the scanner core compiles in, each library in its own folder. */
 const THIRD_PARTY = 'modules/scanner/cpp/third_party';
 /** What a decoder writes for bytes it can't read: U+FFFD. */
 const REPLACEMENT = String.fromCharCode(0xfffd);
+/** The Apache-2.0 license's own text, which the script takes for every entry that needs it (ruling T21-1, T21-5). */
+const APACHE_2_0 = 'assets/licenses/opencv-Apache-2.0.txt';
+
+/** A source's text as the script reads it: \n line endings, from its first line with text, with no space after it. */
+const textOf = (file: string): string =>
+  fs
+    .readFileSync(file, 'utf8')
+    .replace(/\r\n?/g, '\n')
+    .replace(/^(?:[ \t]*\n)+/, '')
+    .trimEnd();
 
 test('every production dependency is covered', () => {
   const uncovered = Object.keys(dependencies).filter((dependency) => coveredBy(dependency) === undefined);
@@ -34,9 +46,26 @@ test('every production dependency is covered', () => {
   expect(coveredBy('left-pad')).toBeUndefined();
   expect(coveredBy('expolorer')).toBeUndefined(); // "expo-*" is the expo- prefix
 
-  // and what the scanner module ships, by its build.gradle's implementation lines (group:artifact); its test-only
-  // libraries don't ship
-  const native = [...GRADLE.matchAll(/^\s*implementation\s+"([^":]+:[^":]+):/gm)].map((match) => match[1]);
+  // and what the scanner module ships, by its build.gradle's dependencies (group:artifact) that reach the app: its
+  // implementation, api and runtimeOnly lines, in either quotes, with or without parentheses. Its test-only and
+  // compile-only libraries don't ship.
+  const shipped = (gradle: string) => [...gradle.matchAll(SHIPS)].map((match) => match[1]);
+  expect(
+    shipped(
+      [
+        'implementation "a.b:c:${v}"',
+        "  implementation 'a.b:d:1.0'",
+        'api "a.b:e:1.0"',
+        "runtimeOnly 'a.b:f:1.0'",
+        'implementation("a.b:g:1.0")',
+        "implementation ('a.b:h:1.0')",
+        'testImplementation "junit:junit:4.13.2"',
+        'compileOnly "a.b:i:1.0"',
+        '// implementation "a.b:j:1.0"',
+      ].join('\n'),
+    ),
+  ).toEqual(['a.b:c', 'a.b:d', 'a.b:e', 'a.b:f', 'a.b:g', 'a.b:h']);
+  const native = shipped(GRADLE);
   expect(native).toEqual(
     expect.arrayContaining(['org.opencv:opencv', 'com.microsoft.onnxruntime:onnxruntime-android', 'androidx.camera:camera-core']),
   );
@@ -79,8 +108,10 @@ test("the design's required notices are there", () => {
   });
 });
 
-test("each version is its source's: package.json, the scanner module's build.gradle, model.json", () => {
-  // package.json's version, without its range's ~ or ^
+test("each version is its source's: the installed package, the scanner module's build.gradle, model.json", () => {
+  // the version installed, which is what ships: node_modules/<package>/package.json's, not package.json's range (whose
+  // floor an update leaves behind)
+  const installed = (pkg: string): string => JSON.parse(fs.readFileSync(`node_modules/${pkg}/package.json`, 'utf8')).version;
   for (const dependency of [
     'react-native',
     'react',
@@ -89,7 +120,7 @@ test("each version is its source's: package.json, the scanner module's build.gra
     'react-native-screens',
     'react-native-safe-area-context',
   ]) {
-    expect([dependency, coveredBy(dependency)?.version]).toEqual([dependency, dependencies[dependency].replace(/^[~^]/, '')]);
+    expect([dependency, coveredBy(dependency)?.version]).toEqual([dependency, installed(dependency)]);
   }
   expect(named('OpenCV')?.version).toBe(/def opencvVersion = '([^']+)'/.exec(GRADLE)?.[1]);
   expect(named('ONNX Runtime')?.version).toBe(/def ortVersion = '([^']+)'/.exec(GRADLE)?.[1]);
@@ -122,7 +153,26 @@ test("every entry's text file exists and isn't empty", () => {
   }
 });
 
-test("nlohmann/json's text: the MIT license with json.hpp's copyright, then the notices json.hpp carries", () => {
+test('the script writes the very files lib/licenses requires, so no text is orphaned', () => {
+  // scripts/collect-licenses.mjs's entries, each its slug and its sources: <slug>.txt is the file it writes. A checkout
+  // may give it \r\n.
+  const script: string = fs.readFileSync('scripts/collect-licenses.mjs', 'utf8').replace(/\r\n/g, '\n');
+  const entries = /\nconst ENTRIES = \[\n([\s\S]*?)\n\];/.exec(script)?.[1] ?? '';
+  const written = [...entries.matchAll(/^\s*\['([\w-]+)', /gm)].map((match) => `${match[1]}.txt`);
+  const source: string = fs.readFileSync('lib/licenses.ts', 'utf8');
+  const required = [...source.matchAll(/require\('\.\.\/assets\/licenses\/([\w.-]+\.txt)'\)/g)].map((match) => match[1]);
+  expect(written).toHaveLength(LICENSES.length);
+  expect([...written].sort()).toEqual([...required].sort());
+
+  // and every other text in assets/licenses is one the script reads: Task 0's downloads, <project>-<license>.txt
+  const read = [...script.matchAll(/\bown\('([\w.-]+\.txt)'/g)].map((match) => match[1]);
+  const others = fs
+    .readdirSync('assets/licenses')
+    .filter((file: string) => file.endsWith('.txt') && !written.includes(file));
+  expect(others.sort()).toEqual([...new Set(read)].sort());
+});
+
+test("nlohmann/json's text: the MIT license with json.hpp's copyright, then the notices json.hpp carries, Abseil's with Apache-2.0's text", () => {
   // built from the vendored json.hpp and the MIT text react ships (ruling T21-3); a checkout may give it \r\n
   const text = fs.readFileSync('assets/licenses/nlohmann-json.txt', 'utf8').replace(/\r\n/g, '\n');
   expect(text).toMatch(/^MIT License\n\nCopyright \(c\) 2013-2023 Niels Lohmann\n\nPermission is hereby granted, free/);
@@ -133,13 +183,28 @@ test("nlohmann/json's text: the MIT license with json.hpp's copyright, then the 
     'Copyright (c) 2016-2021 Evan Nemerson\n\nHedley - https://nemequ.github.io/hedley\nCreated by Evan Nemerson',
     'Copyright (c) 2018 The Abseil Authors\n\nThe following code is taken from https://github.com/abseil/abseil-cpp/',
     'which is part of Google Abseil (https://github.com/abseil/abseil-cpp), licensed under the Apache License 2.0.',
-    'Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>\nhttp://bjoern.hoehrmann.de/utf-8/decoder/dfa/',
+    'Copyright (c) 2008-2009 Björn Hoehrmann\n\nhttp://bjoern.hoehrmann.de/utf-8/decoder/dfa/',
     'Copyright (c) 2009 Florian Loitsch\n\nimplements the Grisu2 algorithm for binary to decimal floating-point',
     'The code is distributed under the MIT license, Copyright (c) 2009 Florian Loitsch.',
   ]) {
     expect(text).toContain(notice);
   }
   expect(text).not.toMatch(/^\s*(?:\/\/|\/\*|\*\/|@brief|@copyright|@sa)/m); // the comments' marks don't come along
+  // each holder's copyright once, as json.hpp's SPDX line gives it: no quoted comment repeats it
+  for (const holder of ['Niels Lohmann', 'Evan Nemerson', 'The Abseil Authors', 'Hoehrmann', 'Florian Loitsch']) {
+    const lines = text.split('\n').filter((line: string) => line.startsWith('Copyright (c)') && line.includes(holder));
+    expect([holder, lines.length]).toEqual([holder, 1]);
+  }
+
+  // Ruling T21-5: the Abseil-derived code is under Apache-2.0, so that license's text follows its notice, and the entry
+  // stands alone. It's the canonical text, apache.org's LICENSE-2.0.txt byte for byte, as OpenCV's entry has it.
+  expect(text).toContain(
+    `licensed under the Apache License 2.0.\n\n${textOf(APACHE_2_0)}\n\n_____\n\nBjörn Hoehrmann's UTF-8 decoder, in json.hpp`,
+  );
+  const canonical = fs.readFileSync(APACHE_2_0, 'utf8').replace(/\r\n/g, '\n'); // a checkout may give it \r\n
+  expect(require('crypto').createHash('sha256').update(canonical).digest('hex')).toBe(
+    'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30',
+  );
 });
 
 test('no text holds U+FFFD, the mark of a source read in the wrong encoding', () => {
@@ -148,4 +213,46 @@ test('no text holds U+FFFD, the mark of a source read in the wrong encoding', ()
   // FreeType's notice is Latin-1 (PDFium's licenses/freetype.txt): the credit line it asks for keeps its ©
   const pdfium: string = fs.readFileSync('assets/licenses/pdfium.txt', 'utf8');
   expect(pdfium).toContain('Portions of this software are copyright © <year> The FreeType');
+});
+
+test("the script reads a source that isn't UTF-8 as Latin-1, keeps its characters, and names it on stdout", () => {
+  // The script as `npm run licenses` runs it, but writing into a scratch folder, with a pdfium cache of its own: its
+  // LICENSE and one notice in UTF-8, and one in Latin-1 whose © is the one byte A9, as FreeType's is. The other sources
+  // are the repo's.
+  const os = require('os');
+  const path = require('path');
+  const { Buffer } = require('buffer');
+  const { spawnSync } = require('child_process');
+  const scratch: string = fs.mkdtempSync(path.join(os.tmpdir(), 'collect-licenses-'));
+  try {
+    // where scripts/fetch-pdfium.mjs keeps its cache, under the LOCALAPPDATA (Windows) or HOME the script is given
+    const cache: string =
+      process.platform === 'win32'
+        ? path.join(scratch, 'mbs-cxx', 'pdfium', 'chromium-8125')
+        : path.join(scratch, '.cache', 'mbs-pdfium', 'chromium-8125');
+    const notices: string = path.join(cache, 'arm64-v8a', 'licenses');
+    fs.mkdirSync(notices, { recursive: true });
+    fs.writeFileSync(path.join(cache, 'arm64-v8a', 'LICENSE'), 'Copyright © 2014 The PDFium Authors\n');
+    fs.writeFileSync(path.join(notices, 'zlib.txt'), 'Copyright © 1995-2024 Jean-loup Gailly and Mark Adler\n');
+    const [before, after] = ['Portions of this software are copyright ', ' <year> The FreeType\n'].map((s) => Buffer.from(s));
+    fs.writeFileSync(path.join(notices, 'freetype.txt'), Buffer.concat([before, Buffer.from([0xa9]), after]));
+    const out: string = path.join(scratch, 'out');
+    fs.mkdirSync(out);
+
+    const run = spawnSync(process.execPath, ['scripts/collect-licenses.mjs', out], {
+      encoding: 'utf8',
+      env: { ...process.env, LOCALAPPDATA: scratch, HOME: scratch },
+    });
+    expect([run.status, run.stderr]).toEqual([0, '']);
+    // the Latin-1 source, named in full; none of the UTF-8 ones
+    const named: string[] = run.stdout.split(/\r?\n/).filter((line: string) => line.includes('Latin-1'));
+    expect(named).toEqual([`collect-licenses: read ${path.join(notices, 'freetype.txt')} as Latin-1: it isn't UTF-8`]);
+    // and its ©, as the UTF-8 sources keep theirs
+    const pdfium: string = fs.readFileSync(path.join(out, 'pdfium.txt'), 'utf8');
+    expect(pdfium).toContain('Portions of this software are copyright © <year> The FreeType');
+    expect(pdfium).toContain('Copyright © 1995-2024 Jean-loup Gailly and Mark Adler');
+    expect(pdfium).not.toContain(REPLACEMENT);
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
 });
