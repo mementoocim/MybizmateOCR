@@ -174,6 +174,11 @@ test('the files: each kind with what it has to export, and the parties first whe
   // a kind whose saved scans have all gone out stays, so it can go again
   await act(async () => markExported([cert], NOW));
   expect(listed()).toEqual(['Sales, 1 to export', '2307s, All exported']);
+  // the counts in the figure style, as Home's (§9.2; ruling T18-3), and All exported, in the same slot, alike
+  for (const sub of [screen.getByText('1 to export'), screen.getByText('All exported')]) {
+    expect(typeStylesOf(sub)).toEqual(['figureSmall']); // mono: a label of the same size flattens alike here
+    expect(sub).toHaveStyle({ ...type.figureSmall, color: colors.mute });
+  }
   await act(async () => {
     await saveInvoice({ purchase: true });
   });
@@ -191,6 +196,7 @@ test('the files: each kind with what it has to export, and the parties first whe
     'New customers and suppliers, 1 to export',
   ]);
   expect(iconsIn(button(/^New customers and suppliers, /), colors.chevron)).toHaveLength(1);
+  expect(typeStylesOf(within(button(/^New customers and suppliers, /)).getByText('1 to export'))).toEqual(['figureSmall']);
 
   // a waiting sale names it: the parties' file comes first, with why under it, in the warning color
   await act(async () => {
@@ -215,6 +221,7 @@ test('the files: each kind with what it has to export, and the parties first whe
     '2307s, All exported',
     'New customers and suppliers, All exported',
   ]);
+  expect(typeStylesOf(within(button(/^New customers and suppliers, /)).getByText('All exported'))).toEqual(['figureSmall']);
 
   // a row opens its file
   await press(button(/^Purchases, /));
@@ -332,7 +339,7 @@ test("the 2307s' file: the tax withheld, the payor to check, and the question fo
 
   await press(button('Share the file'));
   expect(mockShare).toHaveBeenCalledWith('file:///cache/exports/MyBizMate 2307-CWT import 2026-10-05.xlsx', SHARED);
-  expect(screen.getByText('Mark this 2307 as exported, so the next export leaves it out. "All" still includes it.')).toBeOnTheScreen();
+  expect(screen.getByText('Mark this 2307 as exported, so the next export leaves it out. “All” still includes it.')).toBeOnTheScreen();
   await press(button('Mark 1 as exported'));
   expect(mockToast).toHaveBeenCalledWith('Marked 1 2307 as exported.');
 });
@@ -403,7 +410,7 @@ test('after sharing: the question as a step; Mark N as exported marks them and s
   expect(header(QUESTION)).toBeOnTheScreen();
   expect(focused()).toEqual([QUESTION]);
   const body = screen.getByText(
-    'Mark these 2 sales as exported, so the next export leaves them out. "All" still includes them.',
+    'Mark these 2 sales as exported, so the next export leaves them out. “All” still includes them.',
   );
   expect(typeStylesOf(body)).toEqual(['body']);
   expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
@@ -435,7 +442,7 @@ test('Not yet marks nothing', async () => {
   const id = await saveInvoice();
   await openAt('sale');
   await press(button('Share the file'));
-  expect(screen.getByText('Mark this sale as exported, so the next export leaves it out. "All" still includes it.')).toBeOnTheScreen();
+  expect(screen.getByText('Mark this sale as exported, so the next export leaves it out. “All” still includes it.')).toBeOnTheScreen();
   expect(actions()).toEqual(['Not yet', 'Mark 1 as exported']);
   await press(button('Not yet'));
   expect(onClose).toHaveBeenCalledTimes(1);
@@ -470,7 +477,7 @@ test('a cancelled share asks the same question', async () => {
   await press(button('Share the file'));
   expect(mockShare).toHaveBeenCalledTimes(1);
   expect(header(QUESTION)).toBeOnTheScreen();
-  expect(screen.getByText('Mark this sale as exported, so the next export leaves it out. "All" still includes it.')).toBeOnTheScreen();
+  expect(screen.getByText('Mark this sale as exported, so the next export leaves it out. “All” still includes it.')).toBeOnTheScreen();
   expect(savedSummary(id)!.exportedAt).toBeNull();
   await press(button('Not yet'));
   expect(savedSummary(id)!.exportedAt).toBeNull();
@@ -585,7 +592,7 @@ test('the parties file: All added from scans in the question', async () => {
   expect(mockShare).toHaveBeenCalledWith('file:///cache/exports/MyBizMate Parties import 2026-10-05.xlsx', SHARED);
   expect(
     screen.getByText(
-      'Mark this party as exported, so the next file leaves it out. "All added from scans" still includes it.',
+      'Mark this party as exported, so the next file leaves it out. “All added from scans” still includes it.',
     ),
   ).toBeOnTheScreen();
   jest.setSystemTime(LATER);
@@ -606,7 +613,7 @@ test('the parties file: All added from scans in the question', async () => {
   await press(button('Share the file'));
   expect(
     screen.getByText(
-      'Mark these 2 parties as exported, so the next file leaves them out. "All added from scans" still includes them.',
+      'Mark these 2 parties as exported, so the next file leaves them out. “All added from scans” still includes them.',
     ),
   ).toBeOnTheScreen();
   await press(button('Mark 2 as exported'));

@@ -225,7 +225,7 @@ export function ExportSheet({ visible, kind, onClose }: { visible: boolean; kind
     const { which, at, ids } = step;
     const n = ids.length;
     const { one, many, next } = FILES[which].words;
-    const all = FILES[which].ranges.find((r) => r.value === 'all')!.label; // "All", or "All added from scans"
+    const all = FILES[which].ranges.find((r) => r.value === 'all')!.label; // All, or All added from scans: in “ ”s
     const mark = async () => {
       await (which === 'parties' ? markPartiesExported(ids, at) : markExported(ids, at));
       onClose();
@@ -241,8 +241,8 @@ export function ExportSheet({ visible, kind, onClose }: { visible: boolean; kind
         <View style={styles.body}>
           <Text style={[type.body, styles.ink]}>
             {n === 1
-              ? `Mark this ${one} as exported, so the ${next} leaves it out. "${all}" still includes it.`
-              : `Mark these ${n} ${many} as exported, so the ${next} leaves them out. "${all}" still includes them.`}
+              ? `Mark this ${one} as exported, so the ${next} leaves it out. “${all}” still includes it.`
+              : `Mark these ${n} ${many} as exported, so the ${next} leaves them out. “${all}” still includes them.`}
           </Text>
         </View>
       ),
@@ -270,6 +270,7 @@ function Files({
       key={which}
       title={FILES[which].row}
       sub={waiting > 0 ? `${waiting} to export` : 'All exported'}
+      subMono // the count in the figure style, as Home's To export rows (ruling T18-3); All exported alike, in its slot
       chevron
       onPress={() => onOpen(which)}
     />
