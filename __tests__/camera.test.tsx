@@ -27,6 +27,9 @@ const mockLibrary = jest.fn();
 const mockDeleted: string[] = [];
 
 jest.mock('expo-router', () => ({
+  get router() {
+    return mockRouter; // Close goes back with it (lib/navigation's goBackOrHome)
+  },
   useRouter: () => mockRouter,
   useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, []),
   useIsFocused: () => mockFocused,

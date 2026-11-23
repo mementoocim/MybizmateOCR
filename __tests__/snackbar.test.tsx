@@ -22,12 +22,16 @@ import { keyboard } from '../test-utils/keyboard';
 // Design B §5.5, §5.6 and §8, and the plan's call 4: the snackbar, in place of Android's toasts. Ink, with paper text
 // and an optional action in brand; a polite live region; up for the time the phone recommends for 4 s, or for 8 s with
 // an action; a new one replaces the old. It shows in the newest host (the root layout's, an open sheet's), so it's
-// never dimmed behind a sheet, and it sits above the bottom bar, or the sheet's action row. Timers are jest's fake ones,
-// and the phone recommends the very time it's asked about unless a test says otherwise. Insets are zero, or, where a
-// test gives them, 34 dp at the bottom.
+// never dimmed behind a sheet, and it sits above the bottom bar of the screen on top, or the sheet's action row. Timers
+// are jest's fake ones, and the phone recommends the very time it's asked about unless a test says otherwise. Insets
+// are zero, or, where a test gives them, 34 dp at the bottom. The navigation paths are __tests__/snackbarClearance's.
 
 const BOTTOM = 34;
 const noop = () => {};
+
+/** Whether the screen a bottom bar is on is the one on top (expo-router's useIsFocused). */
+let mockFocused = true;
+jest.mock('expo-router', () => ({ useIsFocused: () => mockFocused }));
 
 function Insets({ children }: { children?: ReactNode }) {
   return (
@@ -63,6 +67,7 @@ beforeEach(() => {
   jest.useFakeTimers();
   jest.spyOn(AccessibilityInfo, 'getRecommendedTimeoutMillis').mockImplementation(async (ms) => ms);
   motionListeners = [];
+  mockFocused = true;
   jest.spyOn(AccessibilityInfo, 'addEventListener').mockImplementation((event, listener) => {
     if (event === 'reduceMotionChanged') motionListeners.push(listener as (enabled: boolean) => void);
     return { remove: noop };
@@ -215,6 +220,39 @@ test('it sits above the bottom bar', async () => {
   expect(snackbar()).toHaveStyle({ bottom: 80 + space.s });
 
   await screen.rerender(ui(false)); // the bar goes, and its clearance with it
+  expect(snackbar()).toHaveStyle({ bottom: BOTTOM + space.s });
+});
+
+test('a bar counts only while its screen is the one on top (ruling T19-5)', async () => {
+  const ui = () => (
+    <>
+      <BottomBar buttons={[{ label: 'Export…', onPress: noop }]} />
+      <SnackbarHost />
+    </>
+  );
+  await withInsets(ui());
+  await layout('bottom-bar', 120);
+  await raise('Marked 1 sale as exported.');
+  expect(snackbar()).toHaveStyle({ bottom: 120 + space.s });
+
+  // another screen goes over it: its height goes with its focus
+  mockFocused = false;
+  await screen.rerender(ui());
+  expect(snackbar()).toHaveStyle({ bottom: BOTTOM + space.s });
+  await layout('bottom-bar', 136); // it lays out again under that screen: still nothing
+  expect(snackbar()).toHaveStyle({ bottom: BOTTOM + space.s });
+
+  // back on top: its height, as last laid out
+  mockFocused = true;
+  await screen.rerender(ui());
+  expect(snackbar()).toHaveStyle({ bottom: 136 + space.s });
+
+  // a bar that mounts under the screen on top waits for its own screen's focus
+  await screen.unmount();
+  mockFocused = false;
+  await withInsets(ui());
+  await layout('bottom-bar', 120);
+  await raise('Added to your customers.');
   expect(snackbar()).toHaveStyle({ bottom: BOTTOM + space.s });
 });
 

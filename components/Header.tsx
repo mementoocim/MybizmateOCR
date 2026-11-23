@@ -1,8 +1,8 @@
-import { router } from 'expo-router';
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { goBackOrHome } from '../lib/navigation';
 import { colors, space, touch, type } from '../lib/theme';
 import { IconButton } from './IconButton';
 import { ArrowLeft, Close } from './icons';
@@ -28,16 +28,27 @@ export function Header({
   title?: string;
   subtitle?: string | null;
   brand?: boolean; // Home: the logo and "mybizmate.io" in place of a title
-  onBack?: (() => void) | null; // default router.back(), or Home with nothing to go back to; null: no back button
+  onBack?: (() => void) | null; // default goBackOrHome(), once; null: no back button
   backIcon?: 'back' | 'close'; // spoken "Back" or "Close"
   right?: ReactNode; // up to two IconButtons, or the photo thumbnail
   tone?: 'light' | 'dark'; // dark: the photo viewer (viewer fill, cameraText)
 }) {
   const insets = useSafeAreaInsets();
+  const leaving = useRef(false); // set at once, so a second tap is refused before the screen has gone
   const dark = tone === 'dark';
   const close = backIcon === 'close';
   const hasBack = onBack !== null;
   const hasRight = Boolean(right);
+
+  /**
+   * The default Back, once, as the camera's Close: router.back() queues a GO_BACK per call, so a fast double tap
+   * would leave the screen under this one too. With nothing to go back to, Home (lib/navigation).
+   */
+  function goBack() {
+    if (leaving.current) return;
+    leaving.current = true;
+    goBackOrHome();
+  }
   return (
     <View testID="header" style={[styles.header, dark && styles.dark, { paddingTop: insets.top }]}>
       <View style={[styles.row, !dark && styles.hairline]}>
@@ -74,15 +85,6 @@ export function Header({
       </View>
     </View>
   );
-}
-
-/**
- * The default Back: to the screen under this one, or Home when there's none (ruling T24-1). The router is read when
- * Back is pressed, so a test's expo-router mock needs no `router`.
- */
-function goBack() {
-  if (router.canGoBack()) router.back();
-  else router.replace('/');
 }
 
 const styles = StyleSheet.create({

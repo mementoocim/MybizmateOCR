@@ -1,6 +1,7 @@
 import { type Ref, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   type KeyboardTypeOptions,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -33,6 +34,19 @@ const GROW = FOCUS_BORDER - BORDER;
 const NOTE_ICON = 16;
 
 type Note = { text: string; color: string; Icon: IconComponent | null };
+
+/**
+ * The plan's call 15: a field's keyboard for what isn't words (a code, an amount, a date, a TIN, digits, a number).
+ * Android's visible-password keyboard keeps every character ("WC158", "1,140.00", "Oct 29") and adds a number row,
+ * with no suggestions; iOS has no such keyboard, so its default one. A code (an ATC) in capitals, else as typed. The
+ * box editor's, Settings' ATC and the save sheet's ATC spread it into their TextField.
+ */
+export function codeKeyboard(autoCapitalize: 'characters' | 'none' = 'characters'): {
+  keyboardType: KeyboardTypeOptions;
+  autoCapitalize: TextInputProps['autoCapitalize'];
+} {
+  return { keyboardType: Platform.OS === 'android' ? 'visible-password' : 'default', autoCapitalize };
+}
 
 export function TextField({
   label,

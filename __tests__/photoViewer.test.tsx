@@ -158,6 +158,24 @@ test('Enhanced by default, each made once', async () => {
   expect(mockEnhance).toHaveBeenCalledTimes(2);
 });
 
+test('Enhanced is made when the viewer is first shown, not while it waits closed', async () => {
+  // The Scan screen keeps the viewer mounted, closed, from the start: nothing is made until the photo is opened.
+  const ui = (visible: boolean) => <PhotoViewer visible={visible} result={FOUND} onClose={noop} />;
+  let made: (uri: string) => void = noop;
+  mockEnhance.mockImplementationOnce(() => new Promise<string>((resolve) => (made = resolve)));
+  await show(ui(false));
+  expect(mockEnhance).not.toHaveBeenCalled();
+  await screen.rerender(ui(true));
+  expect(mockEnhance.mock.calls).toEqual([[FOUND.pageUri, 'enhanced']]);
+
+  // closed before it's ready, it's still made, once: open again, it's there
+  await screen.rerender(ui(false));
+  await act(async () => made(ENHANCED));
+  await screen.rerender(ui(true));
+  expect(image().props.source).toEqual({ uri: ENHANCED });
+  expect(mockEnhance).toHaveBeenCalledTimes(1);
+});
+
 test("a view that can't be made falls back to Original", async () => {
   mockEnhance.mockRejectedValueOnce(new Error('out of memory'));
   await show(<PhotoViewer visible result={FOUND} onClose={noop} />);

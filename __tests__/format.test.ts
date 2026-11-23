@@ -10,6 +10,10 @@ test('amount: rows without the peso sign', () => {
 test('monthDay', () => {
   expect(monthDay('2026-11-22')).toBe('Nov 22');
   expect(monthDay('2026-01-05')).toBe('Jan 5');
+  // an empty or malformed date: a dash, as Saved's prettyDate(…) ?? '—' had it
+  for (const date of ['', '2026-11', '2026-13-01', '2026-00-05', '2026-11-xx', '2026-11-00', 'Nov 22, 2026']) {
+    expect([date, monthDay(date)]).toEqual([date, '—']);
+  }
 });
 
 test('monthYear', () => {
@@ -19,6 +23,10 @@ test('monthYear', () => {
   expect(monthYear('2026-01')).toBe('January 2026');
   expect(monthYear('2025-12')).toBe('December 2025');
   expect(monthYear('2026-09-20'.slice(0, 7))).toBe('September 2026');
+  // an empty or malformed one: a dash
+  for (const month of ['', '2026', '2026-13', '2026-00', '2026-1x', 'xxxx-11', 'Nov 202']) {
+    expect([month, monthYear(month)]).toEqual([month, '—']);
+  }
 });
 
 test('pesos, quantities and dates as the test app writes them', () => {

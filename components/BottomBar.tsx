@@ -1,3 +1,4 @@
+import { useIsFocused } from 'expo-router';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,8 +14,10 @@ import { Button, type ButtonProps, type ButtonVariant } from './Buttons';
 // beside text buttons, fills what they leave, as a primary does (the supplier sheet's Use this name, beside Add to
 // your suppliers). When any label wraps (large text, a narrow phone), they stack full width in the given order, which
 // puts the primary last. A row that stacked stays stacked for those labels at that width and font size: once full
-// width the labels fit on one line, and flipping back would loop. While it's mounted, the bar reports its height, so
-// the snackbar sits above it (lib/snackbar).
+// width the labels fit on one line, and flipping back would loop. While its screen is the one on top (focused), the
+// bar reports its height, so the snackbar sits above it (lib/snackbar). It withdraws it when another screen goes over
+// it, and reports again when its screen is back on top. So a bar that mounts on a covered screen (Saved's, when a save
+// on the Scan screen over it gives it something to export) never moves the message on the screen on top (T19-5).
 
 export function ButtonRow({ buttons }: { buttons: readonly ButtonProps[] }) {
   const { width, fontScale } = useWindowDimensions();
@@ -46,12 +49,18 @@ export function ButtonRow({ buttons }: { buttons: readonly ButtonProps[] }) {
 
 export function BottomBar({ buttons, children }: { buttons: readonly ButtonProps[]; children?: ReactNode }) {
   const insets = useSafeAreaInsets();
+  const focused = useIsFocused();
   const ownerRef = useRef(null); // this bar, as the clearance knows it
-  useEffect(() => () => setBottomClearance(ownerRef, null), []);
+  const [height, setHeight] = useState<number | null>(null); // as last laid out
+  useEffect(() => {
+    if (!focused || height === null) return;
+    setBottomClearance(ownerRef, height);
+    return () => setBottomClearance(ownerRef, null); // covered, or gone
+  }, [focused, height]);
   return (
     <View
       testID="bottom-bar"
-      onLayout={(e) => setBottomClearance(ownerRef, e.nativeEvent.layout.height)}
+      onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
       style={[styles.bar, { paddingBottom: space.m + insets.bottom }]}>
       {children}
       <ButtonRow buttons={buttons} />

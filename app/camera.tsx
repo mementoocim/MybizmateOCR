@@ -1,6 +1,6 @@
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import { useFocusEffect, useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -14,6 +14,7 @@ import { Tap } from '../components/Tap';
 import { TEAM_BUILD } from '../lib/build';
 import { CAMERA_ERRORS, CAMERA_TEXT, PERMISSION_TEXT, statusText } from '../lib/cameraCopy';
 import { confirmHaptic } from '../lib/haptics';
+import { goBackOrHome } from '../lib/navigation';
 import { sampleUri } from '../lib/samples';
 import { useScanFlow } from '../lib/scanFlow';
 import { colors, radius, space, touch, type } from '../lib/theme';
@@ -57,7 +58,6 @@ function toPermission(p: ImagePicker.CameraPermissionResponse): Permission {
 }
 
 export default function CameraScreen() {
-  const router = useRouter();
   const flow = useScanFlow();
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
@@ -134,13 +134,12 @@ export default function CameraScreen() {
 
   /**
    * Back, once: router.back() queues a GO_BACK per call, so a fast double tap would leave the next screen too. With
-   * nothing to go back to, Home (ruling T24-1).
+   * nothing to go back to, Home (ruling T24-1: lib/navigation).
    */
   function close() {
     if (closing.current) return;
     closing.current = true;
-    if (router.canGoBack()) router.back();
-    else router.replace('/');
+    goBackOrHome();
   }
 
   async function allow() {

@@ -29,7 +29,7 @@ import { pinToday } from '../test-utils/today';
 
 let mockParams: { id?: string; from?: string } = {};
 let mockTeam = false;
-const mockRouter = { back: jest.fn(), replace: jest.fn(), push: jest.fn() };
+const mockRouter = { back: jest.fn(), replace: jest.fn(), push: jest.fn(), canGoBack: jest.fn(() => true) };
 const mockEnhance = jest.fn(async (_uri: string, mode: string) => `file:///x/${mode}.img`);
 const mockSave = jest.fn();
 const mockToast = jest.fn();
@@ -41,6 +41,9 @@ const mockDisplayName = jest.fn();
 const mockRelease = jest.fn(async (_uri: string) => undefined);
 
 jest.mock('expo-router', () => ({
+  get router() {
+    return mockRouter; // going back (lib/navigation's goBackOrHome), read when it's called
+  },
   useLocalSearchParams: () => mockParams,
   useRouter: () => mockRouter,
   useIsFocused: () => true,
@@ -129,6 +132,7 @@ afterAll(() => jest.useRealTimers());
 
 beforeEach(async () => {
   jest.clearAllMocks();
+  mockRouter.canGoBack.mockReturnValue(true); // a screen under this one, as when Home or Saved opened it
   memoryFs.reset();
   mockTeam = false;
   await updateSettings({ annotation: false });
@@ -596,6 +600,10 @@ test('an item row', async () => {
   expect(screen.getAllByText(amount(first.amount)).length).toBeGreaterThan(0);
   expect(screen.getByText('Items · 6')).toBeTruthy();
   expect(screen.getByText('Amount')).toBeTruthy(); // the section's right column
+  // which TalkBack says with the amount, as focus can land on the row away from the strip (ruling T12-4)
+  const spoken = `${first.description}, ${qty(first.qty)} × ${amount(first.unit_price)}, Amount ${amount(first.amount)}`;
+  expect(button(spoken)).toBeOnTheScreen();
+  expect(screen.getAllByText('Amount')).toHaveLength(1); // only the strip shows it
   await act(async () => {
     setEdit(id, 'item1_unit_price', 'xyz'); // with the price unreadable, the row's math can't be repaired
     setEdit(id, 'item1_amount', '1.00');
@@ -678,6 +686,13 @@ test('not found: a PDF chooses a PDF; Retake opens the camera, the camera app ag
   expect(mockCameraApp).toHaveBeenCalledTimes(1);
   await show('blank_page', { source: 'gallery', from: 'recent' });
   await press(button('Retake'));
+  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+
+  // with nothing under it, Home (ruling T24-1: the Stack's anchor, so a fallback)
+  mockRouter.canGoBack.mockReturnValue(false);
+  await show('blank_page', { source: 'gallery', from: 'recent' });
+  await press(button('Retake'));
+  expect(mockRouter.replace).toHaveBeenLastCalledWith('/');
   expect(mockRouter.back).toHaveBeenCalledTimes(1);
 });
 
@@ -803,6 +818,24 @@ test('deleting from ⋮: a delete that fails says so, once the screen has gone b
   expect(mockToast).toHaveBeenCalledTimes(1);
   expect(mockToast).toHaveBeenCalledWith("Couldn't delete the scan.");
   expect(savedSummary(id)).toBeDefined(); // still saved, so still in Saved
+  remove.mockRestore();
+});
+
+test('deleting from ⋮ with nothing under the screen goes Home, in the same order (ruling T24-1)', async () => {
+  // The Stack is anchored on Home (app/_layout), so this is the fallback, as for the header's Back
+  mockRouter.canGoBack.mockReturnValue(false);
+  const remove = jest.spyOn(savedStore, 'deleteSaved');
+  const id = await showSaved('inv_0007');
+  placeMenu();
+  await press(button('More options'));
+  await press(screen.getByRole('menuitem', { name: 'Delete saved scan' }));
+  await act(async () => alertButtons()[1].onPress!());
+  expect(mockRouter.replace.mock.calls).toEqual([['/']]);
+  expect(mockRouter.back).not.toHaveBeenCalled();
+  // Review Focus 4's order: it leaves, then deletes, in the same press
+  expect(mockRouter.replace.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
+  expect(savedSummary(id)).toBeUndefined();
+  expect(screen.queryByText(/no longer here/)).toBeNull();
   remove.mockRestore();
 });
 
@@ -1069,8 +1102,9 @@ test('a scan kept before PDFs shows as a photo', async () => {
 test('views', async () => {
   const r = parseScanResult(coreJson('inv_0007'));
   await show('inv_0007');
-  await waitFor(() => expect(mockEnhance).toHaveBeenCalledWith(r.pageUri, 'enhanced'));
+  expect(mockEnhance).not.toHaveBeenCalled(); // the viewer waits, mounted, until the photo is first opened
   await openPhoto();
+  await waitFor(() => expect(mockEnhance).toHaveBeenCalledWith(r.pageUri, 'enhanced'));
   await waitFor(() => expect(screen.getByTestId('scan-image').props.source).toEqual({ uri: 'file:///x/enhanced.img' }));
   await press(screen.getByText('B&W'));
   await waitFor(() => expect(mockEnhance).toHaveBeenCalledWith(r.pageUri, 'bw'));

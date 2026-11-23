@@ -1,4 +1,4 @@
-import { invoiceSections, type LedgerRowSpec, type LedgerSection } from '../components/InvoiceLedger';
+import { boxesOf, editedIn, invoiceSections, type LedgerRowSpec, type LedgerSection } from '../components/InvoiceLedger';
 import { amount, peso, qty } from '../lib/format';
 import { lists } from '../lib/lists';
 import { saleOf } from '../lib/sale';
@@ -233,6 +233,35 @@ test("edited follows the row's boxes", () => {
   // The sold-to row has the customer's boxes too.
   updateScan(id, { kind: 'purchase' });
   expect(edited()).toEqual(['sold_to', 'item2']);
+});
+
+test("both ledgers' rows: boxesOf lists a row's boxes in its form's order; editedIn says whether one was fixed", () => {
+  // the form's order, whatever order a row names them in; a box the form doesn't have (a 2307's) isn't listed
+  expect(boxesOf('sales_invoice', 'Customer', ['customer_address', 'customer_tin', 'customer_name'])).toEqual({
+    kind: 'boxes',
+    title: 'Customer',
+    boxes: ['customer_name', 'customer_tin', 'customer_address'],
+  });
+  expect(boxesOf('sales_invoice', 'Sugar', ['item1_amount', 'item1_qty', 'ewt1_tax'], 1)).toEqual({
+    kind: 'boxes',
+    title: 'Sugar',
+    boxes: ['item1_qty', 'item1_amount'],
+    row: 1, // an item row's sheet knows its row
+  });
+  expect(boxesOf('bir_2307', 'Period', ['period_to', 'period_from'])).toEqual({
+    kind: 'boxes',
+    title: 'Period',
+    boxes: ['period_from', 'period_to'],
+  });
+
+  const id = scanOf('inv_0007');
+  const scan = () => getScan(id)!;
+  expect(editedIn(scan(), ['invoice_no', 'date'])).toBe(false);
+  setEdit(id, 'date', '10/29/2026');
+  expect(editedIn(scan(), ['invoice_no', 'date'])).toBe(true);
+  expect(editedIn(scan(), ['invoice_no'])).toBe(false);
+  setEdit(id, 'invoice_no', ''); // cleared: the person's edit too
+  expect(editedIn(scan(), ['invoice_no'])).toBe(true);
 });
 
 test('no items: one row, No items read', () => {

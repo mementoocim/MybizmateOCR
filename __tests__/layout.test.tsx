@@ -33,6 +33,7 @@ jest.mock('expo-router', () => ({
   get router() {
     return mockRouter; // read when Back is pressed, never at render
   },
+  useIsFocused: () => true, // a bottom bar's screen is the one on top
 }));
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 0 }),
@@ -121,6 +122,27 @@ test('Header: with nothing to go back to, Back goes Home (ruling T24-1)', async 
   await fireEvent.press(button('Back'));
   expect(mockRouter.replace).toHaveBeenCalledWith('/');
   expect(mockRouter.replace).toHaveBeenCalledTimes(1);
+  expect(mockRouter.back).not.toHaveBeenCalled();
+});
+
+test('Header: Back goes back once, however fast it is tapped twice', async () => {
+  // router.back() queues one GO_BACK per call: a second would leave the screen under this one too (as Close's guard)
+  await render(<Header title="Saved" />);
+  await act(async () => {
+    await fireEvent.press(button('Back'));
+    await fireEvent.press(button('Back'));
+  });
+  expect(mockRouter?.back).toHaveBeenCalledTimes(1);
+
+  // with nothing under it: Home, once
+  mockRouter = freshRouter();
+  mockRouter.canGoBack.mockReturnValue(false);
+  await render(<Header title="Speed test" />);
+  await act(async () => {
+    await fireEvent.press(button('Back'));
+    await fireEvent.press(button('Back'));
+  });
+  expect(mockRouter.replace.mock.calls).toEqual([['/']]);
   expect(mockRouter.back).not.toHaveBeenCalled();
 });
 

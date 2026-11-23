@@ -20,10 +20,11 @@ import { Tap } from './Tap';
 // status-bar icons and no motion (§5.5 doesn't animate it). Under Close (x) and the title "Photo": when the form was
 // found, a dark choice of Enhanced (the default), B&W and Original; the image; and for Enhanced and B&W, "Save to
 // Pictures", which copies it into the phone's Pictures/MyBizMate Scan and runs once on a double tap. Enhanced and B&W
-// are each made from the page once: Enhanced as soon as the viewer mounts, so it's ready when it opens, and B&W when
-// it's first chosen. One that can't be made falls back to Original. While it's open the viewer is the snackbar's host
-// (the plan's call 4), so the save's message shows above the Save bar, not behind the viewer. Nothing in it scrolls,
-// so its scroll-into-view scope is a no-op. Back closes it.
+// are each made from the page once: Enhanced when the viewer is first shown (it stays mounted, closed, so a scan that's
+// never opened makes none), and B&W when it's first chosen; one closed before it's ready is still kept. One that can't
+// be made falls back to Original. While it's open the viewer is the snackbar's host (the plan's call 4), so the save's
+// message shows above the Save bar, not behind the viewer. Nothing in it scrolls, so its scroll-into-view scope is a
+// no-op. Back closes it.
 
 type ViewName = 'enhanced' | 'bw' | 'original';
 const VIEWS: readonly { value: ViewName; label: string }[] = [
@@ -57,9 +58,12 @@ export function PhotoViewer({ visible, result, onClose }: { visible: boolean; re
   const [view, setView] = useState<ViewName>(page ? 'enhanced' : 'original');
   const [made, setMade] = useState<Partial<Record<'enhanced' | 'bw', string>>>({});
   const [actionsHeight, setActionsHeight] = useState(0); // as laid out: its padding takes in the bottom inset
+  // Shown at least once: the Scan screen keeps the viewer mounted, closed, so nothing is made before the photo opens.
+  const [shown, setShown] = useState(visible);
+  if (visible && !shown) setShown(true);
 
   useEffect(() => {
-    if (view === 'original' || made[view] || !page) return;
+    if (!shown || view === 'original' || made[view] || !page) return;
     let live = true;
     enhance(page, view)
       .then((uri) => live && setMade((m) => ({ ...m, [view]: uri })))
@@ -67,7 +71,7 @@ export function PhotoViewer({ visible, result, onClose }: { visible: boolean; re
     return () => {
       live = false;
     };
-  }, [view, page, made]);
+  }, [shown, view, page, made]);
 
   const uri = view === 'original' ? result.originalUri : made[view];
   const saveable = view !== 'original';

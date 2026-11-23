@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 
 import Result from '../app/result';
 import { SnackbarHost } from '../components/Snackbar';
@@ -238,15 +239,16 @@ test('the customer: New when it goes out as written, and an unsure match says so
   }
 });
 
-test('the tax type helper shows while it is the suggestion', async () => {
+test('the tax type helper shows while it is the suggestion, and only one the VAT boxes made', async () => {
   const id = await show('inv_0007');
   await press(screen.getByTestId('save-open'));
-  // suggested from the VAT boxes, and again from the answer about VAT, until the person picks one
+  // suggested from the VAT boxes, until the answer about VAT or the person's pick
   expect(screen.getByRole('radio', { name: 'VAT', checked: true })).toBeOnTheScreen();
   expect(sheet().getByText(SUGGESTED)).toBeOnTheScreen();
+  // ruling T15-1: a business that isn't VAT-registered sells Non-VAT, whatever the boxes say: the helper would be untrue
   await press(screen.getByText('Not VAT-registered'));
   expect(screen.getByRole('radio', { name: 'Non-VAT', checked: true })).toBeOnTheScreen();
-  expect(sheet().getByText(SUGGESTED)).toBeOnTheScreen();
+  expect(sheet().queryByText(SUGGESTED)).toBeNull();
   await press(screen.getByRole('radio', { name: 'Zero-rated' }));
   expect(screen.getByRole('radio', { name: 'Zero-rated', checked: true })).toBeOnTheScreen();
   expect(sheet().queryByText(SUGGESTED)).toBeNull();
@@ -258,6 +260,28 @@ test('the tax type helper shows while it is the suggestion', async () => {
   await press(screen.getByTestId('save-open'));
   expect(screen.getByRole('radio', { name: 'Zero-rated', checked: true })).toBeOnTheScreen();
   expect(sheet().queryByText(SUGGESTED)).toBeNull();
+});
+
+test("the tax type helper: a VAT-registered business's sale, and any purchase, are suggested from the VAT boxes", async () => {
+  // ruling T15-1: only a sale by a business that isn't VAT-registered is Non-VAT by that status
+  await updateSettings({ vatRegistered: true });
+  const id = await show('inv_0007');
+  await press(screen.getByTestId('save-open'));
+  expect(screen.getByRole('radio', { name: 'VAT', checked: true })).toBeOnTheScreen();
+  expect(sheet().getByText(SUGGESTED)).toBeOnTheScreen();
+  await press(screen.getByRole('button', { name: 'Cancel' }));
+
+  await act(async () => updateSettings({ vatRegistered: false }));
+  await press(screen.getByTestId('save-open'));
+  expect(screen.getByRole('radio', { name: 'Non-VAT', checked: true })).toBeOnTheScreen();
+  expect(sheet().queryByText(SUGGESTED)).toBeNull();
+  await press(screen.getByRole('button', { name: 'Cancel' }));
+
+  // the same business's purchase: its type is the supplier's, read from the boxes
+  await act(async () => updateScan(id, { kind: 'purchase', party: { name: 'Juan Hardware' } }));
+  await press(screen.getByTestId('save-open'));
+  expect(screen.getByRole('radio', { name: 'VAT', checked: true })).toBeOnTheScreen();
+  expect(sheet().getByText(SUGGESTED)).toBeOnTheScreen();
 });
 
 test('Save stays off until the account and the terms are set', async () => {
@@ -418,6 +442,23 @@ test('withholding asks for the ATC', async () => {
   // in figures, with today's note under it, which TalkBack hears as the field's hint
   expect(screen.getByLabelText('Withholding tax ATC')).toHaveStyle(theme.type.figure);
   expect(screen.getByLabelText('Withholding tax ATC').props.accessibilityHint).toBe(note);
+});
+
+test("the ATC is a code: capitals, on Android's keyboard with a number row; the accounts take a code or a name", async () => {
+  // the plan's call 15, as Settings' ATC has it: visible-password keeps every character and adds a number row
+  jest.replaceProperty(Platform, 'OS', 'android');
+  const keyboardOf = (label: string) => {
+    const { keyboardType, autoCapitalize, autoCorrect } = screen.getByLabelText(label).props;
+    return [keyboardType, autoCapitalize, autoCorrect];
+  };
+  const id = await show('svc_0002');
+  await act(async () => setEdit(id, 'withholding', '50.00'));
+  await press(screen.getByTestId('save-open'));
+  expect(keyboardOf('Withholding tax ATC')).toEqual(['visible-password', 'characters', false]);
+  expect(keyboardOf('Revenue account')).toEqual([undefined, undefined, false]); // words: the default keyboard
+  await show('bir2307_text_1', { source: 'pdf' });
+  await press(screen.getByTestId('save-open'));
+  expect(keyboardOf('Offset account')).toEqual([undefined, undefined, false]);
 });
 
 test('the banner counts what is still marked to check', async () => {

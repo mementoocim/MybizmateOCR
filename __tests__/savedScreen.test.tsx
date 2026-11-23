@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import SavedScreen from '../app/saved';
 import { type IconComponent, Share } from '../components/icons';
 import { SnackbarHost } from '../components/Snackbar';
+import * as exportFile from '../lib/exportFile';
 import { addParty, clearParties, markPartiesExported, type Party } from '../lib/lists';
 import * as savedStore from '../lib/saved';
 import {
@@ -38,6 +39,7 @@ const mockToast = jest.fn();
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
+  useIsFocused: () => true,
 }));
 // Ruling P8: the toast's arguments go through as given, so a message without an action is checked by its words alone.
 jest.mock('../lib/toast', () => ({ toast: (...args: unknown[]) => mockToast(...args) }));
@@ -312,6 +314,36 @@ test("grouped by the month of the document's date: a Q1 2307 sits under March 20
   ]);
 });
 
+test("a date that can't be read is a dash, in its month's strip and in the row", async () => {
+  // A scan with no date can't be saved (saveBlock); a saved.json that holds one anyway still reads, as prettyDate's
+  // '—' had it: an empty date, and one with no such month.
+  await showSaved([
+    invoice('sale', '2026-11-20', { partyName: 'Store A' }),
+    invoice('sale', '', { partyName: 'Store B' }),
+    invoice('purchase', '2026-13-05', { partyName: 'Store C' }),
+  ]);
+  expect(listed()).toEqual([
+    '—',
+    'Store C, Purchase · —, 100.00, To export',
+    'November 2026',
+    'Store A, Sale · Nov 20, 100.00, To export',
+    '—',
+    'Store B, Sale · —, 100.00, To export',
+  ]);
+});
+
+test("a row is To export by its scan's id, whatever object the export's rule hands back", async () => {
+  // lib/exportFile's waitingOf decides what waits; here it answers with copies of the saved scans
+  const rule = exportFile.waitingOf;
+  jest.spyOn(exportFile, 'waitingOf').mockImplementation((kind, list) => rule(kind, list).map((s) => ({ ...s })));
+  await showSaved([
+    invoice('sale', '2026-11-20', { partyName: 'Store A' }),
+    invoice('sale', '2026-11-18', { partyName: 'Store B', exportedAt: EXPORTED }),
+  ]);
+  expect(headerTexts()).toEqual(['Saved', '1 to export']);
+  expect(rows()).toEqual(['Store A, Sale · Nov 20, 100.00, To export', 'Store B, Sale · Nov 18, 100.00, Exported']);
+});
+
 test('a row: the party, kind · date · number, the amount and its badge', async () => {
   await showSaved([
     invoice('sale', '2026-11-22', {
@@ -520,6 +552,9 @@ test('Export… shows when anything is saved, or when parties added from scans c
   expect(screen.getByText('Nothing saved yet')).toBeOnTheScreen();
   expect(headerTexts()).toEqual(['Saved']); // no scan waits
   expect(barButtons()).toEqual(['Export…']);
+  // ruling T19-8: the empty state's Take photo stays the screen's one primary (§5.1); Export… is the side path
+  expect(button('Take photo')).toHaveStyle({ backgroundColor: colors.brand });
+  expect(button('Export…')).toHaveStyle({ backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.outline });
   expect(endPadding()).toMatchObject({ paddingBottom: space.xl }); // the bar takes the inset now
   await press(button('Export…'));
   expect(header('Export')).toBeOnTheScreen();
@@ -549,6 +584,7 @@ test('Export… shows when anything is saved, or when parties added from scans c
   expect(screen.queryByTestId('bottom-bar')).toBeNull();
   await savedAre([invoice('sale', '2026-11-20')]);
   expect(barButtons()).toEqual(['Export…']);
+  expect(button('Export…')).toHaveStyle({ backgroundColor: colors.brand }); // with a scan saved, the one primary
 });
 
 test('a message on Saved sits above its bottom bar', async () => {

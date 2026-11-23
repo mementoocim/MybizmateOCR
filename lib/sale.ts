@@ -69,6 +69,14 @@ const firstAmount = (raw: Raw, box: string) => candidates(raw.boxes[box])[0] ?? 
 const VAT_BOXES = ['vatable_sales', 'vat', 'less_vat', 'net_of_vat', 'add_vat'];
 
 /**
+ * Whether suggestTaxType reads the invoice's VAT boxes: always, but for a sale by a business that isn't VAT-registered,
+ * which is NONVAT by that status (ruling T15-1: the save sheet says the boxes suggested it only when they did).
+ */
+export function taxTypeFromBoxes(kind: Kind, vatRegistered: boolean | null): boolean {
+  return !(kind === 'sale' && vatRegistered === false);
+}
+
+/**
  * The import's Type for this invoice. A sale by a business that isn't VAT-registered: NONVAT. A VAT-registered sale:
  * ZERO or EXEMPT when those are its only VAT-box amounts, else VAT. A purchase, or a sale before the question is
  * answered: VAT when a VAT box has an amount, else ZERO or EXEMPT, else NONVAT.
@@ -77,7 +85,7 @@ export function suggestTaxType(kind: Kind, raw: Raw, vatRegistered: boolean | nu
   const hasVat = VAT_BOXES.some((b) => firstAmount(raw, b) > 0);
   const zero = firstAmount(raw, 'zero_rated') > 0;
   const exempt = firstAmount(raw, 'vat_exempt') > 0;
-  if (kind === 'sale' && vatRegistered === false) return 'NONVAT';
+  if (!taxTypeFromBoxes(kind, vatRegistered)) return 'NONVAT';
   if (kind === 'sale' && vatRegistered === true) {
     if (zero && !hasVat && !exempt) return 'ZERO';
     if (exempt && !hasVat && !zero) return 'EXEMPT';

@@ -351,6 +351,40 @@ test('LedgerRow: the value in its style with its badge, the sub-line, and the am
   ).toBeOnTheScreen();
 });
 
+test("LedgerRow: the amount is said with its column's name, which only the section's strip shows", async () => {
+  // Ruling T12-4: focus can land on a row from a chip or a closing sheet, away from the strip that names the column
+  await render(
+    <LedgerRow
+      value="WC158 · Office supplies"
+      sub="Total 208,043.00"
+      subMono
+      amount="4,160.86"
+      spokenAmountLabel="Tax"
+      onPress={noop}
+    />,
+  );
+  expect(screen.getByRole('button', { name: 'WC158 · Office supplies, Total 208,043.00, Tax 4,160.86' })).toBeOnTheScreen();
+  expect(screen.getByText('4,160.86')).toHaveStyle({ ...type.figure, color: colors.ink, textAlign: 'right' });
+  expect(screen.queryByText(/Tax/)).toBeNull(); // nothing changes on screen
+  // flagged: the reason still comes last
+  await render(
+    <LedgerRow
+      value="Sugar"
+      sub="24 × 85.00"
+      subMono
+      amount="2,040.00"
+      spokenAmountLabel="Amount"
+      reason="Doesn't add up"
+      flagged
+      onPress={noop}
+    />,
+  );
+  expect(screen.getByRole('button', { name: "Sugar, 24 × 85.00, Amount 2,040.00. Check: doesn't add up" })).toBeOnTheScreen();
+  // a row with no amount says no column
+  await render(<LedgerRow value="No items read" spokenAmountLabel="Amount" />);
+  expect(screen.getByLabelText('No items read')).toBeOnTheScreen();
+});
+
 test('LedgerRow: the key keeps its width; the value takes the rest, or goes under past half the row', async () => {
   await render(<LedgerRow label="Gross (VAT included)" value="₱5,810.50" valueStyle="figure" onPress={noop} />);
   const key = screen.getByText('Gross (VAT included)');

@@ -143,7 +143,8 @@ test("a 2307's sections", async () => {
   ).toBeTruthy();
   for (const field of ['Period', 'Payee', 'Payor']) expect(screen.getAllByText(field)).toHaveLength(1);
 
-  // each payment: its ATC and payment, its total under them, and its tax on the right, in a row without the peso sign
+  // each payment: its ATC and payment, its total under them, and its tax on the right, in a row without the peso sign;
+  // TalkBack says the tax with its column's name, which the section's strip shows (ruling T12-4)
   const payments = [
     ['WI050 · Consultancy fees', 'Total 438,849.60', '21,942.48'],
     ['WI160 · Trucking services', 'Total 538,746.53', '10,774.93'],
@@ -151,19 +152,19 @@ test("a 2307's sections", async () => {
     ['WI515 · Sales commissions', 'Total 242,397.37', '12,119.87'],
   ];
   for (const [title, total, tax] of payments) {
-    expect(button(`${title}, ${total}, ${tax}`)).toBeTruthy();
+    expect(button(`${title}, ${total}, Tax ${tax}`)).toBeTruthy();
     expect(screen.getByText(total)).toHaveStyle(type.figureSmall);
     expect(screen.getByText(tax)).toHaveStyle(type.figure);
   }
 
   // the second table, laid out like the first
-  expect(button('WV010 · Purchase of goods, Total 189,255.11, 9,462.76')).toBeTruthy();
+  expect(button('WV010 · Purchase of goods, Total 189,255.11, Tax 9,462.76')).toBeTruthy();
 
   // each table's total row: its total, in mono as a payment's (ruling T12-2), and its tax, with the peso sign
-  expect(button('Income payments, Total ₱1,375,018.56, ₱47,937.78')).toBeTruthy();
+  expect(button('Income payments, Total ₱1,375,018.56, Tax ₱47,937.78')).toBeTruthy();
   expect(screen.getByText('Total ₱1,375,018.56')).toHaveStyle(type.figureSmall);
   expect(screen.getByText('₱47,937.78')).toHaveStyle(type.figureStrong);
-  expect(button('Business tax, Total ₱189,255.11, ₱9,462.76')).toBeTruthy();
+  expect(button('Business tax, Total ₱189,255.11, Tax ₱9,462.76')).toBeTruthy();
   expect(screen.getByText('Total ₱189,255.11')).toHaveStyle(type.figureSmall);
   expect(screen.getByText('₱9,462.76')).toHaveStyle(type.figureStrong);
 
@@ -208,22 +209,22 @@ test("the rows' flags", async () => {
   await show('bir2307_text_2', { edits: { ewt2_tax: '4,160.86', ewt_total_tax: '24,779.42' } });
   expect(screen.getByText('Not 1% of the total')).toHaveStyle({ color: colors.warning });
   expect(within(screen.getByTestId('row-ewt2')).getByText('Check')).toBeTruthy();
-  expect(button('WC158 · Office supplies, Total 208,043.00, 4,160.86. Check: not 1% of the total')).toBeTruthy();
+  expect(button('WC158 · Office supplies, Total 208,043.00, Tax 4,160.86. Check: not 1% of the total')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Row 2 tax, to check' })).toBeTruthy();
   // a rate like 0.5%, as people write it
   await show('bir2307_text_2', { edits: { ewt2_atc: 'WC156' } });
-  expect(button('WC156 · Office supplies, Total 208,043.00, 2,080.43. Check: not 0.5% of the total')).toBeTruthy();
+  expect(button('WC156 · Office supplies, Total 208,043.00, Tax 2,080.43. Check: not 0.5% of the total')).toBeTruthy();
   // an income payment's ATC must be one for income payments
   await show('bir2307_text_2', { edits: { ewt2_atc: 'WV010' } });
   expect(screen.getByText('WV010 · Office supplies')).toBeTruthy();
   expect(screen.getByText('Not an ATC for income payments')).toBeTruthy();
   expect(screen.getByText('2,080.43')).toBeTruthy();
   await show('bir2307_text_2', { edits: { ewt2_atc: '' } });
-  expect(button('Office supplies, Total 208,043.00, 2,080.43. Check: no ATC')).toBeTruthy();
+  expect(button('Office supplies, Total 208,043.00, Tax 2,080.43. Check: no ATC')).toBeTruthy();
   // a business-tax row's own words
   await show('bir2307_photo_1', { edits: { bt1_atc: 'WC158' } });
   expect(
-    button('WC158 · Purchase of goods, Total 149,514.00, 7,475.70. Check: not an ATC for business tax'),
+    button('WC158 · Purchase of goods, Total 149,514.00, Tax 7,475.70. Check: not an ATC for business tax'),
   ).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Business tax row 1 ATC, to check' })).toBeTruthy();
 });
@@ -279,15 +280,15 @@ test('fixing a month re-runs the checks', async () => {
   expect(screen.getByRole('button', { name: 'Totals, to check' })).toBeTruthy();
   await press(screen.getByLabelText('Close'));
   expect(
-    button("WC610 · Purchase of corn, Total 114,402.88, 1,144.03. Check: the months don't add up to the total"),
+    button("WC610 · Purchase of corn, Total 114,402.88, Tax 1,144.03. Check: the months don't add up to the total"),
   ).toBeTruthy();
   expect(
-    button("Income payments, Total ₱559,190.98, ₱10,039.79. Check: the rows don't add up to the total row"),
+    button("Income payments, Total ₱559,190.98, Tax ₱10,039.79. Check: the rows don't add up to the total row"),
   ).toBeTruthy();
   // back as written: every check passes again
   await act(async () => setEdit(id, 'ewt1_m1', '100,664.00'));
   expect(screen.getByRole('header', { name: 'Checks passed' })).toBeTruthy();
-  expect(button('WC610 · Purchase of corn, Total 114,402.88, 1,144.03')).toBeTruthy();
+  expect(button('WC610 · Purchase of corn, Total 114,402.88, Tax 1,144.03')).toBeTruthy();
   expect(screen.queryByText("The months don't add up to the total")).toBeNull();
 });
 
@@ -417,7 +418,7 @@ test("the business-tax table, and a total row that isn't a total", async () => {
   await show('bir2307_text_0');
   expect(screen.queryByRole('header', { name: /^Business tax/ })).toBeNull();
   expect(screen.queryByText('Business tax')).toBeNull();
-  expect(button('Income payments, Total ₱559,190.98, ₱10,039.79')).toBeTruthy();
+  expect(button('Income payments, Total ₱559,190.98, Tax ₱10,039.79')).toBeTruthy();
 
   // a template's total line printing 0.00 or a dash, with no rows, isn't a total
   const zeros = (prefix: string) => Object.fromEntries(columns(prefix, TOTAL).map((box) => [box, '0.00']));
@@ -431,12 +432,12 @@ test("the business-tax table, and a total row that isn't a total", async () => {
   await show('bir2307_text_0', { edits: zeros('ewt_total') });
   expect(screen.getByRole('button', { name: 'Totals, to check' })).toBeTruthy();
   expect(screen.queryByText('₱0.00')).toBeNull();
-  expect(button("Income payments, Total —, —. Check: the rows don't add up to the total row")).toBeTruthy();
+  expect(button("Income payments, Total —, Tax —. Check: the rows don't add up to the total row")).toBeTruthy();
   expect(await boxesIn('Income payments')).toEqual(columns('ewt_total', TOTAL));
   // a total row that wasn't read: the same
   const blank = Object.fromEntries(columns('ewt_total', TOTAL).map((box) => [box, '']));
   await show('bir2307_text_0', { edits: blank });
-  expect(button("Income payments, Total —, —. Check: the rows don't add up to the total row")).toBeTruthy();
+  expect(button("Income payments, Total —, Tax —. Check: the rows don't add up to the total row")).toBeTruthy();
 });
 
 test('no income payments read', async () => {

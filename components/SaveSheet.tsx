@@ -5,7 +5,7 @@ import { StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { type CertView, type PayorStatus, periodName, taxWithheld } from '../lib/cert';
 import type { Terms } from '../lib/checks/finalize';
 import { peso, prettyDate } from '../lib/format';
-import type { PartyStatus, SaleView } from '../lib/sale';
+import { type PartyStatus, type SaleView, taxTypeFromBoxes } from '../lib/sale';
 import { saveScan } from '../lib/saved';
 import type { Kind, SaveDetails, SourceTag, StoredScan } from '../lib/scans';
 import { annotationOn, settings, subscribeSettings, type TaxType, updateSettings } from '../lib/settings';
@@ -17,18 +17,19 @@ import { Banner } from './Banner';
 import { ChoiceChips } from './ChoiceChips';
 import { Sheet } from './Sheet';
 import { SummaryBox, type SummaryLine } from './SummaryBox';
-import { TextField } from './TextField';
+import { codeKeyboard, TextField } from './TextField';
 
 // Design B §9.6, and §9.11 for annotation mode: the save sheets. A summary box of what the import row (a 2307's rows)
 // will hold: the date, the party and the gross, or the payor, the period and the tax withheld. The party has a New
 // badge when it goes out as written, not in the list; an unsure match says so, as today. Then today's fields, restyled:
-// whether the business is VAT-registered (asked once), the tax type (its helper shows while it's the suggestion), the
-// account in figures, the terms, the withholding tax's ATC; a 2307's offset account. In annotation mode (team builds;
-// milestone 4's behaviour), the scan's source tag, with M4's two notes. A warning banner counts what's still marked to
-// check, which saving doesn't wait for. Cancel and the save are the sheet's pinned actions (ruling T7-4). The save's
-// press returns its promise, so the button loads while the save runs and a double tap saves once (Review Focus 3).
-// After a save, the sheet closes, and a snackbar says so, with View, which opens Saved for the kind. A save that fails
-// keeps the sheet open, and says so in it, above the scrim (Review Focus 1).
+// whether the business is VAT-registered (asked once), the tax type (its helper shows while it's the VAT boxes'
+// suggestion, never for a sale that's Non-VAT because the business isn't VAT-registered: ruling T15-1), the account in
+// figures, the terms, the withholding tax's ATC (a code: call 15's keyboard); a 2307's offset account. In annotation
+// mode (team builds; milestone 4's behaviour), the scan's source tag, with M4's two notes. A warning banner counts
+// what's still marked to check, which saving doesn't wait for. Cancel and the save are the sheet's pinned actions
+// (ruling T7-4). The save's press returns its promise, so the button loads while the save runs and a double tap saves
+// once (Review Focus 3). After a save, the sheet closes, and a snackbar says so, with View, which opens Saved for the
+// kind. A save that fails keeps the sheet open, and says so in it, above the scrim (Review Focus 1).
 
 export const TAX_TYPES = [
   { value: 'VAT', label: 'VAT' },
@@ -127,7 +128,8 @@ export function SaveSheet({
           options={TAX_TYPES}
           value={taxType}
           onChange={setChosenType}
-          helper={chosenType === null ? SUGGESTED : null}
+          // only while it's the boxes' suggestion: a non-VAT-registered business's sale is Non-VAT by that (T15-1)
+          helper={chosenType === null && taxTypeFromBoxes(scan.kind, s.vatRegistered) ? SUGGESTED : null}
         />
         <TextField
           label={isSale ? 'Revenue account' : 'Expense account'}
@@ -145,7 +147,7 @@ export function SaveSheet({
             onChangeText={(t) => setAtc(t.toUpperCase())}
             helper={`The invoice shows ${peso(sale.withholding)} withheld. MyBizMate works out the tax from the ATC code.`}
             mono
-            autoCapitalize="characters"
+            {...codeKeyboard()} // a code, as Settings' ATC: capitals, with a number row (call 15)
           />
         ) : null}
         <CodeFields codes={codes} />

@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useRef, useState, useSyncExternalStore } from 'react';
-import { Platform, StyleSheet, Switch, Text, View, type ViewInstance } from 'react-native';
+import { StyleSheet, Switch, Text, View, type ViewInstance } from 'react-native';
 
 import { ChoiceChips } from '../components/ChoiceChips';
 import { Header } from '../components/Header';
@@ -10,7 +10,7 @@ import { Screen } from '../components/Screen';
 import { SectionHeader } from '../components/SectionHeader';
 import { Sheet } from '../components/Sheet';
 import { Tap } from '../components/Tap';
-import { TextField } from '../components/TextField';
+import { codeKeyboard, TextField } from '../components/TextField';
 import { TEAM_BUILD } from '../lib/build';
 import { settings, subscribeSettings, updateSettings } from '../lib/settings';
 import { colors, space, touch, type } from '../lib/theme';
@@ -89,9 +89,7 @@ export default function SettingsScreen() {
             helper="Used when an invoice shows tax withheld"
             warning={atcWarning}
             mono
-            // a code (the plan's call 15): letters and a number row, no suggestions
-            keyboardType={Platform.OS === 'android' ? 'visible-password' : 'default'}
-            autoCapitalize="characters"
+            {...codeKeyboard()} // a code (the plan's call 15): capitals, and a number row, no suggestions
             value={atc}
             onChangeText={(t) => {
               setAtc(t.toUpperCase());

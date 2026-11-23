@@ -17,7 +17,7 @@ import { certSections, payorLine } from '../components/CertificateSections';
 import { Header } from '../components/Header';
 import { IconButton } from '../components/IconButton';
 import { More } from '../components/icons';
-import { invoiceSections, Ledger, type LedgerOpen } from '../components/InvoiceLedger';
+import { type BoxesOpen, invoiceSections, Ledger, type LedgerOpen } from '../components/InvoiceLedger';
 import { Menu } from '../components/Menu';
 import { PartySheet } from '../components/PartySheet';
 import { PhotoThumb, PhotoViewer } from '../components/PhotoViewer';
@@ -34,10 +34,11 @@ import { TEAM_BUILD } from '../lib/build';
 import { localIsoDate } from '../lib/checks/dates';
 import { confirmDeleteSaved } from '../lib/confirmDelete';
 import { blockWords, saveBlock } from '../lib/exportRows';
-import { flagTarget } from '../lib/flagTargets';
+import { flagTarget, PAYOR_ROW } from '../lib/flagTargets';
 import { formatClock, formatMs, monthDay } from '../lib/format';
 import { FORMS } from '../lib/forms';
 import { addItem } from '../lib/lists';
+import { goBackOrHome } from '../lib/navigation';
 import { boxValue, type SaleView } from '../lib/sale';
 import { compareWithSample, sampleInfo } from '../lib/samples';
 import type { SavedSummary } from '../lib/saved';
@@ -74,11 +75,10 @@ const WHOLE_FORM = [
 /** The photo's height when the form wasn't found, in dp (§9.5). */
 const PHOTO_HEIGHT = 240;
 
-type BoxesOpen = Extract<LedgerOpen, { kind: 'boxes' }>;
 /**
  * What a sheet opens with: a row's (LedgerOpen), the boxes annotation mode still needs checked (always a list, as
  * milestone 4 had it: ruling T13-5), or the save sheet; n counts the openings, so each starts fresh, and rowKey is the
- * row it opened from, by its lib/flagTargets key (a 2307's payor row's sheet has the payor's line).
+ * row it opened from, by its lib/flagTargets key (a 2307's payor row's, PAYOR_ROW: its sheet has the payor's line).
  */
 type SheetOpen = Exclude<LedgerOpen, BoxesOpen> | (BoxesOpen & { alwaysList?: boolean }) | { kind: 'save' };
 type Opening = SheetOpen & { n: number; rowKey?: string };
@@ -204,7 +204,7 @@ export default function Result() {
   function confirmDelete(scanId: string) {
     confirmDeleteSaved(scanId, () => {
       setLeaving({ title, subtitle });
-      router.back();
+      goBackOrHome();
     });
   }
 
@@ -311,7 +311,7 @@ export default function Result() {
           }}
           returnFocus={boxesOpener}>
           {boxes.row !== undefined && sale ? <NewItem scan={scan} sale={sale} row={boxes.row} /> : null}
-          {boxes.rowKey === 'payor' && cert ? (
+          {boxes.rowKey === PAYOR_ROW && cert ? (
             // §9.5: read-only, whether the payor is in the customers and as which; there's no payor chooser
             <Text style={[type.label, styles.payorLine]}>{payorLine(cert.payor)}</Text>
           ) : null}

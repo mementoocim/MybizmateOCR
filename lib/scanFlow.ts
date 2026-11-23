@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { displayName, readPdf, releaseAccess, scanPhoto, type ScanResult } from '../modules/scanner';
+import { goBackOrHome } from './navigation';
 import { SAMPLES, sampleUri } from './samples';
 import { addScan, type ScanSource, type StoredScan } from './scans';
 
@@ -229,12 +230,12 @@ export function useScanFlow() {
   }
 
   /**
-   * Retake: the same source again (for a PDF, the picker again); back Home after a sample or a scan opened from Recent
-   * scans.
+   * Retake: the same source again (for a PDF, the picker again); back after a sample or a scan opened from Home's
+   * Recent scans or Saved (Home when there's nothing to go back to: goBackOrHome).
    */
   async function retake(scan: StoredScan, openedFromRecent: boolean): Promise<void> {
     if (openedFromRecent || scan.source === 'sample') {
-      router.back();
+      goBackOrHome();
       return;
     }
     if (scan.source === 'camera') {

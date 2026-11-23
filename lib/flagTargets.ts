@@ -5,6 +5,8 @@
 
 /** The rows a VAT breakdown can be about, in the screen's order. */
 const VAT_ROWS = ['vatable', 'vat', 'total_due'] as const;
+/** A 2307's payor row: the 2307's ledger keys it so, and the Scan screen gives its sheet the payor's line. */
+export const PAYOR_ROW = 'payor';
 
 type Rule = readonly [word: RegExp, row: (match: RegExpMatchArray, flagged: ReadonlySet<string>) => string];
 
@@ -22,7 +24,7 @@ const RULES: readonly Rule[] = [
   [/^VAT breakdown$/, (_, flagged) => VAT_ROWS.find((row) => flagged.has(row)) ?? 'total_due'],
   [/^Period$/, () => 'period'],
   [/^Payee's TIN$/, () => 'payee'],
-  [/^(Payor's TIN$|Payor )/, () => 'payor'],
+  [/^(Payor's TIN$|Payor )/, () => PAYOR_ROW],
   [/^Totals$/, () => 'ewt_total'],
   [/^Business tax totals$/, () => 'bt_total'],
 ];

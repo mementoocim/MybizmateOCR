@@ -2,8 +2,9 @@
 // One message at a time: a new one replaces the one showing. Hosts stack in the order they mount (the root layout's,
 // then an open sheet's, inside its Modal; the photo viewer's too), and only the newest shows the message, so it's
 // never dimmed behind a modal; one that goes hands the message back to the one under it. A bottom bar reports its
-// height while it's mounted, so the root host's message sits above it: the bar that first reported most recently (the
-// screen on top), whatever the ones under it report later.
+// height while its screen is the one on top (components/BottomBar: ruling T19-5), so the root host's message sits
+// above it. Should two report at once, the bar that first reported most recently counts, whatever the other reports
+// later.
 
 export type SnackAction = { label: string; onPress: () => void };
 export type Snack = { id: number; message: string; action: SnackAction | null };

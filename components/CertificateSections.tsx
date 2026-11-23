@@ -1,11 +1,12 @@
 import type { CertView, PayorStatus } from '../lib/cert';
 import type { CertRow } from '../lib/checks/bir2307';
+import { PAYOR_ROW } from '../lib/flagTargets';
 import { amount, peso, prettyDate, qty } from '../lib/format';
-import { formFields } from '../lib/forms';
 import { formatTin, partyName } from '../lib/lists';
 import { boxValue } from '../lib/sale';
 import type { StoredScan } from '../lib/scans';
-import type { LedgerOpen, LedgerRowSpec, LedgerSection } from './InvoiceLedger';
+import type { FormName } from '../modules/scanner';
+import { boxesOf, editedIn, type LedgerRowSpec, type LedgerSection } from './InvoiceLedger';
 
 // Design B §9.5 and the plan's call 14: the Scan screen's BIR 2307 as a ledger, drawn by InvoiceLedger's Ledger as the
 // invoice is. Today's sections (the period, the payee, the payor, Part III's income payments, its business-tax rows
@@ -17,8 +18,8 @@ import type { LedgerOpen, LedgerRowSpec, LedgerSection } from './InvoiceLedger';
 // can land on them from a chip or a closing sheet (ruling T12-1).
 
 type Table = CertRow['table'];
-type BoxesOpen = Extract<LedgerOpen, { kind: 'boxes' }>;
 
+const FORM: FormName = 'bir_2307';
 const PERIOD_BOXES = ['period_from', 'period_to'];
 const partyBoxes = (who: 'payee' | 'payor') => ['tin', 'name', 'address', 'zip'].map((c) => `${who}_${c}`);
 const ROW_COLUMNS = ['payment', 'atc', 'm1', 'm2', 'm3', 'total', 'tax'];
@@ -77,8 +78,6 @@ function realTotal(row: CertRow | null): CertRow | null {
   return row && [...row.months, row.total, row.tax].some((v) => v !== null && v !== 0) ? row : null;
 }
 
-const hasOwn = (o: object, key: string) => Object.prototype.hasOwnProperty.call(o, key);
-
 /**
  * A BIR 2307's sections, in today's order: the period, the payee (the business), the payor (matched like a sale's
  * customer), the income payments, the business-tax rows when it has any, and the totals. Every row but "No income
@@ -87,15 +86,6 @@ const hasOwn = (o: object, key: string) => Object.prototype.hasOwnProperty.call(
 export function certSections(scan: StoredScan, view: CertView): LedgerSection[] {
   const { cert, payor } = view;
   const has = (flag: string) => cert.flags.includes(flag);
-  const fields = formFields('bir_2307');
-  /** The form's own boxes of these, in its order. */
-  const boxesOf = (title: string, names: readonly string[]): BoxesOpen => ({
-    kind: 'boxes',
-    title,
-    boxes: fields.filter((f) => names.includes(f)),
-  });
-  /** Whether the person fixed any of these boxes. */
-  const editedIn = (open: BoxesOpen) => open.boxes.some((box) => hasOwn(scan.edits, box));
   const rowsOf = (table: Table) => cert.rows.filter((r) => r.table === table);
 
   // The period: a quarter's days, with the quarter as a badge; else the boxes as read, a box that wasn't read a dash.
@@ -104,7 +94,7 @@ export function certSections(scan: StoredScan, view: CertView): LedgerSection[] 
       ? { days: quarterDays(cert.from, cert.to), badge: cert.quarter.split('-')[1] }
       : null;
   const read = [boxValue(scan, 'period_from'), boxValue(scan, 'period_to')];
-  const period = boxesOf('Period', PERIOD_BOXES);
+  const period = boxesOf(FORM, 'Period', PERIOD_BOXES);
   const periodRow: LedgerRowSpec = {
     key: 'period',
     section: 'Period',
@@ -114,11 +104,11 @@ export function certSections(scan: StoredScan, view: CertView): LedgerSection[] 
     badge: quarter ? { label: quarter.badge, tone: 'neutral' } : null,
     reason: has('period') ? 'Not one calendar quarter' : null,
     flagged: has('period'),
-    edited: editedIn(period),
+    edited: editedIn(scan, period.boxes),
     open: period,
   };
 
-  const payee = boxesOf('Payee', partyBoxes('payee'));
+  const payee = boxesOf(FORM, 'Payee', partyBoxes('payee'));
   const payeeRow: LedgerRowSpec = {
     key: 'payee',
     section: 'Payee',
@@ -127,19 +117,19 @@ export function certSections(scan: StoredScan, view: CertView): LedgerSection[] 
     sub: tinAndZip(cert.payee),
     subMono: true,
     flagged: has('payee_tin'),
-    edited: editedIn(payee),
+    edited: editedIn(scan, payee.boxes),
     open: payee,
   };
 
-  const payorBoxes = boxesOf('Payor', partyBoxes('payor'));
+  const payorBoxes = boxesOf(FORM, 'Payor', partyBoxes('payor'));
   const payorRow: LedgerRowSpec = {
-    key: 'payor',
+    key: PAYOR_ROW,
     section: 'Payor',
     spokenLabel: 'Payor',
     value: payor.shown || null,
     sub: `${payorSub(payor)}\n${tinAndZip(cert.payor)}`,
     flagged: has('payor_tin') || has('payor_new') || has('payor_unsure'),
-    edited: editedIn(payorBoxes),
+    edited: editedIn(scan, payorBoxes.boxes),
     open: payorBoxes,
   };
 
@@ -153,7 +143,7 @@ export function certSections(scan: StoredScan, view: CertView): LedgerSection[] 
       has(`${name}_tax`) && row.rate !== null ? `Not ${percent(row.rate)} of the total` : null,
       has(`${name}_atc`) ? (row.atc === null ? 'No ATC' : `Not an ATC for ${words.atcFor}`) : null,
     ].filter((s) => s !== null);
-    const open = boxesOf(title, ROW_COLUMNS.map((c) => `${name}_${c}`));
+    const open = boxesOf(FORM, title, ROW_COLUMNS.map((c) => `${name}_${c}`));
     return {
       key: name,
       section,
@@ -163,7 +153,7 @@ export function certSections(scan: StoredScan, view: CertView): LedgerSection[] 
       amount: amount(row.tax),
       reason: why.length > 0 ? why.join(' · ') : null,
       flagged: has(`${name}_sum`) || has(`${name}_tax`) || has(`${name}_atc`),
-      edited: editedIn(open),
+      edited: editedIn(scan, open.boxes),
       open,
     };
   };
@@ -204,7 +194,7 @@ export function certSections(scan: StoredScan, view: CertView): LedgerSection[] 
         const total = realTotal(cert.totals[table]);
         const { name } = TABLES[table];
         const flagged = has(`${table}_total`);
-        const open = boxesOf(name, TOTAL_COLUMNS.map((c) => `${table}_total_${c}`));
+        const open = boxesOf(FORM, name, TOTAL_COLUMNS.map((c) => `${table}_total_${c}`));
         return {
           key: `${table}_total`,
           section: 'Totals',
@@ -215,7 +205,7 @@ export function certSections(scan: StoredScan, view: CertView): LedgerSection[] 
           amountStrong: true,
           reason: flagged ? "The rows don't add up to the total row" : null,
           flagged,
-          edited: editedIn(open),
+          edited: editedIn(scan, open.boxes),
           open,
         };
       }),

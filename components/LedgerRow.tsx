@@ -25,6 +25,7 @@ type LedgerRowProps = {
   subMono?: boolean;
   reason?: string | null; // shown only when flagged, in warning
   amount?: string | null; // the right column
+  spokenAmountLabel?: string; // never shown, said before the amount: its column's name, which the strip shows ("Tax")
   amountStrong?: boolean;
   flagged?: boolean;
   edited?: boolean;
@@ -51,6 +52,7 @@ export const LedgerRow = forwardRef<ViewInstance, LedgerRowProps>(function Ledge
     subMono = false,
     reason,
     amount,
+    spokenAmountLabel,
     amountStrong = false,
     flagged = false,
     edited = false,
@@ -94,8 +96,18 @@ export const LedgerRow = forwardRef<ViewInstance, LedgerRowProps>(function Ledge
       </View>
     </>
   );
+  const spokenAmount = amount && spokenAmountLabel ? `${spokenAmountLabel} ${amount}` : amount;
   const a11y = {
-    accessibilityLabel: spokenName({ label: label || spokenLabel, value, badge, sub, amount, reason, flagged, edited }),
+    accessibilityLabel: spokenName({
+      label: label || spokenLabel,
+      value,
+      badge,
+      sub,
+      amount: spokenAmount,
+      reason,
+      flagged,
+      edited,
+    }),
     testID,
     style: styles.row,
   };
@@ -123,8 +135,8 @@ export const LedgerRow = forwardRef<ViewInstance, LedgerRowProps>(function Ledge
 
 /**
  * What TalkBack says (§7): the key (on a row that shows none, its spoken-only label: ruling T12-1), the value ("blank"
- * when empty), the badge beside it (ruling T4-4: a badge is part of its row's label), the sub-line and the amount;
- * then the flag and its reason, or that the value was edited.
+ * when empty), the badge beside it (ruling T4-4: a badge is part of its row's label), the sub-line and the amount,
+ * after its column's name ("Tax 4,160.86": ruling T12-4); then the flag and its reason, or that the value was edited.
  */
 function spokenName({
   label,

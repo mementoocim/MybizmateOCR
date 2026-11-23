@@ -30,8 +30,9 @@ import { toast } from '../lib/toast';
 // that date, then the time saved, newest first. A row says the party, its kind, date and number, the amount (a 2307's
 // tax withheld) and To export or Exported. It opens the scan, and a long press asks to delete it, in the Scan screen's
 // ⋮ words (lib/confirmDelete). The bottom bar's one Export… is there whenever something can be exported: a saved scan,
-// or a party added from a scan, whose file needs no saved scan (ruling T19-7). It opens the export at the filtered
-// kind, or at its list of files for All or for a kind with nothing saved, whose file would hold nothing (T19-6).
+// or a party added from a scan, whose file needs no saved scan (ruling T19-7); with nothing saved it's secondary, as
+// the empty state's Take photo is the screen's primary (T19-8). It opens the export at the filtered kind, or at its
+// list of files for All or for a kind with nothing saved, whose file would hold nothing (T19-6).
 
 type Filter = Kind | 'all';
 
@@ -67,7 +68,7 @@ export default function SavedScreen() {
   const canExport = anySaved || newParties(theLists, true).length > 0;
   const end = useEndPadding(canExport);
 
-  const waiting = useMemo(() => new Set(waitingOf(null, all)), [all]);
+  const waiting = useMemo(() => new Set(waitingOf(null, all).map((s) => s.id)), [all]); // by id, not by object
   const sections = useMemo(() => byMonth(filter === 'all' ? all : all.filter((s) => s.kind === filter)), [all, filter]);
   const countOf = (k: Kind) => all.filter((s) => s.kind === k).length;
   // A kind with nothing saved has no chip, unless it's the filter: then it stays, checked, at 0, beside its "No … saved"
@@ -104,7 +105,17 @@ export default function SavedScreen() {
         bottom={
           canExport ? (
             <BottomBar
-              buttons={[{ label: 'Export…', icon: Share, onPress: openExport, ref: exportButton, testID: 'export-open' }]}
+              buttons={[
+                {
+                  label: 'Export…',
+                  icon: Share,
+                  // with nothing saved, the empty state's Take photo is the one primary (ruling T19-8)
+                  variant: anySaved ? 'primary' : 'secondary',
+                  onPress: openExport,
+                  ref: exportButton,
+                  testID: 'export-open',
+                },
+              ]}
             />
           ) : undefined
         }>
@@ -139,7 +150,7 @@ export default function SavedScreen() {
               subMono
               subCaps
               amount={amount(item.kind === '2307' ? item.tax : item.gross)}
-              badge={waiting.has(item) ? TO_EXPORT : EXPORTED}
+              badge={waiting.has(item.id) ? TO_EXPORT : EXPORTED}
               onPress={() => void open(item.id)}
               onLongPress={() => confirmDeleteSaved(item.id)}
               accessibilityHint="Long-press to delete"

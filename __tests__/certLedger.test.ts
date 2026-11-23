@@ -1,7 +1,7 @@
 import { certSections, payorLine } from '../components/CertificateSections';
 import type { LedgerRowSpec, LedgerSection } from '../components/InvoiceLedger';
 import { certOf } from '../lib/cert';
-import { flagTarget } from '../lib/flagTargets';
+import { flagTarget, PAYOR_ROW } from '../lib/flagTargets';
 import type { Lists } from '../lib/lists';
 import { addScan, getScan, setEdit } from '../lib/scans';
 import { settings } from '../lib/settings';
@@ -279,6 +279,14 @@ test('totals keep the peso sign', () => {
   // With no rows, a 0.00 total line isn't one either: no row for it.
   for (const box of columns('bt_total', TOTAL)) setEdit(zeros, box, '0.00');
   expect(keysOf(sectionsOf(zeros)).at(-1)).toEqual(['Totals', ['ewt_total']]);
+});
+
+test("the payor's row has one key, PAYOR_ROW: its chips open it, and the Scan screen gives its sheet the payor's line", () => {
+  // lib/flagTargets' constant, not the word typed again in each place (app/result.tsx finds the payor's sheet by it)
+  expect(rowOf(sectionsOf(scanOf('bir2307_text_1')), PAYOR_ROW)).toMatchObject({ section: 'Payor', spokenLabel: 'Payor' });
+  for (const word of ["Payor's TIN", 'Payor (not in your customers)', 'Payor (confirm the match)']) {
+    expect(flagTarget(word, new Set())).toBe(PAYOR_ROW);
+  }
 });
 
 test('payorLine for each status', () => {

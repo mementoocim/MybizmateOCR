@@ -12,7 +12,6 @@ import {
   AccessibilityInfo,
   Image,
   type KeyboardTypeOptions,
-  Platform,
   StyleSheet,
   Text,
   type TextInputInstance,
@@ -33,7 +32,7 @@ import type { ButtonProps } from './Buttons';
 import { CHIP_SLOP } from './FlagChip';
 import { Sheet } from './Sheet';
 import { Tap } from './Tap';
-import { TextField } from './TextField';
+import { codeKeyboard, TextField } from './TextField';
 
 // Design B §9.5 ("Fix a box"), §12 A8 and the plan's calls 15 and 19: what the camera saw in a row's boxes, each one
 // fixable. The person types what the box says (an edit is "the box says this", kept apart from the reading), and the
@@ -102,18 +101,15 @@ const editorOf = (scan: StoredScan, box: string, fromList: boolean): Editor => {
 
 /**
  * Words get the default keyboard, in sentences. Every other box (amounts, dates, quantities, TINs, digits, codes,
- * numbers) gets Android's visible-password keyboard, which keeps every character ("1,140.00", "Oct 29", "P") and adds
- * a number row, with no suggestions; codes (a 2307's ATC) in capitals. Autocorrect is off in every field (TextField).
+ * numbers) gets the code keyboard (TextField's codeKeyboard: Android's visible-password, which keeps every character
+ * and adds a number row, with no suggestions); codes (a 2307's ATC) in capitals. Autocorrect is off in every field.
  */
 function keyboardOf(kind: FieldType): {
   keyboardType: KeyboardTypeOptions;
   autoCapitalize: TextInputProps['autoCapitalize'];
 } {
   if (kind === 'text') return { keyboardType: 'default', autoCapitalize: 'sentences' };
-  return {
-    keyboardType: Platform.OS === 'android' ? 'visible-password' : 'default',
-    autoCapitalize: kind === 'code' ? 'characters' : 'none',
-  };
+  return codeKeyboard(kind === 'code' ? 'characters' : 'none');
 }
 
 export function BoxSheet({

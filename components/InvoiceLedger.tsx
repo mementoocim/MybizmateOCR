@@ -6,6 +6,7 @@ import { amount, peso, prettyDate, qty } from '../lib/format';
 import { FORMS, formFields } from '../lib/forms';
 import { boxValue, rawFromScan, type SaleView } from '../lib/sale';
 import type { StoredScan } from '../lib/scans';
+import type { FormName } from '../modules/scanner';
 import type { BadgeSpec } from './Badge';
 import { LedgerRow } from './LedgerRow';
 import { SectionHeader } from './SectionHeader';
@@ -22,6 +23,8 @@ export type LedgerOpen =
   | { kind: 'customer' }
   | { kind: 'supplier' }
   | { kind: 'terms' };
+/** A row's boxes, listed in their sheet. */
+export type BoxesOpen = Extract<LedgerOpen, { kind: 'boxes' }>;
 
 export type LedgerRowSpec = {
   key: string; // the row keys of lib/flagTargets
@@ -67,24 +70,28 @@ const SUPPLIER_SUB: Record<string, string> = {
 
 const hasOwn = (o: object, key: string) => Object.prototype.hasOwnProperty.call(o, key);
 
+/**
+ * What a row of either ledger (the invoice's, the 2307's) opens: the form's own boxes of these, in its order, under the
+ * sheet's title; an item row's sheet knows its row.
+ */
+export function boxesOf(form: FormName, title: string, names: readonly string[], row?: number): BoxesOpen {
+  return { kind: 'boxes', title, boxes: formFields(form).filter((f) => names.includes(f)), row };
+}
+
+/** Whether the person fixed any of these boxes (clearing one is a fix too). */
+export function editedIn(scan: StoredScan, boxes: readonly string[]): boolean {
+  return boxes.some((box) => hasOwn(scan.edits, box));
+}
+
 /** The invoice's sections, in today's order: the invoice, its items, then its totals. */
 export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection[] {
-  const form = FORMS[scan.result.form!];
-  const fields = formFields(scan.result.form!);
+  const formName = scan.result.form!;
+  const form = FORMS[formName];
   const final = sale.final;
   const has = (flag: string) => final.flags.includes(flag);
   const raw = rawFromScan(scan);
   const boxAmount = (box: string) => candidates(raw.boxes[box])[0] ?? 0;
   const anyRead = (names: readonly string[]) => names.some((b) => boxValue(scan, b) !== null);
-  /** The form's own boxes of these, in its order. */
-  const boxesOf = (title: string, names: readonly string[], row?: number): LedgerOpen => ({
-    kind: 'boxes',
-    title,
-    boxes: fields.filter((f) => names.includes(f)),
-    row,
-  });
-  /** Whether the person fixed any of these boxes. */
-  const editedIn = (open: LedgerOpen) => open.kind === 'boxes' && open.boxes.some((box) => hasOwn(scan.edits, box));
 
   // The invoice: its number, date, customer (or supplier, and the buyer it names), and terms.
   const invoice = 'Invoice';
@@ -98,8 +105,8 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
           ? "Couldn't make out a date"
           : 'Not a date in the last 6 months'
         : null;
-  const number = boxesOf(form.number, ['invoice_no']);
-  const date = boxesOf('Date', ['date']);
+  const number = boxesOf(formName, form.number, ['invoice_no']);
+  const date = boxesOf(formName, 'Date', ['date']);
   const invoiceRows: LedgerRowSpec[] = [
     {
       key: 'number',
@@ -108,7 +115,7 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
       value: final.invoice_no || null,
       valueStyle: 'figure',
       flagged: false,
-      edited: editedIn(number),
+      edited: editedIn(scan, number.boxes),
       open: number,
     },
     {
@@ -119,7 +126,7 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
       valueStyle: 'figure',
       reason: dateReason,
       flagged: has('date'),
-      edited: editedIn(date),
+      edited: editedIn(scan, date.boxes),
       open: date,
     },
   ];
@@ -145,14 +152,14 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
       sub: flagged ? null : words,
       reason: flagged ? words : null,
       flagged,
-      edited: editedIn(boxesOf('Customer', CUSTOMER_BOXES)),
+      edited: editedIn(scan, boxesOf(formName, 'Customer', CUSTOMER_BOXES).boxes),
       open: { kind: 'customer' },
     });
   } else {
     // The seller is printed, not read: the person chooses it, so it has no boxes to fix.
     const flagged = party.status === 'missing';
     const words = SUPPLIER_SUB[party.status] ?? null;
-    const soldTo = boxesOf('Sold to', CUSTOMER_BOXES);
+    const soldTo = boxesOf(formName, 'Sold to', CUSTOMER_BOXES);
     invoiceRows.push(
       {
         key: 'supplier',
@@ -173,7 +180,7 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
         value: boxValue(scan, 'customer_name') || null,
         sub: 'You, as the invoice names you',
         flagged: false,
-        edited: editedIn(soldTo),
+        edited: editedIn(scan, soldTo.boxes),
         open: soldTo,
       },
     );
@@ -199,11 +206,7 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
       : final.items.map((it) => {
           const row = it.row;
           const title = it.description || `Item ${row}`;
-          const open = boxesOf(
-            title,
-            ITEM_COLUMNS.map((c) => `item${row}_${c}`),
-            row,
-          );
+          const open = boxesOf(formName, title, ITEM_COLUMNS.map((c) => `item${row}_${c}`), row);
           const why = [
             has(`row${row}`) ? "Doesn't add up" : null,
             has(`item${row}`) ? 'Not in your item list' : null,
@@ -218,7 +221,7 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
             amount: amount(it.amount),
             reason: why.length > 0 ? why.join(' · ') : null,
             flagged: why.length > 0,
-            edited: editedIn(open),
+            edited: editedIn(scan, open.boxes),
             open,
           };
         });
@@ -235,7 +238,7 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
     check: { flags: readonly string[]; reason: string } | null,
   ) => {
     const flagged = check !== null && check.flags.some((flag) => has(flag));
-    const open = boxesOf(label, names);
+    const open = boxesOf(formName, label, names);
     totalRows.push({
       key,
       section: totals,
@@ -244,7 +247,7 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
       valueStyle: 'figure',
       reason: flagged ? check.reason : null,
       flagged,
-      edited: editedIn(open),
+      edited: editedIn(scan, open.boxes),
       open,
     });
   };
@@ -273,7 +276,7 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
       : has('check_total_sales')
         ? "Total sales doesn't match the total due"
         : 'The written totals agree';
-  const total = boxesOf('Total due', TOTAL_BOXES);
+  const total = boxesOf(formName, 'Total due', TOTAL_BOXES);
   totalRows.push({
     key: 'total_due',
     section: totals,
@@ -283,11 +286,11 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
     sub: totalFlagged ? null : totalWords,
     reason: totalFlagged ? totalWords : null,
     flagged: totalFlagged,
-    edited: editedIn(total),
+    edited: editedIn(scan, total.boxes),
     open: total,
   });
   if (final.less > 0) {
-    const gross = boxesOf('Gross (VAT included)', ['total_sales', 'discount', 'withholding']);
+    const gross = boxesOf(formName, 'Gross (VAT included)', ['total_sales', 'discount', 'withholding']);
     totalRows.push({
       key: 'gross',
       section: totals,
@@ -296,7 +299,7 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
       valueStyle: 'figure',
       sub: 'Before the discount and withholding tax. This goes to MyBizMate.',
       flagged: false,
-      edited: editedIn(gross),
+      edited: editedIn(scan, gross.boxes),
       open: gross,
     });
   }
@@ -311,7 +314,7 @@ export function invoiceSections(scan: StoredScan, sale: SaleView): LedgerSection
 /**
  * The sections, each a section strip and then its rows. A row that opens something calls onOpen with itself and its
  * view, which the sheet it opens gives TalkBack focus back to. rowRefs holds each row's view by its key, so a flag
- * chip can scroll to its row.
+ * chip can scroll to its row. A row's amount is said with the name of the column it sits under, the section's right.
  */
 export function Ledger({
   sections,
@@ -343,6 +346,7 @@ export function Ledger({
               subMono={row.subMono}
               reason={row.reason}
               amount={row.amount}
+              spokenAmountLabel={section.right} // the column the strip names, said with the amount (ruling T12-4)
               amountStrong={row.amountStrong}
               flagged={row.flagged}
               edited={row.edited}
