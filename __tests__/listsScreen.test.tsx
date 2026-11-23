@@ -5,6 +5,7 @@ import ListsScreen from '../app/lists';
 import { addParty, clearItems, clearParties, markPartiesExported, type Party } from '../lib/lists';
 import { colors, type } from '../lib/theme';
 import { memoryFs } from '../test-utils/memoryFs';
+import { scrollListToEnd } from '../test-utils/scrollList';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §9.9: Your lists, the customers, suppliers and items the checks use, imported from CSV files (MyBizMate's
@@ -152,38 +153,8 @@ const fromScan = (registeredName: string, tin = '', extra: Partial<Party> = {}) 
     ...extra,
   });
 
-/** A row's height as the test lays the list out. */
+/** A row's height as the test lays the list out (test-utils/scrollList). */
 const ROW = 60;
-/** The phone's viewport, in dp. */
-const VIEWPORT = { width: 360, height: 640 };
-/**
- * Scrolls the list to its end as a phone would. Jest lays nothing out, so this does: the viewport, then each part the
- * list has rendered (its controls, its rows, the Clear button) one under the other, ROW dp each. The list then
- * renders the rows that come into reach, a batch at a time.
- */
-async function scrollToEnd() {
-  const list = screen.getByTestId('lists-list');
-  for (let batch = 0; batch < 10; batch += 1) {
-    const parts = list.queryAll((n) => n !== list && typeof n.props.onLayout === 'function');
-    const height = parts.length * ROW;
-    await act(async () => {
-      await fireEvent(list, 'layout', { nativeEvent: { layout: { x: 0, y: 0, ...VIEWPORT } } });
-      for (const [i, part] of parts.entries()) {
-        const layout = { x: 0, y: i * ROW, width: VIEWPORT.width, height: ROW };
-        await fireEvent(part, 'layout', { nativeEvent: { layout } });
-      }
-      await fireEvent(list, 'contentSizeChange', VIEWPORT.width, height);
-      await fireEvent.scroll(list, {
-        nativeEvent: {
-          contentOffset: { x: 0, y: Math.max(0, height - VIEWPORT.height) },
-          contentSize: { width: VIEWPORT.width, height },
-          layoutMeasurement: VIEWPORT,
-        },
-      });
-      await new Promise((resolve) => setTimeout(resolve, 60)); // the list renders a batch after 50 ms
-    });
-  }
-}
 
 beforeEach(async () => {
   jest.clearAllMocks();
@@ -327,7 +298,7 @@ test('long names and long lists show in full', async () => {
   expect(header('60 customers')).toBeOnTheScreen();
   // the list is virtualized: its rows come as it scrolls, down to the last one
   expect(screen.queryByText('Customer 60')).toBeNull();
-  await scrollToEnd();
+  await scrollListToEnd('lists-list', ROW);
   expect(row('Customer 60')).toBeOnTheScreen();
   expect(button('Clear customers')).toBeOnTheScreen();
 });

@@ -5,6 +5,7 @@ import LicensesScreen from '../app/licenses';
 import { LICENSES } from '../lib/licenses';
 import { colors } from '../lib/theme';
 import { memoryFs } from '../test-utils/memoryFs';
+import { scrollListToEnd } from '../test-utils/scrollList';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §9.10: Open-source licenses, from Settings › About. A row per component, with its license and version,
@@ -27,7 +28,10 @@ jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.m
 const FILE = 'file:///cache/ExponentAsset-license.txt';
 const ONNX = LICENSES.findIndex((entry) => entry.name === 'ONNX Runtime');
 
-/** The table's entries, in its order, with CameraX among the scanner module's native libraries (ruling T21-1). */
+/**
+ * The table's entries, in its order, with CameraX (ruling T21-1) and nlohmann/json among the scanner module's native
+ * libraries.
+ */
 const NAMES = [
   'React Native',
   'React',
@@ -39,6 +43,7 @@ const NAMES = [
   'ONNX Runtime',
   'CameraX (AndroidX)',
   'PDFium',
+  'nlohmann/json',
   'PP-OCRv6 small, Latin (PaddleOCR)',
   'Lucide',
   'Schibsted Grotesk',
@@ -52,37 +57,8 @@ const paragraphs = () =>
     .queryAllByText(/./)
     .map((paragraph) => paragraph.props.children);
 
-/** A paragraph's height as the test lays the text out, and the phone's viewport, in dp. */
+/** A paragraph's height as the test lays the text out (test-utils/scrollList). */
 const PARAGRAPH = 60;
-const VIEWPORT = { width: 360, height: 640 };
-/**
- * Scrolls the text to its end as a phone would. Jest lays nothing out, so this does: the viewport, then each part the
- * list has rendered, one under the other, PARAGRAPH dp each. The list then renders the paragraphs that come into
- * reach, a batch at a time.
- */
-async function scrollToEnd() {
-  const list = screen.getByTestId('license-text');
-  for (let batch = 0; batch < 10; batch += 1) {
-    const parts = list.queryAll((n: Instance) => n !== list && typeof n.props.onLayout === 'function');
-    const height = parts.length * PARAGRAPH;
-    await act(async () => {
-      await fireEvent(list, 'layout', { nativeEvent: { layout: { x: 0, y: 0, ...VIEWPORT } } });
-      for (const [i, part] of parts.entries()) {
-        const layout = { x: 0, y: i * PARAGRAPH, width: VIEWPORT.width, height: PARAGRAPH };
-        await fireEvent(part, 'layout', { nativeEvent: { layout } });
-      }
-      await fireEvent(list, 'contentSizeChange', VIEWPORT.width, height);
-      await fireEvent.scroll(list, {
-        nativeEvent: {
-          contentOffset: { x: 0, y: Math.max(0, height - VIEWPORT.height) },
-          contentSize: { width: VIEWPORT.width, height },
-          layoutMeasurement: VIEWPORT,
-        },
-      });
-      await new Promise((resolve) => setTimeout(resolve, 60)); // the list renders a batch after 50 ms
-    });
-  }
-}
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -180,7 +156,7 @@ test('a long text shows in full, a paragraph at a time', async () => {
 
   // virtualized: the first paragraphs at first, the rest as it scrolls, every one of them in full
   expect(paragraphs().length).toBeLessThan(text.length);
-  await scrollToEnd();
+  await scrollListToEnd('license-text', PARAGRAPH);
   expect(paragraphs()).toEqual(text);
   const long = within(screen.getByTestId('license-text')).getByText(icons);
   expect(long.props.numberOfLines).toBeUndefined();

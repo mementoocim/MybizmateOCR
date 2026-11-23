@@ -3,10 +3,10 @@ import { MODEL } from './versions';
 // Design B §9.10: what Settings › About › Open-source licenses lists (app/licenses.tsx), each with its license, its
 // version and the text the app ships for it (app/license.tsx). The texts are .txt assets that
 // scripts/collect-licenses.mjs gathers into assets/licenses, a file each (`npm run licenses`). A version is its
-// source's: package.json, the scanner module's build.gradle (with the pdfium release scripts/fetch-pdfium.mjs pins) or
-// model.json, as a test checks. Lucide's is the tag its glyphs were copied from (components/icons.tsx), and a font's is
-// the version its files carry. A test fails when a dependency in package.json, or one the scanner module's build.gradle
-// implements, has no entry.
+// source's: package.json, the scanner module's build.gradle (with the pdfium release scripts/fetch-pdfium.mjs pins),
+// json.hpp's banner or model.json, as a test checks. Lucide's is the tag its glyphs were copied from
+// (components/icons.tsx), and a font's is the version its files carry. A test fails when a dependency in package.json,
+// one the scanner module's build.gradle implements, or a library its C++ core compiles in has no entry.
 
 export type LicenseEntry = {
   name: string;
@@ -61,9 +61,9 @@ export const LICENSES: readonly LicenseEntry[] = [
     covers: ['react-native-safe-area-context'],
     asset: require('../assets/licenses/react-native-safe-area-context.txt'),
   },
-  // The scanner module's native libraries, which cover what its build.gradle implements (group:artifact). The rest
-  // aren't dependencies, so they cover none: pdfium's prebuilt library, the model, and what's copied into the app (the
-  // icons' paths, the fonts).
+  // The scanner module's native libraries, which cover what its build.gradle implements (group:artifact) and what its
+  // C++ core compiles in (by its folder, third_party/<name>). The rest aren't dependencies, so they cover none: pdfium's
+  // prebuilt library, the model, and what's copied into the app (the icons' paths, the fonts).
   {
     name: 'OpenCV',
     version: '5.1.0',
@@ -91,6 +91,13 @@ export const LICENSES: readonly LicenseEntry[] = [
     license: 'BSD-3-Clause and others', // the binaries' own notice, then each library's in libpdfium.so
     covers: [],
     asset: require('../assets/licenses/pdfium.txt'),
+  },
+  {
+    name: 'nlohmann/json', // JSON for Modern C++, which the scanner core compiles in (ruling T21-3)
+    version: '3.11.3',
+    license: 'MIT', // then the notices json.hpp carries for the code it takes from others
+    covers: ['third_party/nlohmann'],
+    asset: require('../assets/licenses/nlohmann-json.txt'),
   },
   {
     // PaddleOCR's LICENSE, from its main branch at dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf: no tag is pinned for the
@@ -126,8 +133,9 @@ export const LICENSES: readonly LicenseEntry[] = [
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 /**
- * The entry that covers a dependency, a package.json one by its name or a Gradle one by group:artifact: one naming it,
- * or naming its prefix and "*" ("expo-*", "androidx.camera:*").
+ * The entry that covers a dependency: a package.json one by its name, a Gradle one by group:artifact, and C++ the
+ * scanner core compiles in by its folder (third_party/nlohmann). That's the entry naming it, or naming its prefix and
+ * "*" ("expo-*", "androidx.camera:*").
  */
 export function coveredBy(dependency: string): LicenseEntry | undefined {
   return LICENSES.find(({ covers }) =>
