@@ -1,11 +1,20 @@
-import { act, render, screen } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { AccessibilityInfo, Animated, StyleSheet } from 'react-native';
 
 import { BrandSplash } from '../components/BrandSplash';
+import { colors, type } from '../lib/theme';
+import { typeStylesOf } from '../test-utils/typeStyles';
+
+// Design B §9.1 and §12 A11: the brand while the scanner gets ready (the model, what the phone keeps, a warm-up read),
+// for at least half a second so it doesn't flash, then a 300 ms fade. The logo sits where the phone's own splash drew
+// it. A start that fails says so in plain words, as a polite live region, with Try again: it runs the start again,
+// once per tap (Review Focus 3). The raw message shows in team builds only. Animations in jest end at once
+// (test-utils/jestSetup.ts), so fake timers carry the floor and the fade.
 
 const mockPreload = jest.fn();
 const mockScan = jest.fn();
 const mockLoadAppData = jest.fn(async () => {});
+let mockTeam = false;
 
 jest.mock('../modules/scanner', () => ({
   preload: () => mockPreload(),
@@ -13,65 +22,107 @@ jest.mock('../modules/scanner', () => ({
 }));
 jest.mock('../lib/startup', () => ({ loadAppData: () => mockLoadAppData() }));
 jest.mock('../lib/samples', () => ({ sampleUri: async (id: string) => `file:///s/${id}.jpg` }));
+jest.mock('../lib/build', () => ({
+  get TEAM_BUILD() {
+    return mockTeam;
+  },
+}));
 jest.mock('expo-splash-screen', () => ({ hideAsync: jest.fn(async () => {}) }));
+
+const TAGLINE = 'Scan invoices. Even offline.';
+const READY = 'Getting the scanner ready…';
+const HEADLINE = "The scanner couldn't start";
+const AGAIN = 'Try again. If it keeps happening, close the app and open it again.';
+const noop = () => {};
+/** Every animation holds its first frame. */
+const still: Animated.CompositeAnimation = { start: noop, stop: noop, reset: noop };
+
+type Instance = ReturnType<typeof screen.getByRole>;
+const kids = (el: Instance) => el.children.filter((child): child is Instance => typeof child !== 'string');
+const press = (el: Instance) => act(async () => fireEvent.press(el));
+const button = (name: string) => screen.getByRole('button', { name });
+const splash = () => screen.getByTestId('splash');
+const words = () => screen.getByTestId('splash-words');
 
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
+  mockTeam = false;
+  // each test starts from a start that works; it changes what it needs
+  mockPreload.mockReset().mockResolvedValue(undefined);
+  mockLoadAppData.mockReset().mockResolvedValue(undefined);
+  mockScan.mockReset().mockResolvedValue({});
 });
 
 afterEach(() => {
   jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 async function settle() {
   for (let i = 0; i < 10; i++) await act(async () => {});
 }
 
-test('ready after the scanner and a warm-up scan, and not before 1200 ms', async () => {
-  mockPreload.mockResolvedValue(undefined);
-  mockScan.mockResolvedValue({});
+/** The clock moves on by ms, and what that lets go runs. */
+async function after(ms: number) {
+  await act(async () => {
+    jest.advanceTimersByTime(ms);
+  });
+  await settle();
+}
+
+test('ready after at least half a second, then the fade', async () => {
+  const timing = jest.spyOn(Animated, 'timing'); // a spy only: jest's animation, which ends at once
   const onReady = jest.fn();
   await render(<BrandSplash onReady={onReady} />);
-  expect(screen.getByText('Scan invoices. Even offline.')).toBeTruthy();
-  expect(screen.getByText('Getting the scanner ready…')).toBeTruthy();
+  // the brand: the wordmark with ".io" in brandText, today's tagline; under them the loading bar and its line
+  const wordmark = screen.getByText('mybizmate.io');
+  expect(wordmark).toHaveStyle({ ...type.title, color: colors.ink });
+  expect(within(wordmark).getByText('.io')).toHaveStyle({ color: colors.brandText });
+  expect(screen.getByText(TAGLINE)).toHaveStyle({ ...type.body, color: colors.mute });
+  expect(screen.getByTestId('loading-track')).toHaveStyle({ backgroundColor: colors.sand }); // Task 16's LoadingBar
+  expect(screen.getByText(READY)).toHaveStyle({ ...type.label, color: colors.mute });
+
+  // the scanner, what the phone keeps, then a warm-up read of a sample that keeps no files
   await settle();
-  expect(mockPreload).toHaveBeenCalled();
-  expect(mockLoadAppData).toHaveBeenCalled();
+  expect(mockPreload).toHaveBeenCalledTimes(1);
+  expect(mockLoadAppData).toHaveBeenCalledTimes(1);
   expect(mockScan).toHaveBeenCalledWith('file:///s/inv_0001.jpg', { keepFiles: false });
+
+  // all ready at once, and still not before half a second
+  await after(499);
+  expect(splash()).toHaveStyle({ opacity: 1 });
   expect(onReady).not.toHaveBeenCalled();
-  await act(async () => {
-    jest.advanceTimersByTime(1100);
-  });
+  await after(1); // half a second: the fade, on the native driver
+  expect(timing).toHaveBeenCalledWith(expect.anything(), { toValue: 0, duration: 300, useNativeDriver: true });
+  expect(splash()).toHaveStyle({ opacity: 0 });
   expect(onReady).not.toHaveBeenCalled();
-  await act(async () => {
-    jest.advanceTimersByTime(1000); // past 1200 ms: the fade starts
-  });
-  await settle();
+  await after(299);
   expect(onReady).not.toHaveBeenCalled();
-  await act(async () => {
-    jest.advanceTimersByTime(300); // the fade
-  });
-  await settle();
+  await after(1); // the fade's 300 ms
+  expect(onReady).toHaveBeenCalledTimes(1);
+});
+
+test('a slow start adds nothing: the fade follows at once', async () => {
+  mockPreload.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 800)));
+  const onReady = jest.fn();
+  await render(<BrandSplash onReady={onReady} />);
+  await after(800); // the scanner took longer than the floor
+  expect(splash()).toHaveStyle({ opacity: 0 }); // no fixed minimum on top (§12 A11)
+  await after(300);
   expect(onReady).toHaveBeenCalledTimes(1);
 });
 
 test('a warm-up read that fails still opens the app (it only makes the first scan quicker)', async () => {
-  mockPreload.mockResolvedValue(undefined);
   mockScan.mockRejectedValue(new Error('unreadable'));
   const onReady = jest.fn();
   await render(<BrandSplash onReady={onReady} />);
   await settle();
-  await act(async () => {
-    jest.advanceTimersByTime(1200); // the splash's shortest time
-  });
-  await settle();
-  await act(async () => {
-    jest.advanceTimersByTime(300); // the fade
-  });
-  await settle();
+  await after(500); // the splash's shortest time
+  await after(300); // the fade
   expect(onReady).toHaveBeenCalledTimes(1);
-  expect(screen.queryByText(/couldn't start/)).toBeNull();
+  expect(screen.queryByText(HEADLINE)).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
 });
 
 test("the logo starts where the phone's splash drew it: 104 dp, centred on the screen", async () => {
@@ -81,14 +132,134 @@ test("the logo starts where the phone's splash drew it: 104 dp, centred on the s
   expect(StyleSheet.flatten(screen.getByTestId('splash-brand').props.style)).toMatchObject({ top: '50%', marginTop: -52 });
 });
 
-test('a scanner that fails to start says so and goes no further', async () => {
+test('a failed start: the words and Try again; the raw message only in team builds', async () => {
   mockPreload.mockRejectedValue(new Error('boom'));
   const onReady = jest.fn();
   await render(<BrandSplash onReady={onReady} />);
   await settle();
-  await act(async () => {
-    jest.advanceTimersByTime(5000);
-  });
-  expect(screen.getByText("The scanner couldn't start: boom")).toBeTruthy();
+  expect(screen.getByRole('header', { name: HEADLINE })).toHaveStyle({ ...type.headline, color: colors.ink });
+  expect(screen.getByText(AGAIN)).toHaveStyle({ ...type.body, color: colors.mute });
+  expect(button('Try again')).toHaveStyle({ backgroundColor: colors.brand }); // the primary button
+  expect(button('Try again')).toBeEnabled();
+  expect(screen.queryByText(/boom/)).toBeNull(); // a client never sees the raw message
+  expect(screen.getByText(TAGLINE)).toBeOnTheScreen(); // the brand stays above it
+  expect(screen.queryByText(READY)).toBeNull();
+  expect(screen.queryByTestId('loading-track')).toBeNull();
+
+  // and it goes no further
+  await after(5000);
+  expect(mockLoadAppData).not.toHaveBeenCalled();
+  expect(mockScan).not.toHaveBeenCalled();
   expect(onReady).not.toHaveBeenCalled();
+  expect(splash()).toHaveStyle({ opacity: 1 });
+  await screen.unmount();
+
+  // a team build shows the raw message under Try again, in the figures' mono
+  mockTeam = true;
+  await render(<BrandSplash onReady={onReady} />);
+  await settle();
+  const raw = screen.getByText('boom');
+  expect(raw).toHaveStyle({ ...type.figureSmall, color: colors.mute });
+  expect(typeStylesOf(raw)).toEqual(['figureSmall']); // jest runs as iOS, where label's size flattens alike
+  expect(kids(screen.getByTestId('splash-failure')).at(-1)).toBe(raw);
+  expect(screen.getByRole('header', { name: HEADLINE })).toBeOnTheScreen();
+});
+
+test('Try again starts again, once per tap', async () => {
+  // Review Focus 3: the second tap comes while the start it began is still running
+  mockPreload.mockRejectedValueOnce(new Error('boom')); // then it works
+  const onReady = jest.fn();
+  await render(<BrandSplash onReady={onReady} />);
+  await settle();
+  expect(mockPreload).toHaveBeenCalledTimes(1);
+
+  // A fast double tap: inside one act() scope, nothing re-renders between the two taps.
+  await act(async () => {
+    await fireEvent.press(button('Try again'));
+    await fireEvent.press(button('Try again'));
+  });
+  expect(mockPreload).toHaveBeenCalledTimes(2); // one start more, not two
+  // it loads while the start runs, and a tap then does nothing either
+  expect(button('Try again')).toBeBusy();
+  await press(button('Try again'));
+  await settle();
+  expect(mockPreload).toHaveBeenCalledTimes(2);
+  expect(mockLoadAppData).toHaveBeenCalledTimes(1);
+  expect(mockScan).toHaveBeenCalledTimes(1);
+
+  // then the floor and the fade, and the app
+  await after(500);
+  expect(onReady).not.toHaveBeenCalled();
+  await after(300);
+  expect(onReady).toHaveBeenCalledTimes(1);
+  expect(mockPreload).toHaveBeenCalledTimes(2);
+});
+
+test('a Try again that fails too says so, and Try again is ready for the next tap', async () => {
+  mockTeam = true;
+  mockPreload.mockRejectedValueOnce(new Error('boom')).mockRejectedValueOnce(new Error('still boom'));
+  mockLoadAppData.mockRejectedValueOnce(new Error('No space left on the phone'));
+  const onReady = jest.fn();
+  await render(<BrandSplash onReady={onReady} />);
+  await settle();
+  await press(button('Try again'));
+  await settle();
+  expect(screen.getByText('still boom')).toBeOnTheScreen(); // this start's own reason
+  expect(screen.queryByText('boom')).toBeNull();
+  expect(button('Try again')).toBeEnabled();
+
+  // what the phone keeps couldn't be read: the same words, the same way back
+  await press(button('Try again'));
+  await settle();
+  expect(screen.getByRole('header', { name: HEADLINE })).toBeOnTheScreen();
+  expect(screen.getByText('No space left on the phone')).toBeOnTheScreen();
+  expect(button('Try again')).toBeEnabled();
+  expect(mockScan).not.toHaveBeenCalled();
+
+  await press(button('Try again'));
+  await after(500);
+  await after(300);
+  expect(onReady).toHaveBeenCalledTimes(1);
+  expect(mockPreload).toHaveBeenCalledTimes(4);
+});
+
+test('the failure is announced', async () => {
+  mockTeam = true;
+  mockPreload.mockRejectedValue(new Error('boom'));
+  await render(<BrandSplash onReady={jest.fn()} />);
+  await settle();
+  // A polite live region, so TalkBack reads it out as it shows (whether it does for a region that mounts already
+  // holding its words is Task 26's device check: ruling T8-2).
+  const block = screen.getByTestId('splash-failure');
+  expect(block).toHaveProp('accessibilityLiveRegion', 'polite');
+  expect(within(block).getByRole('header', { name: HEADLINE })).toBeOnTheScreen();
+  expect(within(block).getByText(AGAIN)).toBeOnTheScreen();
+  expect(within(block).getByText('boom')).toBeOnTheScreen();
+  // a region, not one stop: Try again stays a button of its own
+  expect(block.props.accessible).toBeFalsy();
+  expect(within(block).getByRole('button', { name: 'Try again' })).toBeEnabled();
+});
+
+test('the words rise in as they fade in; with reduced motion they only fade', async () => {
+  const timing = jest.spyOn(Animated, 'timing').mockReturnValue(still); // every animation holds its first frame
+  const reduceMotion = jest.mocked(AccessibilityInfo.isReduceMotionEnabled);
+  mockPreload.mockReturnValue(new Promise(() => {}));
+  await render(<BrandSplash onReady={jest.fn()} />);
+  await settle(); // the phone answers: motion
+  expect(words()).toHaveStyle({ opacity: 0, transform: [{ translateY: 12 }] });
+  expect(timing).toHaveBeenCalledWith(expect.anything(), { toValue: 1, duration: 450, useNativeDriver: true });
+  await screen.unmount();
+
+  reduceMotion.mockResolvedValue(true); // the phone asks for less motion (every hook hears the same answer)
+  await render(<BrandSplash onReady={jest.fn()} />);
+  await settle();
+  expect(words()).toHaveStyle({ opacity: 0 }); // they still fade in
+  expect(StyleSheet.flatten(words().props.style).transform).toBeUndefined(); // with no rise
+  await screen.unmount();
+
+  // and then no longer, so the last answer heard is motion again, as the other tests expect
+  reduceMotion.mockResolvedValue(false);
+  await render(<BrandSplash onReady={jest.fn()} />);
+  await settle();
+  expect(words()).toHaveStyle({ transform: [{ translateY: 12 }] });
 });
