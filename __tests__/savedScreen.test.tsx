@@ -397,7 +397,8 @@ test('a row opens its scan; one that has gone says so', async () => {
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/result', params: { id: 'a', from: 'saved' } });
   await press(button(/^Store B, /));
   expect(mockPush).toHaveBeenCalledTimes(1);
-  expect(mockToast).toHaveBeenCalledWith("Couldn't open that invoice.");
+  // a scan, as Saved holds 2307s too (ruling T19-3)
+  expect(mockToast).toHaveBeenCalledWith("Couldn't open that scan.");
 });
 
 test('a long press asks to delete, in the new words', async () => {
@@ -502,7 +503,7 @@ test('a message on Saved sits above its bottom bar', async () => {
 
   // and one Saved says itself: a scan that has gone
   await press(button(/^Store A, /));
-  expect(within(screen.getByTestId('snackbar')).getByText("Couldn't open that invoice.")).toBeOnTheScreen();
+  expect(within(screen.getByTestId('snackbar')).getByText("Couldn't open that scan.")).toBeOnTheScreen();
   expect(screen.getByTestId('snackbar')).toHaveStyle({ bottom: 80 + space.s });
 });
 
@@ -529,25 +530,43 @@ test('nothing saved: the empty state with Take photo', async () => {
   expect(screen.getByText('Nothing saved yet')).toBeOnTheScreen();
   expect(headerTexts()).toEqual(['Saved']);
   expect(screen.queryByTestId('bottom-bar')).toBeNull();
+
+  // opened for a kind with nothing saved at all: the same, with no chips (a chosen kind's chip is the filter's)
+  await screen.unmount();
+  await showSaved([], 'purchase');
+  expect(screen.getByText('Nothing saved yet')).toBeOnTheScreen();
+  expect(screen.queryByText('No purchases saved')).toBeNull();
+  expect(screen.queryByRole('radiogroup')).toBeNull();
 });
 
 test('a filter with nothing: No purchases saved', async () => {
-  // opened for purchases with none saved: the chip isn't there, so none is chosen
+  // opened for purchases with none saved: the chosen kind keeps its chip, checked, at 0 (ruling T19-4), so the group
+  // always has a chip chosen beside "No purchases saved"
   await showSaved([invoice('sale', '2026-11-20', { partyName: 'Store A' }), cert('Q4 2026', '2026-12-31')], 'purchase');
   expect(screen.getByText('No purchases saved')).toHaveStyle({ ...type.title, color: colors.ink });
   expect(screen.queryByText('Nothing saved yet')).toBeNull();
-  expect(chips()).toEqual(['All 2', 'Sales 1', '2307s 1']);
-  expect(screen.queryByRole('radio', { checked: true })).toBeNull();
+  expect(chips()).toEqual(['All 2', 'Sales 1', 'Purchases 0', '2307s 1']);
+  expect(screen.getAllByRole('radio', { checked: true }).map((chip) => chip.props.accessibilityLabel)).toEqual([
+    'Purchases 0',
+  ]);
   expect(rows()).toEqual([]);
   expect(barButtons()).toEqual(['Export…']); // the others can still go
+  // another chip chosen: the empty kind's chip goes, as any kind with nothing saved does
   await press(radio('All 2'));
   expect(screen.queryByText('No purchases saved')).toBeNull();
+  expect(chips()).toEqual(['All 2', 'Sales 1', '2307s 1']);
   expect(rows()).toHaveLength(2);
 
-  // the last of the chosen kind deleted: its own words
+  // the last of the chosen kind deleted: its own words, and its chip stays, checked, at 0, until another is picked
   await press(radio('2307s 1'));
   await longPress(button(/^Castillo Eatery, /));
   await answer('Delete');
   expect(screen.getByText('No 2307s saved')).toBeOnTheScreen();
+  expect(chips()).toEqual(['All 1', 'Sales 1', '2307s 0']);
+  expect(screen.getAllByRole('radio', { checked: true }).map((chip) => chip.props.accessibilityLabel)).toEqual([
+    '2307s 0',
+  ]);
+  await press(radio('Sales 1'));
   expect(chips()).toEqual(['All 1', 'Sales 1']);
+  expect(rows()).toEqual(['Store A, Sale · Nov 20, 100.00, To export']);
 });

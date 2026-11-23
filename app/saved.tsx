@@ -23,12 +23,13 @@ import { toast } from '../lib/toast';
 
 // Design B §9.7: Saved, the scans saved as sales, purchases and 2307s. The header says how many wait to export, by the
 // export's own rule (lib/exportFile's waitingOf: ruling T17-3). Chips filter the list by kind, each with its count, a
-// kind with nothing saved left out; Saved opens at the kind Home's To export row or a save's View asked for. The list
-// (virtualized) goes by the month of each document's date (an invoice's date, a 2307's period end: the month the
-// export's This month and Last month count it in), newest first; within a month, by that date, then the time saved,
-// newest first. A row says the party, its kind, date and number, the amount (a 2307's tax withheld) and To export or
-// Exported. It opens the scan, and a long press asks to delete it, in the Scan screen's ⋮ words (lib/confirmDelete).
-// The bottom bar's one Export… opens the export at the filtered kind, or at its list of files.
+// kind with nothing saved left out unless it's the one chosen (ruling T19-4); Saved opens at the kind Home's To export
+// row or a save's View asked for. The list (virtualized) goes by the month of each document's date (an invoice's date,
+// a 2307's period end: the month the export's This month and Last month count it in), newest first; within a month, by
+// that date, then the time saved, newest first. A row says the party, its kind, date and number, the amount (a 2307's
+// tax withheld) and To export or Exported. It opens the scan, and a long press asks to delete it, in the Scan screen's
+// ⋮ words (lib/confirmDelete). The bottom bar's one Export… opens the export at the filtered kind, or at its list of
+// files.
 
 type Filter = Kind | 'all';
 
@@ -63,11 +64,13 @@ export default function SavedScreen() {
 
   const waiting = useMemo(() => new Set(waitingOf(null, all)), [all]);
   const sections = useMemo(() => byMonth(filter === 'all' ? all : all.filter((s) => s.kind === filter)), [all, filter]);
+  // A kind with nothing saved has no chip, unless it's the filter: then it stays, checked, at 0, beside its "No … saved"
+  // (ruling T19-4), and goes once another chip is picked.
   const options: { value: Filter; label: string }[] = [
     { value: 'all', label: `All ${all.length}` },
     ...KINDS.flatMap(({ kind: k, chip }) => {
       const n = all.filter((s) => s.kind === k).length;
-      return n > 0 ? [{ value: k, label: `${chip} ${n}` }] : [];
+      return n > 0 || k === filter ? [{ value: k, label: `${chip} ${n}` }] : [];
     }),
   ];
   const subtitle = !anySaved ? null : waiting.size > 0 ? `${waiting.size} to export` : 'All exported';
@@ -75,7 +78,7 @@ export default function SavedScreen() {
   async function open(id: string) {
     const scan = await openSaved(id);
     if (!scan) {
-      toast("Couldn't open that invoice.");
+      toast("Couldn't open that scan."); // a scan, as Saved holds 2307s too (ruling T19-3)
       return;
     }
     router.push({ pathname: '/result', params: { id, from: 'saved' } });
