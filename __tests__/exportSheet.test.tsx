@@ -122,6 +122,11 @@ const listed = () =>
     .getByTestId('sheet-scroll')
     .queryAll((n) => n.props.accessibilityRole === 'button' || n.props.children === FIRST)
     .map((n) => n.props.accessibilityLabel ?? n.props.children);
+/** Where each node sits in the sheet's scroll, top to bottom (-1: not in it). */
+const positions = (...nodes: Instance[]) => {
+  const all = screen.getByTestId('sheet-scroll').queryAll(() => true);
+  return nodes.map((node) => all.indexOf(node));
+};
 /** A radio group's options, in order. */
 const options = (group: string) =>
   within(screen.getByRole('radiogroup', { name: group }))
@@ -174,11 +179,13 @@ test('the files: each kind with what it has to export, and the parties first whe
   // a kind whose saved scans have all gone out stays, so it can go again
   await act(async () => markExported([cert], NOW));
   expect(listed()).toEqual(['Sales, 1 to export', '2307s, All exported']);
-  // the counts in the figure style, as Home's (§9.2; ruling T18-3), and All exported, in the same slot, alike
-  for (const sub of [screen.getByText('1 to export'), screen.getByText('All exported')]) {
-    expect(typeStylesOf(sub)).toEqual(['figureSmall']); // mono: a label of the same size flattens alike here
-    expect(sub).toHaveStyle({ ...type.figureSmall, color: colors.mute });
-  }
+  // a count in the figure style, as Home's (§9.2; ruling T18-3); All exported is words, in the label style (T18-5)
+  const count = screen.getByText('1 to export');
+  expect(typeStylesOf(count)).toEqual(['figureSmall']); // mono: a label of the same size flattens alike here
+  expect(count).toHaveStyle({ ...type.figureSmall, color: colors.mute });
+  const words = screen.getByText('All exported');
+  expect(typeStylesOf(words)).toEqual(['label']);
+  expect(words).toHaveStyle({ ...type.label, color: colors.mute });
   await act(async () => {
     await saveInvoice({ purchase: true });
   });
@@ -221,7 +228,7 @@ test('the files: each kind with what it has to export, and the parties first whe
     '2307s, All exported',
     'New customers and suppliers, All exported',
   ]);
-  expect(typeStylesOf(within(button(/^New customers and suppliers, /)).getByText('All exported'))).toEqual(['figureSmall']);
+  expect(typeStylesOf(within(button(/^New customers and suppliers, /)).getByText('All exported'))).toEqual(['label']);
 
   // a row opens its file
   await press(button(/^Purchases, /));
@@ -327,7 +334,7 @@ test("the file: its summary, Which ones, and today's warnings as banners", async
 });
 
 test("the 2307s' file: the tax withheld, the payor to check, and the question for one", async () => {
-  await save2307();
+  const id = await save2307();
   await openAt('2307');
   expect(header('Export 2307s')).toBeOnTheScreen();
   expect(screen.getByText("A file in MyBizMate's 2307-CWT import format, to import at mybizmate.io.")).toBeOnTheScreen();
@@ -342,6 +349,16 @@ test("the 2307s' file: the tax withheld, the payor to check, and the question fo
   expect(screen.getByText('Mark this 2307 as exported, so the next export leaves it out. “All” still includes it.')).toBeOnTheScreen();
   await press(button('Mark 1 as exported'));
   expect(mockToast).toHaveBeenCalledWith('Marked 1 2307 as exported.');
+  expect(savedSummary(id)!.exportedAt).toBe(NOW.toISOString());
+
+  // marked, it leaves Not exported yet; All still holds it, and warns that it went before
+  await screen.unmount();
+  await openAt('2307');
+  expect(line('2307s, Nothing to export for this choice')).toBeOnTheScreen();
+  expect(button('Share the file')).toBeDisabled();
+  await press(radio('All'));
+  expect(line('2307s, 1 · Tax withheld ₱57,400.54')).toBeOnTheScreen();
+  expect(banner('1 of them was exported before. Importing it again adds it to MyBizMate twice.')).toBeOnTheScreen();
 });
 
 test('nothing in the choice: Share is disabled', async () => {
@@ -498,12 +515,32 @@ test('file errors stay in the sheet', async () => {
   expect(mockShare).not.toHaveBeenCalled();
   expect(mockToast).not.toHaveBeenCalled();
   expect(alert).not.toHaveBeenCalled();
+  // first in the body, above the summary box, so it can't sit below the fold (ruling T18-4); today's warning stays
+  // under the choice
+  const order = positions(
+    made,
+    line('File, Sales import · .xlsx'),
+    screen.getByRole('radiogroup', { name: 'Which ones' }),
+    banner('Check that these are in MyBizMate before you import: TorresConstruction Supply.'),
+  );
+  expect(order[0]).toBeGreaterThanOrEqual(0);
+  expect(order).toEqual([...order].sort((a, b) => a - b));
 
   // a phone that can't share: its reason, in place of the last one, and no file is written
   mockAvailable.mockResolvedValueOnce(false);
   await press(button('Share the file'));
   expect(banner("This phone can't share files.").props.accessibilityLiveRegion).toBe('polite');
   expect(screen.queryByRole('alert', { name: "Couldn't make the file." })).toBeNull();
+  expect(write).toHaveBeenCalledTimes(1);
+  expect(mockShare).not.toHaveBeenCalled();
+
+  // the phone failing to say whether it can share: shareFile still settles as a Shared, so it's the file's error,
+  // and Share is free again (it never rejects)
+  mockAvailable.mockRejectedValueOnce(new Error('Sharing is unavailable'));
+  await press(button('Share the file'));
+  expect(banner("Couldn't make the file.")).toBeOnTheScreen();
+  expect(screen.queryByRole('alert', { name: "This phone can't share files." })).toBeNull();
+  expect(button('Share the file')).toBeEnabled();
   expect(write).toHaveBeenCalledTimes(1);
   expect(mockShare).not.toHaveBeenCalled();
 

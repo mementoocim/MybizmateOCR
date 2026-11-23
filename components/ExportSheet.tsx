@@ -1,5 +1,5 @@
-import { type ComponentProps, useState, useSyncExternalStore } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { type ComponentProps, type RefObject, useState, useSyncExternalStore } from 'react';
+import { StyleSheet, Text, View, type ViewInstance } from 'react-native';
 
 import {
   type ExportRange,
@@ -26,18 +26,21 @@ import { Sheet } from './Sheet';
 import { SummaryBox } from './SummaryBox';
 
 // Design B §9.8 and the plan's call 13: one sheet for an export, in steps.
-// - Which file ("Export"): a row per kind with saved scans, saying how many wait to export or that all have gone out
-//   (a file can go again), and the parties' file once any party came from a scan. When a waiting scan names a party
-//   that hasn't gone out, the parties' file comes first, with why: it goes in before the files that name it.
+// - Which file ("Export"): a row per kind with saved scans, saying how many wait to export (in figures) or that all
+//   have gone out (in words: a file can go again), and the parties' file once any party came from a scan. When a
+//   waiting scan names a party that hasn't gone out, the parties' file comes first, with why: it goes in before the
+//   files that name it.
 // - The file: what it will hold, in a summary box; which ones; today's warnings as banners, and the parties' note.
 //   Close, and Share the file, whose press returns the share, so it loads while the file is written and a double tap
 //   shares once (Review Focus 3). Back goes to the list of files, whether or not the sheet opened at this file. A
-//   file that couldn't be made or shared says why in the sheet, in a banner TalkBack reads out.
+//   file that couldn't be made or shared says why in the sheet, in a banner TalkBack reads out, first in the step,
+//   so it never sits below the fold (ruling T18-4).
 // - Once the share sheet has closed, sent or not (it can't tell), today's question: mark what went in the file as
 //   exported, with the time it was written for, so the next file leaves it out; or not yet. Nothing is marked unless
 //   the person says so, and Mark runs once on a double tap too. Marking closes the sheet, then a snackbar says so.
-// Each step's title takes TalkBack focus as it shows (focusKey). The sheet starts where it's opened, at the list of
-// files for no kind, so a caller mounts it anew (or gives it a new key) for each opening.
+// Each step's title takes TalkBack focus as it shows (focusKey), and once the sheet has gone, focus goes back to
+// returnFocus (Saved's Export…: design §7). The sheet starts where it's opened, at the list of files for no kind, so
+// a caller mounts it anew (or gives it a new key) for each opening.
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -166,7 +169,17 @@ function chosen(which: Which, range: ExportRange, theLists: Lists): Chosen {
 }
 
 /** Exporting saved invoices (sales or purchases) or 2307s, or the customers and suppliers added from scans. */
-export function ExportSheet({ visible, kind, onClose }: { visible: boolean; kind: Which | null; onClose: () => void }) {
+export function ExportSheet({
+  visible,
+  kind,
+  onClose,
+  returnFocus,
+}: {
+  visible: boolean;
+  kind: Which | null; // the file it opens at; null: the list of files
+  onClose: () => void;
+  returnFocus?: RefObject<ViewInstance | null>; // what opened it, which TalkBack focus goes back to once it has gone
+}) {
   const saved = useSyncExternalStore(subscribeSaved, savedList);
   const theLists = useSyncExternalStore(subscribeLists, lists);
   const [step, setStep] = useState<Step>(() => (kind === null ? { step: 'files' } : { step: 'file', which: kind }));
@@ -206,6 +219,8 @@ export function ExportSheet({ visible, kind, onClose }: { visible: boolean; kind
       ],
       children: (
         <View style={styles.body}>
+          {/* first, so it shows where the person is looking, never below the fold (ruling T18-4) */}
+          {error ? <Banner tone="danger" text={error} live /> : null}
           <SummaryBox
             lines={[
               { key: 'File', value: `${words.file} · .xlsx` },
@@ -217,7 +232,6 @@ export function ExportSheet({ visible, kind, onClose }: { visible: boolean; kind
             <Banner key={warning} tone="warning" text={warning} />
           ))}
           {which === 'parties' ? <Text style={[type.body, styles.mute]}>{PARTIES_NOTE}</Text> : null}
-          {error ? <Banner tone="danger" text={error} live /> : null}
         </View>
       ),
     };
@@ -249,7 +263,7 @@ export function ExportSheet({ visible, kind, onClose }: { visible: boolean; kind
     };
   }
 
-  return <Sheet visible={visible} onClose={onClose} focusKey={step.step} {...page} />;
+  return <Sheet visible={visible} onClose={onClose} focusKey={step.step} returnFocus={returnFocus} {...page} />;
 }
 
 /**
@@ -270,7 +284,8 @@ function Files({
       key={which}
       title={FILES[which].row}
       sub={waiting > 0 ? `${waiting} to export` : 'All exported'}
-      subMono // the count in the figure style, as Home's To export rows (ruling T18-3); All exported alike, in its slot
+      // a count in the figure style, as Home's To export rows (ruling T18-3); All exported is words, in sans (T18-5)
+      subMono={waiting > 0}
       chevron
       onPress={() => onOpen(which)}
     />

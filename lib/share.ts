@@ -15,10 +15,13 @@ export type Wording = { one: string; many: string; next: string };
  */
 export type Shared = { ok: true; at: Date } | { ok: false; message: string };
 
-/** Writes the file and opens the share sheet with it. */
+/**
+ * Writes the file and opens the share sheet with it. It never rejects: anything that fails on the way, asking whether
+ * the phone can share included, settles as a Shared that says why.
+ */
 export async function shareFile(write: (now: Date) => Promise<string>, mimeType: string): Promise<Shared> {
-  if (!(await Sharing.isAvailableAsync())) return { ok: false, message: "This phone can't share files." };
   try {
+    if (!(await Sharing.isAvailableAsync())) return { ok: false, message: "This phone can't share files." };
     const at = new Date();
     const uri = await write(at);
     await Sharing.shareAsync(uri, { mimeType, dialogTitle: 'Send the file' });
