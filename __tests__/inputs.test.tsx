@@ -14,10 +14,10 @@ import { standIn } from '../test-utils/scrollStandIn';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §5.6 and §7: the inputs. Segmented and ChoiceChips are radio groups that TalkBack names, with the chosen
-// option in ink with a paper label (§5.1: selection is ink); from 150% font size, Segmented stacks its options (ruling
-// T26-2). A TextField has its label above, an outline border that becomes a 2 dp focus border, and one note under it,
-// which is also the field's hint. Taking focus, it scrolls its whole field (label, box and note) into view in the
-// Screen, and again when the keyboard opens or grows (ruling T5-2).
+// option in ink with a paper label (§5.1: selection is ink); Segmented stacks its options when the window is narrow for
+// their words at its font size (ruling T26-3). A TextField has its label above, an outline border that becomes a 2 dp
+// focus border, and one note under it, which is also the field's hint. Taking focus, it scrolls its whole field
+// (label, box and note) into view in the Screen, and again when the keyboard opens or grows (ruling T5-2).
 
 const noop = () => {};
 type Instance = ReturnType<typeof screen.getByRole>;
@@ -43,12 +43,12 @@ const TAX_TYPES = [
 const SUGGESTED = "Suggested from the invoice's VAT boxes";
 const OFFSET_HELPER = 'Code or name, as in MyBizMate';
 
-/** The window as jest starts it, at a font scale of 2. */
+/** The window as jest starts it: 750 dp wide at a font scale of 2. */
 const WINDOW = Dimensions.get('window');
-/** The phone's font size, as the window reports it once it changes in Android's settings. */
-const atFontScale = (fontScale: number) =>
+/** A phone's window: its width in dp, and the font size Android's settings give it. */
+const atWindow = (width: number, fontScale: number) =>
   act(() => {
-    Dimensions.set({ window: { ...WINDOW, fontScale }, screen: Dimensions.get('screen') });
+    Dimensions.set({ window: { ...WINDOW, width, fontScale }, screen: Dimensions.get('screen') });
   });
 
 /**
@@ -61,7 +61,7 @@ const UNDER_LABEL = 44;
 
 afterEach(async () => {
   measureLayout.mockReset(); // as the preset made it: nothing laid out
-  await atFontScale(WINDOW.fontScale);
+  await atWindow(WINDOW.width, WINDOW.fontScale);
 });
 
 /**
@@ -89,7 +89,7 @@ async function fieldInScreen(y: number) {
 
 test('Segmented is a labelled radio group with an ink selection', async () => {
   const onChange = jest.fn();
-  await atFontScale(1); // 100%: the options side by side in one row
+  await atWindow(411, 1); // a 411 dp phone at 100%: the options side by side in one row
   await render(<Segmented label="List" options={LISTS} value="suppliers" onChange={onChange} />);
   const group = screen.getByRole('radiogroup', { name: 'List' });
   expect(group).toHaveStyle({
@@ -122,10 +122,12 @@ test('Segmented is a labelled radio group with an ink selection', async () => {
   expect(screen.getByTestId('focus-ring')).toHaveStyle({ top: 0, left: 0, right: 0, bottom: 0 });
 });
 
-test('from 150% font size, Segmented stacks its options: one full-width option per row (ruling T26-2)', async () => {
-  // Side by side, each option has a third of the row: at 200% Android broke the words inside it ("Custo / mers / 21").
+test('Segmented stacks its options when a third of the row is too narrow for a word (ruling T26-3)', async () => {
+  // Side by side, each option has a third of the row: at 200% Android broke the words inside it ("Custo / mers / 21"),
+  // and on a 360 dp phone at 130% "Customers" (about 75 dp at 100%) outgrows its third too. So the options stack, one
+  // full-width option per row, while the window has under 310 dp per unit of font scale.
   const onChange = jest.fn();
-  await atFontScale(2);
+  await atWindow(411, 2);
   await render(<Segmented label="List" options={LISTS} value="suppliers" onChange={onChange} />);
   const group = () => screen.getByRole('radiogroup', { name: 'List' });
   const options = () => within(group()).getAllByRole('radio');
@@ -152,15 +154,29 @@ test('from 150% font size, Segmented stacks its options: one full-width option p
   await fireEvent.press(other);
   expect(onChange).toHaveBeenCalledWith('customers');
 
-  // From 150%; under it, one row again (Android's next size down is 130%). It follows the font size as it changes.
-  await atFontScale(1.5);
-  expect(group()).toHaveStyle({ flexDirection: 'column' });
-  await atFontScale(1.3);
-  expect(group()).toHaveStyle({ flexDirection: 'row' });
-  for (const option of options()) expect(option).toHaveStyle({ flex: 1 });
+  // Window width in dp, font scale, and the layout. Stacked at 200% on any phone, and at 130% on a 360 dp one; one row
+  // at 100% on any phone, and at 130% on a 411 dp one (316 dp per unit). Around 310 dp per unit: 309.5 stacks; 310 and
+  // 310.5 are one row. It follows the window as it changes.
+  const layouts: [width: number, fontScale: number, direction: 'column' | 'row'][] = [
+    [411, 2, 'column'],
+    [360, 1.3, 'column'],
+    [411, 1, 'row'],
+    [360, 1, 'row'],
+    [411, 1.3, 'row'],
+    [619, 2, 'column'],
+    [620, 2, 'row'],
+    [621, 2, 'row'],
+  ];
+  for (const [width, fontScale, direction] of layouts) {
+    await atWindow(width, fontScale);
+    const shown = [width, fontScale, StyleSheet.flatten(group().props.style).flexDirection];
+    expect(shown).toEqual([width, fontScale, direction]);
+    // side by side each takes an equal share of the row; stacked each takes its own row, full width
+    for (const option of options()) expect(option).toHaveStyle({ flex: direction === 'row' ? 1 : undefined });
+  }
 
   // The photo viewer's views stack the same way, in their dark tone.
-  await atFontScale(2);
+  await atWindow(411, 2);
   await screen.rerender(<Segmented tone="dark" label="View" options={VIEWS} value="enhanced" onChange={noop} />);
   expect(screen.getByRole('radiogroup', { name: 'View' })).toHaveStyle({
     flexDirection: 'column',
