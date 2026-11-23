@@ -5,7 +5,8 @@ import { MODEL } from './versions';
 // scripts/collect-licenses.mjs gathers into assets/licenses, a file each (`npm run licenses`). A version is its
 // source's: package.json, the scanner module's build.gradle (with the pdfium release scripts/fetch-pdfium.mjs pins) or
 // model.json, as a test checks. Lucide's is the tag its glyphs were copied from (components/icons.tsx), and a font's is
-// the version its files carry. A test fails when a dependency in package.json has no entry.
+// the version its files carry. A test fails when a dependency in package.json, or one the scanner module's build.gradle
+// implements, has no entry.
 
 export type LicenseEntry = {
   name: string;
@@ -60,21 +61,29 @@ export const LICENSES: readonly LicenseEntry[] = [
     covers: ['react-native-safe-area-context'],
     asset: require('../assets/licenses/react-native-safe-area-context.txt'),
   },
-  // The rest aren't package.json dependencies, so they cover none: the scanner core's libraries, the model, and what's
-  // copied into the app (the icons' paths, the fonts).
+  // The scanner module's native libraries, which cover what its build.gradle implements (group:artifact). The rest
+  // aren't dependencies, so they cover none: pdfium's prebuilt library, the model, and what's copied into the app (the
+  // icons' paths, the fonts).
   {
     name: 'OpenCV',
     version: '5.1.0',
     license: 'Apache-2.0',
-    covers: [],
+    covers: ['org.opencv:opencv'],
     asset: require('../assets/licenses/opencv.txt'),
   },
   {
     name: 'ONNX Runtime',
     version: '1.32.0',
     license: 'MIT', // and its third-party notices, after it
-    covers: [],
+    covers: ['com.microsoft.onnxruntime:onnxruntime-android'],
     asset: require('../assets/licenses/onnxruntime.txt'),
+  },
+  {
+    name: 'CameraX (AndroidX)', // the scanner's camera (ruling T21-1)
+    version: '1.7.0',
+    license: 'Apache-2.0', // AndroidX ships no NOTICE: the license's text alone
+    covers: ['androidx.camera:*'], // camera-core, camera-camera2, camera-lifecycle, camera-view
+    asset: require('../assets/licenses/camerax.txt'),
   },
   {
     name: 'PDFium',
@@ -116,7 +125,10 @@ export const LICENSES: readonly LicenseEntry[] = [
 ];
 /* eslint-enable @typescript-eslint/no-require-imports */
 
-/** The entry that covers a package.json dependency: one naming it, or naming "expo-*" for an expo- module. */
+/**
+ * The entry that covers a dependency, a package.json one by its name or a Gradle one by group:artifact: one naming it,
+ * or naming its prefix and "*" ("expo-*", "androidx.camera:*").
+ */
 export function coveredBy(dependency: string): LicenseEntry | undefined {
   return LICENSES.find(({ covers }) =>
     covers.some((name) => (name.endsWith('*') ? dependency.startsWith(name.slice(0, -1)) : name === dependency)),

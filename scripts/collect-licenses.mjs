@@ -4,6 +4,8 @@
 // - an npm package's own LICENSE, in node_modules;
 // - Task 0's downloads, the <project>-<license>.txt files in assets/licenses. They stay there as this script's
 //   sources, and the app doesn't bundle them (nothing requires them);
+// - for CameraX, the Apache-2.0 text alone, since AndroidX ships no LICENSE or NOTICE of its own. That's OpenCV's
+//   Task 0 file, which is apache.org's LICENSE-2.0.txt byte for byte;
 // - the fonts' OFL texts, beside the fonts in assets/fonts;
 // - pdfium's notices, from the cache scripts/fetch-pdfium.mjs fills (the folder build.gradle builds against): an ABI's
 //   LICENSE and every file in its licenses/ (each ABI has the same ones).
@@ -26,6 +28,12 @@ const npm = (pkg) => [source(`node_modules/${pkg}/LICENSE`)];
 const own = (name, title) => source(`assets/licenses/${name}`, title);
 const font = (name) => source(`assets/fonts/${name}`);
 
+/**
+ * The Apache-2.0 license's own text: apache.org's LICENSE-2.0.txt, byte for byte (SHA-256
+ * cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30), which is what OpenCV's LICENSE is.
+ */
+const APACHE_2_0 = own('opencv-Apache-2.0.txt');
+
 /** pdfium's: the first ABI folder with a LICENSE (any will do), then each of its licenses/ by name. */
 function pdfium() {
   const abis = existsSync(PDFIUM_DIR) ? readdirSync(PDFIUM_DIR).sort() : [];
@@ -47,8 +55,9 @@ const ENTRIES = [
   ['react-native-svg', npm('react-native-svg')],
   ['react-native-screens', npm('react-native-screens')],
   ['react-native-safe-area-context', npm('react-native-safe-area-context')],
-  ['opencv', [own('opencv-Apache-2.0.txt')]],
+  ['opencv', [APACHE_2_0]],
   ['onnxruntime', [own('onnxruntime-MIT.txt'), own('onnxruntime-ThirdPartyNotices.txt', 'ThirdPartyNotices.txt')]],
+  ['camerax', [APACHE_2_0]], // ruling T21-1
   ['pdfium', pdfium()],
   ['paddleocr', [own('paddleocr-Apache-2.0.txt')]],
   ['lucide', [own('lucide-ISC.txt')]],

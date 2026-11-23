@@ -27,7 +27,7 @@ jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.m
 const FILE = 'file:///cache/ExponentAsset-license.txt';
 const ONNX = LICENSES.findIndex((entry) => entry.name === 'ONNX Runtime');
 
-/** The table's entries, in its order. */
+/** The table's entries, in its order, with CameraX among the scanner module's native libraries (ruling T21-1). */
 const NAMES = [
   'React Native',
   'React',
@@ -37,6 +37,7 @@ const NAMES = [
   'react-native-safe-area-context',
   'OpenCV',
   'ONNX Runtime',
+  'CameraX (AndroidX)',
   'PDFium',
   'PP-OCRv6 small, Latin (PaddleOCR)',
   'Lucide',
