@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import type { Href } from 'expo-router';
 import { useRef, useState, useSyncExternalStore } from 'react';
 import { StyleSheet, Switch, Text, View, type ViewInstance } from 'react-native';
 
@@ -12,6 +12,7 @@ import { Sheet } from '../components/Sheet';
 import { Tap } from '../components/Tap';
 import { codeKeyboard, TextField } from '../components/TextField';
 import { TEAM_BUILD } from '../lib/build';
+import { usePushOnce } from '../lib/navigation';
 import { settings, subscribeSettings, updateSettings } from '../lib/settings';
 import { colors, space, touch, type } from '../lib/theme';
 import { versionLine } from '../lib/versions';
@@ -37,7 +38,7 @@ const PRIVACY = [
 const ANNOTATION_NOTE = 'Every box must be checked before a scan saves, and each scan gets a client and writer code.';
 
 export default function SettingsScreen() {
-  const router = useRouter();
+  const push = usePushOnce(); // one for the screen's every row, the team tools' too
   const s = useSyncExternalStore(subscribeSettings, settings);
   const [revenue, setRevenue] = useState(s.revenueAccount);
   const [expense, setExpense] = useState(s.expenseAccount);
@@ -110,10 +111,10 @@ export default function SettingsScreen() {
 
         <SectionHeader title="About" />
         <ListRow ref={privacyRow} title="Privacy" chevron onPress={() => setPrivacyOpen(true)} />
-        <ListRow title="Open-source licenses" chevron onPress={() => router.push('/licenses')} />
+        <ListRow title="Open-source licenses" chevron onPress={() => push('/licenses')} />
         <ListRow title="Version" amount={versionLine()} />
 
-        {TEAM_BUILD && <TeamTools annotation={s.annotation} />}
+        {TEAM_BUILD && <TeamTools annotation={s.annotation} push={push} />}
       </Screen>
 
       <Sheet visible={privacyOpen} title="Privacy" onClose={() => setPrivacyOpen(false)} returnFocus={privacyRow}>
@@ -134,8 +135,7 @@ export default function SettingsScreen() {
  * switch is one row, and one stop for TalkBack: a tap anywhere on it toggles the setting. The Switch in it shows the
  * state, and a tap on the Switch itself toggles the same setting; TalkBack skips it, so the row isn't read twice.
  */
-function TeamTools({ annotation }: { annotation: boolean }) {
-  const router = useRouter();
+function TeamTools({ annotation, push }: { annotation: boolean; push: (href: Href) => void }) {
   return (
     <>
       <SectionHeader title="Team tools" />
@@ -159,8 +159,8 @@ function TeamTools({ annotation }: { annotation: boolean }) {
         />
       </Tap>
       <Text style={[type.label, styles.note]}>{ANNOTATION_NOTE}</Text>
-      <ListRow title="Training data" chevron onPress={() => router.push('/training')} />
-      <ListRow title="Speed test" chevron onPress={() => router.push('/speed')} />
+      <ListRow title="Training data" chevron onPress={() => push('/training')} />
+      <ListRow title="Speed test" chevron onPress={() => push('/speed')} />
     </>
   );
 }

@@ -255,20 +255,31 @@ export async function openSaved(id: string): Promise<StoredScan | null> {
   return scan;
 }
 
+/**
+ * Deletes a saved scan: its folder, then its summary in saved.json, and only once that's written, from the app. A write
+ * that fails (a full phone) leaves it listed, as saved.json still has it, and the caller says so (the final review's
+ * Important 2).
+ */
 export async function deleteSaved(id: string): Promise<void> {
   const folder = folderOf(id);
   if (folder.exists) folder.delete();
-  summaries = summaries.filter((s) => s.id !== id);
+  const kept = summaries.filter((s) => s.id !== id);
+  await writeJson(INDEX, kept);
+  summaries = kept;
   forgetScan(id);
   changed();
-  await writeJson(INDEX, summaries);
 }
 
+/**
+ * Marks saved scans as gone out in an import file: in saved.json first, then in the app. A write that fails marks none,
+ * so none shows as exported until it's kept, and the caller says so (the final review's Important 2).
+ */
 export async function markExported(ids: readonly string[], at: Date): Promise<void> {
   const when = at.toISOString();
-  summaries = summaries.map((s) => (ids.includes(s.id) ? { ...s, exportedAt: when } : s));
+  const marked = summaries.map((s) => (ids.includes(s.id) ? { ...s, exportedAt: when } : s));
+  await writeJson(INDEX, marked);
+  summaries = marked;
   changed();
-  await writeJson(INDEX, summaries);
 }
 
 /** Marks saved scans as sent in a training export, so the next one leaves them out; the import files' mark stays. */

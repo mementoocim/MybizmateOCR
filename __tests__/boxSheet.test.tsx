@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { type ReactNode, useState, useSyncExternalStore } from 'react';
-import { AccessibilityInfo, Alert, type AlertButton, Platform, StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, Alert, type AlertButton, Animated, Platform, StyleSheet, Text } from 'react-native';
 
 import { BoxSheet, isHardToRead, readingLine } from '../components/BoxSheet';
 import { clearItems, lists, subscribeLists } from '../lib/lists';
@@ -345,6 +345,44 @@ test('Save keeps the edit, closes a one-box sheet and calls onSaved', async () =
   expect(onSaved).toHaveBeenCalledTimes(1);
   expect(screen.queryByLabelText('What the box says')).toBeNull(); // the sheet has gone
   expect(alert).not.toHaveBeenCalled(); // nothing typed was lost
+});
+
+test('after a one-box Save, the editor shows the box as it was while the sheet slides away ([395])', async () => {
+  // Read live, Could also be would gain the reading the edit replaced, so the panel would grow and jump as it went; in
+  // annotation mode, Looks right would come back and the box's state turn to Corrected.
+  type EndCallback = NonNullable<Parameters<Animated.CompositeAnimation['start']>[0]>;
+  let finish: EndCallback = () => {};
+  jest.spyOn(Animated, 'parallel').mockImplementation(() => ({
+    start: (callback?: EndCallback) => {
+      finish = callback ?? (() => {});
+    },
+    stop: () => {},
+    reset: () => {},
+  }));
+  const all = { includeHiddenElements: true }; // a closing sheet is hidden from TalkBack
+  /** Every word the sheet shows, its action row's too, and what the field holds. */
+  const shown = () => {
+    const panel = within(screen.getByTestId('sheet-panel', all));
+    return [...panel.getAllByText(/./, all).map((t) => t.props.children), panel.getByLabelText('What the box says', all).props.value];
+  };
+  for (const annotation of [false, true]) {
+    mockTeam = annotation;
+    await act(async () => updateSettings({ annotation }));
+    const id = addPhoto();
+    await showSheet(id, 'Date', ['date']);
+    await act(async () => finish({ finished: true })); // it's up
+    await typeIn('Oct 21, 2026');
+    const before = shown();
+    expect(before).toContain('27 0ct 2026'); // a chip of Could also be
+    await press(screen.getByTestId('box-save'));
+    expect(getScan(id)!.edits.date).toBe('Oct 21, 2026');
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(shown()).toEqual(before); // closing, and as it was
+    await act(async () => finish({ finished: true })); // gone
+    expect(screen.queryByTestId('sheet-panel', all)).toBeNull();
+    await screen.unmount();
+    onClose.mockClear();
+  }
 });
 
 test('a multi-box row lists its boxes; a box opens its editor; Save goes back to the list; Done closes', async () => {

@@ -30,7 +30,7 @@ import type { BoxRead, FieldType } from '../modules/scanner';
 import { Badge, type BadgeSpec } from './Badge';
 import type { ButtonProps } from './Buttons';
 import { CHIP_SLOP } from './FlagChip';
-import { Sheet } from './Sheet';
+import { Sheet, useLingering } from './Sheet';
 import { Tap } from './Tap';
 import { codeKeyboard, TextField } from './TextField';
 
@@ -129,7 +129,7 @@ function keyboardOf(kind: FieldType): {
 export function BoxSheet({
   visible,
   title,
-  scan,
+  scan: live,
   boxes,
   onClose,
   onSaved,
@@ -149,6 +149,8 @@ export function BoxSheet({
   heading?: boolean; // over the listed boxes, where they were read (the party sheet's: design §9.5)
   children?: ReactNode; // under the list: the party section, the payor line, a new item
 }) {
+  // The scan as it was while the sheet was up: closing (a one-box Save, say), it slides away unchanged ([395]).
+  const scan = useLingering(visible ? live : null) ?? live;
   const annotation = useSyncExternalStore(subscribeSettings, annotationOn);
   // One box and nothing under it: straight to its editor. Decided once, as the sheet opens.
   const [editor, setEditor] = useState<Editor | null>(() =>

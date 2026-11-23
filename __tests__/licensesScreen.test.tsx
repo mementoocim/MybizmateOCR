@@ -17,6 +17,8 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ push: mockPush, back: jest.fn() }),
+  // a screen's pushes run once until it's focused again (lib/navigation)
+  useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
 }));
 /** expo-asset's downloadAsync, for the module it was given: the asset, with the file it's put in. */
 const mockDownload = jest.fn<Promise<{ localUri: string | null }>, [number]>();

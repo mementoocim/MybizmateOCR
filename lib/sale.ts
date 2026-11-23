@@ -128,20 +128,23 @@ export function isInvoice(scan: StoredScan): boolean {
   return aligned && (form === 'sales_invoice' || form === 'service_invoice');
 }
 
-// One run of the checks per scan as it stands: Home's row, the scan's screen and Saved share it. The
-// stores replace a scan, the lists or the settings when they change, so the same objects give the same answer.
-const views = new WeakMap<StoredScan, { lists: Lists; settings: Settings; view: SaleView }>();
+// One run of the checks per scan as it stands: Home's row, the scan's screen and Saved share it. The stores replace a
+// scan or the lists when they change, so the same objects give the same answer. Of the settings, the checks read only
+// whether the business is VAT-registered, so no other setting's change runs them again: not an account typed in
+// Settings, nor a save's new defaults (the final review's Important 1).
+const views = new WeakMap<StoredScan, { lists: Lists; vatRegistered: Settings['vatRegistered']; view: SaleView }>();
 
 /** The sale of an invoice's scan (isInvoice): a 2307 never goes through a sale's checks. */
 export function saleOf(scan: StoredScan, lists: Lists, settings: Settings): SaleView {
+  const { vatRegistered } = settings;
   const hit = views.get(scan);
-  if (hit && hit.lists === lists && hit.settings === settings) return hit.view;
-  const view = checkSale(scan, lists, settings);
-  views.set(scan, { lists, settings, view });
+  if (hit && hit.lists === lists && hit.vatRegistered === vatRegistered) return hit.view;
+  const view = checkSale(scan, lists, vatRegistered);
+  views.set(scan, { lists, vatRegistered, view });
   return view;
 }
 
-function checkSale(scan: StoredScan, lists: Lists, settings: Settings): SaleView {
+function checkSale(scan: StoredScan, lists: Lists, vatRegistered: Settings['vatRegistered']): SaleView {
   const raw = rawFromScan(scan);
   const isSale = scan.kind === 'sale';
   const pack: Pack = isSale ? packFor(lists) : { customers: [], items: [] };
@@ -201,7 +204,7 @@ function checkSale(scan: StoredScan, lists: Lists, settings: Settings): SaleView
     gross: final.gross,
     discount: amountOrNull('discount'),
     withholding: amountOrNull('withholding'),
-    taxType: suggestTaxType(scan.kind, raw, settings.vatRegistered),
+    taxType: suggestTaxType(scan.kind, raw, vatRegistered),
     listPrices,
   };
 }

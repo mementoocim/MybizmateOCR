@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Image, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 
@@ -16,6 +15,7 @@ import { Sheet } from '../components/Sheet';
 import { totalOf, waitingOf } from '../lib/exportFile';
 import { peso } from '../lib/format';
 import { lists, subscribeLists } from '../lib/lists';
+import { usePushOnce } from '../lib/navigation';
 import { type SavedSummary, savedList, subscribeSaved } from '../lib/saved';
 import { SAMPLES } from '../lib/samples';
 import { useScanFlow } from '../lib/scanFlow';
@@ -43,7 +43,7 @@ const LOCK = 16; // dp: the footer's lock, beside its overline
 const handwriting = (font: string) => `${font === 'PatrickHand' ? 'Patrick Hand' : font} handwriting`;
 
 export default function Home() {
-  const router = useRouter();
+  const push = usePushOnce();
   const flow = useScanFlow();
   const recent = useSyncExternalStore(subscribeRecent, recentScans); // a scan read on any screen shows at once
   const saved = useSyncExternalStore(subscribeSaved, savedList);
@@ -64,7 +64,7 @@ export default function Home() {
 
   const firstRun = recent.length === 0 && saved.length === 0; // a sample counts as a scan
   // Saved, for one kind (Saved reads the kind) or every kind
-  const showSaved = (kind?: Kind) => (kind ? router.push({ pathname: '/saved', params: { kind } }) : router.push('/saved'));
+  const showSaved = (kind?: Kind) => (kind ? push({ pathname: '/saved', params: { kind } }) : push('/saved'));
 
   const header = (
     <Header
@@ -72,8 +72,8 @@ export default function Home() {
       onBack={null}
       right={
         <>
-          <IconButton icon={ListIcon} label="Your lists" onPress={() => router.push('/lists')} />
-          <IconButton icon={SettingsIcon} label="Settings" onPress={() => router.push('/settings')} />
+          <IconButton icon={ListIcon} label="Your lists" onPress={() => push('/lists')} />
+          <IconButton icon={SettingsIcon} label="Settings" onPress={() => push('/settings')} />
         </>
       }
     />
@@ -88,7 +88,7 @@ export default function Home() {
             size="large"
             icon={Camera}
             disabled={flow.reading}
-            onPress={() => router.push('/camera')}
+            onPress={() => push('/camera')}
           />
           <ButtonRow
             buttons={[
@@ -123,14 +123,14 @@ export default function Home() {
               sub="So scans can check names, TINs and prices"
               chevron
               checked={listsDone}
-              onPress={() => router.push('/lists')}
+              onPress={() => push('/lists')}
             />
             <ListRow
               title="Set your export defaults"
               sub="VAT status and accounts for MyBizMate"
               chevron
               checked={defaultsDone}
-              onPress={() => router.push('/settings')}
+              onPress={() => push('/settings')}
             />
           </>
         )}
@@ -144,7 +144,7 @@ export default function Home() {
               <RecentRow
                 key={scan.id}
                 scan={scan}
-                onPress={() => router.push({ pathname: '/result', params: { id: scan.id, from: 'recent' } })}
+                onPress={() => push({ pathname: '/result', params: { id: scan.id, from: 'recent' } })}
               />
             ))}
             <Text style={[type.label, styles.note]}>The last 20 scans stay here. Save a scan to keep it.</Text>

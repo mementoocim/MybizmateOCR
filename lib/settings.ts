@@ -66,8 +66,15 @@ export async function loadSettings(): Promise<void> {
   changed();
 }
 
+/**
+ * Changes the settings and keeps them on the phone. A change that changes nothing (a save's defaults, as a rule) keeps
+ * the same settings and tells no screen, so nothing that shows them draws again (the final review's Important 1).
+ */
 export function updateSettings(change: Partial<Settings>): Promise<void> {
-  current = { ...current, ...change };
-  changed();
+  const keys = Object.keys(change) as (keyof Settings)[];
+  if (keys.some((key) => change[key] !== current[key])) {
+    current = { ...current, ...change };
+    changed();
+  }
   return writeJson(FILE, current);
 }

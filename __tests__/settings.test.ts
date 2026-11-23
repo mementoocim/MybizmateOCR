@@ -73,6 +73,23 @@ test('settings kept before the UI pass load with setupDone false', async () => {
   expect(again.settings()).toEqual({ ...kept, setupDone: true });
 });
 
+test("a change that changes nothing keeps the same settings and tells no screen (final review, Important 1)", async () => {
+  // a save writes its account and ATC as the defaults each time: the same ones, as a rule
+  const s = S();
+  await s.updateSettings({ revenueAccount: '4010', atc: 'WC158' });
+  const before = s.settings();
+  const listener = jest.fn();
+  s.subscribeSettings(listener);
+  await s.updateSettings({ revenueAccount: '4010', atc: 'WC158' });
+  await s.updateSettings({});
+  expect(s.settings()).toBe(before);
+  expect(listener).not.toHaveBeenCalled();
+  // one value that differs is a change
+  await s.updateSettings({ revenueAccount: '4010', atc: 'WC160' });
+  expect(s.settings()).toMatchObject({ revenueAccount: '4010', atc: 'WC160' });
+  expect(listener).toHaveBeenCalledTimes(1);
+});
+
 test('a change is saved, and comes back after a restart', async () => {
   const listener = jest.fn();
   const first = S();

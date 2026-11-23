@@ -4,8 +4,9 @@ import { failureDialog } from '../lib/scanFlow';
 // title, and what to do is the message, since Android stops a dialog's title at two lines with an ellipsis. Ruling
 // T16-1a: words that don't split show as a title alone, as one-argument Alert.alert sends them. They never go under an
 // empty title: React Native still sends an empty title on Android, where it opens the dialog with a blank, focusable
-// heading. None of today's words has a decimal point or a "?". The nearest are the scanner's own messages after the
-// colon: one has its own colon, and one has a full stop inside a file name. Each stays whole.
+// heading. None of today's words has a decimal point or a "?". The nearest are the scanner's own messages, which a team
+// build adds under the plain words (the final review's Minor 3): one has its own colon, and one has a full stop inside a
+// file name. Each stays whole.
 
 jest.mock('../modules/scanner', () => ({})); // the split needs nothing of the scanner
 
@@ -23,23 +24,23 @@ test('two sentences: the reason, then what to do', () => {
   ).toEqual(['The camera app needs the camera permission too.', 'Choose a photo from the gallery instead.']);
 });
 
-test("a colon: what couldn't be read, then why, whole", () => {
+test("a colon: what couldn't be read, then why or what to do, whole", () => {
   expect(failureDialog("Couldn't read that photo: This file isn't a photo the scanner can open.")).toEqual([
     "Couldn't read that photo",
     "This file isn't a photo the scanner can open.",
   ]);
-  expect(failureDialog("Couldn't read that PDF: The scanner was closed")).toEqual([
+  expect(failureDialog("Couldn't read that PDF: Try importing it again.")).toEqual([
     "Couldn't read that PDF",
-    'The scanner was closed',
+    'Try importing it again.',
   ]);
-  // the scanner's own words stay whole, with their own colon or full stop
-  expect(failureDialog("Couldn't read that PDF: open failed: ENOENT (No such file or directory)")).toEqual([
+  // a team build's: the scanner's own words under them stay whole, with their own colon or full stop
+  expect(failureDialog("Couldn't read that PDF: Try importing it again.\n\nopen failed: ENOENT (No such file or directory)")).toEqual([
     "Couldn't read that PDF",
-    'open failed: ENOENT (No such file or directory)',
+    'Try importing it again.\n\nopen failed: ENOENT (No such file or directory)',
   ]);
-  expect(failureDialog("Couldn't read that photo: form_small.png can't be decoded")).toEqual([
+  expect(failureDialog("Couldn't read that photo: Try again, or retake it.\n\nform_small.png can't be decoded")).toEqual([
     "Couldn't read that photo",
-    "form_small.png can't be decoded",
+    "Try again, or retake it.\n\nform_small.png can't be decoded",
   ]);
 });
 

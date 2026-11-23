@@ -10,7 +10,9 @@ import { settings, updateSettings } from '../lib/settings';
 import { colors, touch, type } from '../lib/theme';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
+import { dialogWords } from '../test-utils/dialogs';
 import { memoryFs } from '../test-utils/memoryFs';
+import { focusAgain } from '../test-utils/screenFocus';
 import { pinToday } from '../test-utils/today';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
@@ -28,7 +30,8 @@ const mockReadPdf = jest.fn();
 jest.mock('expo-router', () => ({
   useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
-  useFocusEffect: (effect: () => void) => require('react').useEffect(effect, []),
+  // a screen's pushes run once until it's focused again (lib/navigation)
+  useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
   useIsFocused: () => true,
 }));
 jest.mock('../modules/scanner', () => ({
@@ -89,6 +92,8 @@ const button = (name: string | RegExp) => screen.getByRole('button', { name });
 const header = (name: string) => screen.getByRole('header', { name });
 /** The icons under a node drawn in a color: a row's chevron, the footer's lock. */
 const iconsIn = (node: Instance, color: string) => node.queryAll((n) => n.props.stroke === color);
+/** Back on Home from the screen a press opened: its next press opens one again (lib/navigation's usePushOnce). */
+const backHome = () => act(async () => focusAgain());
 
 const EXPORTED = '2026-11-19T02:00:00.000Z';
 let saves = 0;
@@ -152,8 +157,27 @@ test('the header: the wordmark, Your lists and Settings; no menu', async () => {
   }
   await press(top.getByRole('button', { name: 'Your lists' }));
   expect(mockPush).toHaveBeenLastCalledWith('/lists');
+  await backHome();
   await press(top.getByRole('button', { name: 'Settings' }));
   expect(mockPush).toHaveBeenLastCalledWith('/settings');
+});
+
+test('a press opens its screen once, until Home is on top again (final review, Minor 4)', async () => {
+  // a double tap on Take photo pushed two cameras, one over the other
+  await render(<Home />);
+  // A fast double tap: inside one act() scope, nothing re-renders between the two taps.
+  await act(async () => {
+    await fireEvent.press(button('Take photo'));
+    await fireEvent.press(button('Take photo'));
+  });
+  expect(mockPush.mock.calls).toEqual([['/camera']]);
+  // the screen's other presses too, while the camera opens over it
+  await press(within(screen.getByTestId('header')).getByRole('button', { name: 'Settings' }));
+  expect(mockPush.mock.calls).toEqual([['/camera']]);
+  // back on Home, a press opens its screen again
+  await backHome();
+  await press(button('Take photo'));
+  expect(mockPush.mock.calls).toEqual([['/camera'], ['/camera']]);
 });
 
 test('capture: Take photo, From gallery, Import PDF, and what it reads', async () => {
@@ -215,8 +239,7 @@ test('a refused PDF says why in a dialog', async () => {
   await render(<Home />);
   await act(async () => fireEvent.press(screen.getByText('Import PDF')));
   // the reason, then what to do
-  expect(alert).toHaveBeenCalledWith('That PDF has a password.', 'Save a copy without one, then import it.');
-  expect(alert).toHaveBeenCalledTimes(1);
+  expect(dialogWords(alert)).toEqual([['That PDF has a password.', 'Save a copy without one, then import it.']]);
   expect(screen.queryByText('Reading…')).toBeNull();
   expect(mockPush).not.toHaveBeenCalled();
 });
@@ -254,6 +277,7 @@ test('Get set up: two rows, each checked when done, then gone for good', async (
   expect(iconsIn(listsRow(), colors.chevron)).toHaveLength(1);
   await press(listsRow());
   expect(mockPush).toHaveBeenLastCalledWith('/lists');
+  await backHome();
   await press(defaultsRow());
   expect(mockPush).toHaveBeenLastCalledWith('/settings');
 
@@ -318,9 +342,11 @@ test('To export: a row per kind with its count and total; a row opens Saved for 
   expect(iconsIn(button(/^Sales, /), colors.chevron)).toHaveLength(1);
   await press(button(/^Sales, /));
   expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/saved', params: { kind: 'sale' } });
+  await backHome();
   await press(button(/^2307s, /));
   expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/saved', params: { kind: '2307' } });
   // All saved: every kind
+  await backHome();
   await press(button('All saved'));
   expect(mockPush).toHaveBeenLastCalledWith('/saved');
 
@@ -332,6 +358,7 @@ test('To export: a row per kind with its count and total; a row opens Saved for 
     '2307s, 1 to export · Tax withheld, ₱10,039.79',
   ]);
   expect(screen.getByText('₱12,345,678.90').props.numberOfLines).toBeUndefined();
+  await backHome();
   await press(button(/^Purchases, /));
   expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/saved', params: { kind: 'purchase' } });
 });

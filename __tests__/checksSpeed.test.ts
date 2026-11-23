@@ -65,9 +65,11 @@ test('the checks run once for a scan as it stands, however many screens show it'
   const scan = scanOf('inv_0007');
   const l: Lists = { parties: [], items: [], version: 1 };
   expect(saleOf(scan, l, SETTINGS)).toBe(saleOf(scan, l, SETTINGS));
-  // a change to the scan, the lists or the settings runs them again
+  // a change to the scan, the lists or whether the business is VAT-registered runs them again; no other setting does
   expect(saleOf({ ...scan }, l, SETTINGS)).not.toBe(saleOf(scan, l, SETTINGS));
   expect(saleOf(scan, { ...l, version: 2 }, SETTINGS)).not.toBe(saleOf(scan, l, SETTINGS));
+  expect(saleOf(scan, l, { ...SETTINGS, vatRegistered: false })).not.toBe(saleOf(scan, l, SETTINGS));
+  expect(saleOf(scan, l, { ...SETTINGS, revenueAccount: '4010', atc: 'WC158' })).toBe(saleOf(scan, l, SETTINGS));
 });
 
 test('importing 5,000 parties takes a moment, not seconds', async () => {

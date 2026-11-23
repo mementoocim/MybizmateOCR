@@ -285,7 +285,13 @@ test('TextField: label, outline, focus border, and one note under it', async () 
   );
   const input = () => screen.getByLabelText('Revenue account');
   const box = () => input().parent!;
-  expect(screen.getByText('Revenue account')).toHaveStyle({ ...type.label, color: colors.mute });
+  // The label shows over the field. TalkBack says it once, as the input's name: the label is no stop of its own ([216]).
+  expect(screen.getByText('Revenue account', { includeHiddenElements: true })).toHaveStyle({
+    ...type.label,
+    color: colors.mute,
+  });
+  expect(screen.queryByText('Revenue account')).toBeNull();
+  expect(input().props.accessibilityLabel).toBe('Revenue account');
   expect(box()).toHaveStyle({
     minHeight: touch.target,
     height: undefined,
@@ -407,7 +413,8 @@ test('TextField brings its whole field into view: the label above its box and th
   // over the input, sat half under the header. What's measured is the field's own view, from its label to its helper.
   const { input, scrollTo } = await fieldInScreen(420);
   await fireEvent(input, 'focus');
-  const field = screen.getByText('Offset account for 2307s').parent!; // the label's parent: the field's own view
+  // the label's parent: the field's own view (the label shows, though TalkBack says it as the input's name)
+  const field = screen.getByText('Offset account for 2307s', { includeHiddenElements: true }).parent!;
   expect(within(field).getByLabelText('Offset account for 2307s')).toBe(input);
   expect(within(field).getByText(OFFSET_HELPER)).toBeOnTheScreen();
   const measured = measureLayout.mock.contexts as { props: { children?: unknown } }[];

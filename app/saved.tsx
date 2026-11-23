@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { SectionList, StyleSheet, View, type ViewInstance } from 'react-native';
 
@@ -17,6 +17,7 @@ import { confirmDeleteSaved } from '../lib/confirmDelete';
 import { waitingOf } from '../lib/exportFile';
 import { amount, monthDay, monthYear } from '../lib/format';
 import { lists, newParties, subscribeLists } from '../lib/lists';
+import { usePushOnce } from '../lib/navigation';
 import { openSaved, type SavedSummary, savedList, subscribeSaved } from '../lib/saved';
 import type { Kind } from '../lib/scans';
 import { space } from '../lib/theme';
@@ -52,7 +53,7 @@ const EXPORTED: BadgeSpec = { label: 'Exported', tone: 'neutral' };
 type Month = { month: string; key: string; data: SavedSummary[] };
 
 export default function SavedScreen() {
-  const router = useRouter();
+  const push = usePushOnce();
   const { kind } = useLocalSearchParams<{ kind?: Kind }>();
   const all = useSyncExternalStore(subscribeSaved, savedList);
   const theLists = useSyncExternalStore(subscribeLists, lists);
@@ -88,7 +89,7 @@ export default function SavedScreen() {
       toast("Couldn't open that scan."); // a scan, as Saved holds 2307s too (ruling T19-3)
       return;
     }
-    router.push({ pathname: '/result', params: { id, from: 'saved' } });
+    push({ pathname: '/result', params: { id, from: 'saved' } });
   }
 
   function openExport() {
@@ -136,7 +137,7 @@ export default function SavedScreen() {
               <EmptyState
                 title="Nothing saved yet"
                 body="Save a scan and it shows up here, ready to export."
-                actions={[{ label: 'Take photo', onPress: () => router.push('/camera') }]}
+                actions={[{ label: 'Take photo', onPress: () => push('/camera') }]}
               />
             ) : filter === 'all' ? undefined : (
               <EmptyState title={`No ${PLURALS[filter]} saved`} />

@@ -17,12 +17,12 @@ import { CircleAlert, Close, type IconComponent, TriangleAlert } from './icons';
 import { useKeyboardHeight, useScrollIntoView } from './Screen';
 
 // Design B §5.6: a text field. Its label sits above it, unless hideLabel (a search field, whose label is only
-// spoken). The field is a panel box in a 1 dp outline border, which becomes a 2 dp focus border while it has focus;
-// the padding gives the extra 1 dp back, so nothing inside moves. mono sets the text in the figure style. Under it,
-// one note: the error (danger, with an icon), else the warning (warning, with an icon), else the helper (mute); it's
-// also what TalkBack hears as the field's hint. Autocorrect is always off: an edit means "the box says this". A search
-// field leads with its icon, and ends with a clear button while there's text, which gives the field the focus as it
-// goes.
+// spoken); either way TalkBack says the label once, as the input's name ([216]). The field is a panel box in a 1 dp
+// outline border, which becomes a 2 dp focus border while it has focus; the padding gives the extra 1 dp back, so
+// nothing inside moves. mono sets the text in the figure style. Under it, one note: the error (danger, with an icon),
+// else the warning (warning, with an icon), else the helper (mute); it's also what TalkBack hears as the field's hint.
+// Autocorrect is always off: an edit means "the box says this". A search field leads with its icon, and ends with a
+// clear button while there's text, which gives the field the focus as it goes.
 // Taking focus, the field asks the nearest ScrollIntoViewScope (the Screen's, or a sheet's) to scroll it into view:
 // the whole field, its label, box and note, not only the box, whose label would sit above the scroll's top, under the
 // header, at a large font size (QA pass 2). The keyboard opens after that, and the end of the scroll grows with it, so
@@ -112,7 +112,15 @@ export function TextField({
 
   return (
     <View ref={field} style={styles.field}>
-      {hideLabel ? null : <Text style={[type.label, styles.label]}>{label}</Text>}
+      {hideLabel ? null : (
+        // TalkBack says it as the input's name, not twice
+        <Text
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
+          style={[type.label, styles.label]}>
+          {label}
+        </Text>
+      )}
       <View style={[styles.box, focused && styles.boxFocused]}>
         {Leading ? <Leading size={touch.iconSmall} color={colors.chevron} /> : null}
         <TextInput

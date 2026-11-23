@@ -9,6 +9,7 @@ import { getScan } from '../lib/scans';
 import { colors, radius, touch, type } from '../lib/theme';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
+import { dialogWords } from '../test-utils/dialogs';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §9.3: the camera. The preview, its outline, auto-capture and the checks are native. Over them: Close, with
@@ -402,10 +403,9 @@ test('camera app needs the permission too', async () => {
   await open();
   await press(button(CAMERA_APP));
   await settle();
-  expect(alert).toHaveBeenCalledWith(
-    'The camera app needs the camera permission too.',
-    'Choose a photo from the gallery instead.',
-  );
+  expect(dialogWords(alert)).toEqual([
+    ['The camera app needs the camera permission too.', 'Choose a photo from the gallery instead.'],
+  ]);
 });
 
 test('shutter', async () => {
@@ -424,6 +424,30 @@ test('the gallery: an icon over its label', async () => {
   expect(label).toHaveStyle({ ...type.label, color: colors.cameraMute });
   expect(StyleSheet.flatten(gallery.props.style).flexDirection ?? 'column').toBe('column');
   expect(gallery).toHaveStyle({ minWidth: touch.target, minHeight: touch.target });
+});
+
+test("a photo that can't be read: the camera stays off behind the dialog until its OK (final review, Minor 5)", async () => {
+  // Live behind it, Auto would take another photo, and stack another dialog on it
+  const failure = Object.assign(new Error('The scanner was closed'), { code: 'ERR_UNEXPECTED' });
+  mockScanPhoto.mockRejectedValueOnce(failure);
+  await open();
+  await send('photo', { uri: 'file:///cache/camera/capture_4.jpg' });
+  expect(alert).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText('Reading…')).toBeNull(); // the read is over
+  expect(camera().props.active).toBe(false);
+  // one OK, as Android's own dialog has, which the camera waits for, or the dialog's dismissal
+  const [, , buttons, options] = alert.mock.calls[0] as Parameters<typeof Alert.alert>;
+  expect(buttons).toEqual([{ text: 'OK', onPress: expect.any(Function) }]);
+  expect(options).toEqual({ onDismiss: expect.any(Function) });
+  await act(async () => buttons![0].onPress!());
+  expect(camera().props.active).toBe(true);
+
+  // dismissed, where the dialog allows it: the same
+  mockScanPhoto.mockRejectedValueOnce(failure);
+  await send('photo', { uri: 'file:///cache/camera/capture_5.jpg' });
+  expect(camera().props.active).toBe(false);
+  await act(async () => (alert.mock.calls[1] as Parameters<typeof Alert.alert>)[3]!.onDismiss!());
+  expect(camera().props.active).toBe(true);
 });
 
 test('a photo is read', async () => {

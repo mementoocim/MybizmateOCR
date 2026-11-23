@@ -397,7 +397,8 @@ test('the supplier sheet: the picker, Various suppliers, and a name not in the l
   // not in the list: a strip, the name's field, then Use this name (secondary, the row's own share) and Add to your
   // suppliers (text), off until a name is typed
   expect(header('Not in your list?')).toBeTruthy();
-  expect(sheet().getByText("Supplier's name")).toHaveStyle(type.label); // a field's label, shown
+  // a field's label, shown (TalkBack says it as the input's name)
+  expect(sheet().getByText("Supplier's name", { includeHiddenElements: true })).toHaveStyle(type.label);
   const use = () => sheet().getByRole('button', { name: 'Use this name' });
   const add = () => sheet().getByRole('button', { name: 'Add to your suppliers' });
   expect(use()).toBeDisabled();

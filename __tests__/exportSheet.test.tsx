@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { File } from 'expo-file-system';
 import { useState } from 'react';
 import { AccessibilityInfo, Alert } from 'react-native';
 
@@ -605,6 +606,46 @@ test('Mark runs once on a double tap', async () => {
   expect(mark).toHaveBeenCalledWith(ids, NOW);
   expect(onClose).toHaveBeenCalledTimes(1);
   expect(mockToast).toHaveBeenCalledTimes(1);
+  expect(mockToast).toHaveBeenCalledWith('Marked 2 sales as exported.');
+  expect(screen.queryByTestId('sheet-panel')).toBeNull();
+});
+
+test("a mark that can't be written says so in the step, marks nothing, and runs again (final review, Important 2)", async () => {
+  // A full phone: no file can be written, saved.json included. Nothing shows as exported meanwhile, so nothing goes back
+  // to To export at the next start with no warning, to be imported twice.
+  const ids = [await saveInvoice(), await saveInvoice()];
+  await openAt('sale');
+  await press(button('Share the file'));
+  const write = jest.spyOn(File.prototype, 'write').mockRejectedValue(new Error('No space left on device'));
+  await press(button('Mark 2 as exported'));
+  // the question stays, with why first in it, as a banner TalkBack reads out
+  expect(header(QUESTION)).toBeOnTheScreen();
+  const why = banner("Couldn't mark them as exported. Try again.");
+  expect(why).toHaveStyle({ backgroundColor: colors.dangerTint, borderColor: colors.dangerLine });
+  expect(why.props.accessibilityLiveRegion).toBe('polite');
+  const order = positions(why, screen.getByText(/^Mark these 2 sales as exported/));
+  expect(order[0]).toBeGreaterThanOrEqual(0);
+  expect(order[0]).toBeLessThan(order[1]);
+  for (const id of ids) expect(savedSummary(id)!.exportedAt).toBeNull();
+  expect(onClose).not.toHaveBeenCalled();
+  expect(mockToast).not.toHaveBeenCalled();
+  expect(button('Mark 2 as exported')).toBeEnabled();
+
+  // with room again, Mark again: the banner goes while it runs; once written, they're marked, the sheet closes and the
+  // snackbar says so
+  write.mockRestore();
+  const realMark = savedStore.markExported;
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  jest.spyOn(savedStore, 'markExported').mockImplementationOnce(async (...args) => {
+    await held;
+    return realMark(...args);
+  });
+  await press(button('Mark 2 as exported'));
+  expect(screen.queryByRole('alert')).toBeNull();
+  await act(async () => release());
+  for (const id of ids) expect(savedSummary(id)!.exportedAt).toBe(NOW.toISOString());
+  expect(onClose).toHaveBeenCalledTimes(1);
   expect(mockToast).toHaveBeenCalledWith('Marked 2 sales as exported.');
   expect(screen.queryByTestId('sheet-panel')).toBeNull();
 });

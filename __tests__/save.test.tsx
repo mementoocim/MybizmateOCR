@@ -35,6 +35,8 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: mockPush }),
+  // a screen's pushes run once until it's focused again (lib/navigation)
+  useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
   useIsFocused: () => true,
 }));
 jest.mock('../modules/scanner', () => ({

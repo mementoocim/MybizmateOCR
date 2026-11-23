@@ -24,6 +24,7 @@ import { colors, space, touch, type } from '../lib/theme';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 import { memoryFs } from '../test-utils/memoryFs';
+import { focusAgain } from '../test-utils/screenFocus';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §9.7: Saved. Its header says how many wait to export; chips filter it by kind, starting at the kind Home
@@ -40,6 +41,8 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
+  // a screen's pushes run once until it's focused again (lib/navigation)
+  useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
   useIsFocused: () => true,
 }));
 // Ruling P8: the toast's arguments go through as given, so a message without an action is checked by its words alone.
@@ -436,7 +439,7 @@ test('as the app saves them: a sale with its SI number, and a 2307 with its payo
   ]);
 });
 
-test('a row opens its scan; one that has gone says so', async () => {
+test('a row opens its scan, once however fast it is tapped twice; one that has gone says so', async () => {
   const scan = {
     id: 'a',
     label: 'Camera photo',
@@ -454,8 +457,13 @@ test('a row opens its scan; one that has gone says so', async () => {
     invoice('sale', '2026-10-05', { id: 'a', partyName: 'Store A' }),
     invoice('sale', '2026-10-06', { id: 'b', partyName: 'Store B' }),
   ]);
-  await press(button(/^Store A, /));
-  expect(mockPush).toHaveBeenCalledWith({ pathname: '/result', params: { id: 'a', from: 'saved' } });
+  // A fast double tap: inside one act() scope, nothing re-renders between the two taps (final review, Minor 4).
+  await act(async () => {
+    await fireEvent.press(button(/^Store A, /));
+    await fireEvent.press(button(/^Store A, /));
+  });
+  expect(mockPush.mock.calls).toEqual([[{ pathname: '/result', params: { id: 'a', from: 'saved' } }]]);
+  await act(async () => focusAgain()); // back on Saved
   await press(button(/^Store B, /));
   expect(mockPush).toHaveBeenCalledTimes(1);
   // a scan, as Saved holds 2307s too (ruling T19-3)

@@ -37,7 +37,8 @@ import { SummaryBox } from './SummaryBox';
 //   so it never sits below the fold (ruling T18-4).
 // - Once the share sheet has closed, sent or not (it can't tell), today's question: mark what went in the file as
 //   exported, with the time it was written for, so the next file leaves it out; or not yet. Nothing is marked unless
-//   the person says so, and Mark runs once on a double tap too. Marking closes the sheet, then a snackbar says so.
+//   the person says so, and Mark runs once on a double tap too. Marking closes the sheet, then a snackbar says so. A
+//   mark that can't be written marks nothing, and says so in the step, the same way, so Mark can run again.
 // Each step's title takes TalkBack focus as it shows (focusKey), and once the sheet has gone, focus goes back to
 // returnFocus (Saved's Export…: design §7). The sheet starts where it's opened, at the list of files for no kind, so
 // a caller mounts it anew (or gives it a new key) for each opening.
@@ -58,6 +59,7 @@ const PARTY_RANGES = [
 const KINDS: readonly Kind[] = ['sale', 'purchase', '2307'];
 const NOTHING = 'Nothing to export for this choice';
 const FIRST = 'Export these first: they go in before the other files.';
+const MARK_FAILED = "Couldn't mark them as exported. Try again.";
 const PARTIES_NOTE =
   "Before you import, fill in each one's City / Municipality, Province and ZIP, and its TIN where it's blank: MyBizMate needs them. Import this file before the sales and purchases that name them.";
 
@@ -184,7 +186,7 @@ export function ExportSheet({
   const theLists = useSyncExternalStore(subscribeLists, lists);
   const [step, setStep] = useState<Step>(() => (kind === null ? { step: 'files' } : { step: 'file', which: kind }));
   const [range, setRange] = useState<ExportRange>('new');
-  const [error, setError] = useState<string | null>(null); // why the last share didn't happen
+  const [error, setError] = useState<string | null>(null); // why the step's last try didn't work: a share, or a mark
 
   function openFile(which: Which) {
     setRange('new');
@@ -241,7 +243,13 @@ export function ExportSheet({
     const { one, many, next } = FILES[which].words;
     const all = FILES[which].ranges.find((r) => r.value === 'all')!.label; // All, or All added from scans: in “ ”s
     const mark = async () => {
-      await (which === 'parties' ? markPartiesExported(ids, at) : markExported(ids, at));
+      setError(null);
+      try {
+        await (which === 'parties' ? markPartiesExported(ids, at) : markExported(ids, at));
+      } catch {
+        setError(MARK_FAILED); // nothing was marked: the question stays, to try again
+        return;
+      }
       onClose();
       toast(`Marked ${n} ${n === 1 ? one : many} as exported.`);
     };
@@ -253,6 +261,8 @@ export function ExportSheet({
       ],
       children: (
         <View style={styles.body}>
+          {/* first, as the file's step has it (ruling T18-4) */}
+          {error ? <Banner tone="danger" text={error} live /> : null}
           <Text style={[type.body, styles.ink]}>
             {n === 1
               ? `Mark this ${one} as exported, so the ${next} leaves it out. “${all}” still includes it.`

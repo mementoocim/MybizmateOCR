@@ -1,7 +1,9 @@
-import { useNavigation, useRouter } from 'expo-router';
+import { type Href, useFocusEffect, useNavigation, useRouter } from 'expo-router';
+import { useCallback, useRef } from 'react';
 
 // Going back, the one way every screen does it: the header's Back, the camera's Close, a Retake that goes back (a
-// sample, or a scan opened from Home or Saved), and a saved scan deleted from the Scan screen's ⋮ (Review Focus 4).
+// sample, or a scan opened from Home or Saved), and a saved scan deleted from the Scan screen's ⋮ (Review Focus 4). And
+// opening a screen from a press, once.
 
 /**
  * Back to the screen under this one, or Home when there's none (ruling T24-1: the Stack is anchored on Home, so this
@@ -17,5 +19,26 @@ export function useGoBackOrHome(): () => void {
   return () => {
     if (navigation.canGoBack()) navigation.goBack();
     else router.replace('/');
+  };
+}
+
+/**
+ * A screen's push from a press, once: a second press before the new screen is up would push it again (two cameras, one
+ * over the other: the final review's Minor 4). It pushes again once the screen is focused again, back from the one it
+ * opened. A screen takes one, for all its presses, so two different presses can't stack two screens either. On the
+ * live root's router, useRouter(), as useGoBackOrHome goes Home (ruling T26-4).
+ */
+export function usePushOnce(): (href: Href) => void {
+  const router = useRouter();
+  const pushed = useRef(false); // set at once, so a second press is refused before the screen has gone
+  useFocusEffect(
+    useCallback(() => {
+      pushed.current = false;
+    }, []),
+  );
+  return (href) => {
+    if (pushed.current) return;
+    pushed.current = true;
+    router.push(href);
   };
 }

@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   AccessibilityInfo,
@@ -87,7 +87,6 @@ const dayOf = (iso: string) => monthDay(localIsoDate(new Date(iso)));
 
 export default function Result() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
-  const router = useRouter();
   const flow = useScanFlow();
   const goBackOrHome = useGoBackOrHome();
   const scan = useSyncExternalStore(subscribeRecent, () => (id ? getScan(id) : undefined));
@@ -199,8 +198,8 @@ export default function Result() {
 
   /**
    * ⋮ › Delete saved scan, asked as Saved's long press asks it (lib/confirmDelete). Delete first leaves, then deletes,
-   * in the one press: the screen shows only its header from then on, so the scan's going never shows as "This scan is
-   * no longer here": React renders the scans' change, the navigator's and this state's together (one sync batch).
+   * in the one press: the screen shows only its header from then on, so the scan's going, once saved.json is written,
+   * never shows as "This scan is no longer here".
    */
   function confirmDelete(scanId: string) {
     confirmDeleteSaved(scanId, () => {
@@ -218,7 +217,7 @@ export default function Result() {
         {
           label: 'Retake',
           // the plan's call 8: the camera, or the camera app again; opened from Home or Saved, back
-          onPress: back || scan.source === 'camera' || scan.source === 'camera_app' ? retake : () => router.replace('/camera'),
+          onPress: back || scan.source === 'camera' || scan.source === 'camera_app' ? retake : flow.toCamera,
         },
       ]
     : isSample

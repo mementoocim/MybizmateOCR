@@ -1,9 +1,12 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 
 import { RecentRow } from '../components/RecentRow';
+import * as certChecks from '../lib/checks/bir2307';
+import * as saleChecks from '../lib/checks/finalize';
 import { addParty, clearItems, clearParties } from '../lib/lists';
 import { saveScan } from '../lib/saved';
 import { addScan, getScan, type ScanSource, setEdit, type StoredScan, updateScan } from '../lib/scans';
+import { settings, updateSettings } from '../lib/settings';
 import { colors, type } from '../lib/theme';
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
@@ -150,4 +153,27 @@ test('the badge follows the lists', async () => {
   });
   expect(screen.getByRole('button', { name: /, 1 to check$/ })).toBeOnTheScreen();
   expect(screen.getByText('1 to check', { includeHiddenElements: true })).toHaveStyle({ color: colors.warning });
+});
+
+test("a setting the checks don't read never runs them again; VAT-registered runs a sale's (final review, Important 1)", async () => {
+  // Home keeps its 20 rows mounted under Settings, which saves each keystroke, and every save writes new defaults: each
+  // run is the fuzzy matching against the whole list
+  const kept = settings();
+  const sales = jest.spyOn(saleChecks, 'finalize');
+  const certs = jest.spyOn(certChecks, 'check2307');
+  const runs = () => [sales.mock.calls.length, certs.mock.calls.length];
+  await render(
+    <>
+      <RecentRow scan={scanOf('inv_0007')} onPress={noop} />
+      <RecentRow scan={noPayments()} onPress={noop} />
+    </>,
+  );
+  expect(runs()).toEqual([1, 1]);
+  await act(async () => updateSettings({ revenueAccount: '4' })); // typing an account
+  await act(async () => updateSettings({ revenueAccount: '40', atc: 'WC158', setupDone: true })); // a save's defaults
+  expect(runs()).toEqual([1, 1]);
+  // VAT-registered suggests a sale's tax type: the invoice's run again; a 2307's read no setting
+  await act(async () => updateSettings({ vatRegistered: !kept.vatRegistered }));
+  expect(runs()).toEqual([2, 1]);
+  await act(async () => updateSettings(kept));
 });

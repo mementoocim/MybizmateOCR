@@ -249,7 +249,8 @@ export default function CameraScreen() {
             key={mount}
             ref={camera}
             style={styles.fill}
-            active={focused && !flow.busy}
+            // off while a photo is picked or read, and behind its failure's dialog, where Auto would take another
+            active={focused && !flow.busy && !flow.sayingWhy}
             auto={auto}
             torch={torch}
             testImage={testImage}

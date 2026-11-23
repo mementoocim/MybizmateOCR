@@ -7,6 +7,7 @@ import { loadSettings, settings, updateSettings } from '../lib/settings';
 import { colors, space, touch } from '../lib/theme';
 import { keyboard } from '../test-utils/keyboard';
 import { memoryFs } from '../test-utils/memoryFs';
+import { focusAgain } from '../test-utils/screenFocus';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §9.10: Settings, in groups. Your business: VAT-registered or not, which suggests each sale's tax type.
@@ -21,6 +22,8 @@ const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
+  // a screen's pushes run once until it's focused again (lib/navigation)
+  useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
 }));
 jest.mock('../lib/build', () => ({
   get TEAM_BUILD() {
@@ -260,8 +263,9 @@ test('a field scrolls into view above the keyboard, whole: its label, its input 
   );
   await act(async () => fireEvent(atc, 'focus'));
   // What's measured is the field's own view, its label's parent: the label, the input and the helper. (QA pass 2: at
-  // 200%, measuring the input alone left the label half under the header.)
-  const own = screen.getByText('Withholding tax ATC').parent!;
+  // 200%, measuring the input alone left the label half under the header.) The label shows, though TalkBack says it as
+  // the input's name.
+  const own = screen.getByText('Withholding tax ATC', { includeHiddenElements: true }).parent!;
   expect(within(own).getByLabelText('Withholding tax ATC')).toBe(atc);
   expect(within(own).getByText(ATC_HELPER)).toBeOnTheScreen();
   const measured = viewMethods.measureLayout.mock.contexts as { props: { children?: unknown } }[];
@@ -390,6 +394,10 @@ test('team builds show the team tools, after About', async () => {
   for (const name of ['Training data', 'Speed test']) expect(chevronsIn(button(name))).not.toHaveLength(0);
   await press(button('Training data'));
   expect(mockPush).toHaveBeenLastCalledWith('/training');
+  // as the screen's other rows: once, until Settings is on top again (lib/navigation's usePushOnce)
+  await press(button('Speed test'));
+  expect(mockPush).toHaveBeenCalledTimes(1);
+  await act(async () => focusAgain());
   await press(button('Speed test'));
   expect(mockPush).toHaveBeenLastCalledWith('/speed');
 });

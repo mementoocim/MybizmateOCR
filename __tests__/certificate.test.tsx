@@ -484,8 +484,8 @@ test('the checks run once for a scan as it stands', () => {
   const scan = getScan(addScan({ label: 'A 2307', source: 'pdf', result: parseScanResult(coreJson('bir2307_text_0')) }))!;
   const l: Lists = { parties: [], items: [], version: 1 };
   expect(certOf(scan, l, SETTINGS)).toBe(certOf(scan, l, SETTINGS));
-  // a change to the scan, the lists or the settings runs them again
+  // a change to the scan or the lists runs them again; they read no setting, so a settings change never does
   expect(certOf({ ...scan }, l, SETTINGS)).not.toBe(certOf(scan, l, SETTINGS));
   expect(certOf(scan, { ...l, version: 2 }, SETTINGS)).not.toBe(certOf(scan, l, SETTINGS));
-  expect(certOf(scan, l, { ...SETTINGS })).not.toBe(certOf(scan, l, SETTINGS));
+  expect(certOf(scan, l, { ...SETTINGS, vatRegistered: true, offsetAccount: '1205' })).toBe(certOf(scan, l, SETTINGS));
 });

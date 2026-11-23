@@ -1,10 +1,10 @@
-import { useRouter } from 'expo-router';
 import { type RefObject, useState, useSyncExternalStore } from 'react';
 import { StyleSheet, Text, View, type ViewInstance } from 'react-native';
 
 import { type CertView, type PayorStatus, periodName, taxWithheld } from '../lib/cert';
 import type { Terms } from '../lib/checks/finalize';
 import { peso, prettyDate } from '../lib/format';
+import { usePushOnce } from '../lib/navigation';
 import { type PartyStatus, type SaleView, taxTypeFromBoxes } from '../lib/sale';
 import { saveScan } from '../lib/saved';
 import type { Kind, SaveDetails, SourceTag, StoredScan } from '../lib/scans';
@@ -219,7 +219,7 @@ export function CertSaveSheet({
  * kind. A save that fails keeps the sheet open, and says so in it. Its promise settles when it's done.
  */
 function useSave(scan: StoredScan, kind: Kind, failed: string, onClose: () => void) {
-  const router = useRouter();
+  const push = usePushOnce();
   return async (details: SaveDetails, tag: SourceTag | null): Promise<void> => {
     const wasSaved = scan.saved !== null; // as the scan was before this save
     try {
@@ -231,7 +231,7 @@ function useSave(scan: StoredScan, kind: Kind, failed: string, onClose: () => vo
     onClose();
     toast(wasSaved ? 'Changes saved' : `Saved as a ${kind}`, {
       label: 'View',
-      onPress: () => router.push({ pathname: '/saved', params: { kind } }),
+      onPress: () => push({ pathname: '/saved', params: { kind } }),
     });
   };
 }

@@ -19,6 +19,7 @@ import { uncheckedBoxes } from '../lib/training/boxes';
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
+import { dialogWords } from '../test-utils/dialogs';
 import { memoryFs } from '../test-utils/memoryFs';
 import { pinToday } from '../test-utils/today';
 
@@ -46,6 +47,8 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useNavigation: () => mockNavigation,
   useRouter: () => mockRouter,
+  // a screen's pushes run once until it's focused again (lib/navigation)
+  useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
   useIsFocused: () => true,
 }));
 jest.mock('../modules/scanner', () => ({
@@ -1222,6 +1225,14 @@ test('Retake runs once, however fast it is tapped twice (ruling T25b-2)', async 
   await doubleTap();
   expect(mockRouter.replace.mock.calls).toEqual([['/camera']]);
   expect(mockNavigation.goBack).toHaveBeenCalledTimes(2);
+
+  // the form not found in a gallery photo or a PDF: the in-app camera in this screen's place, once too ([802]/[810])
+  for (const source of ['gallery', 'pdf'] as const) {
+    mockRouter.replace.mockClear();
+    await show('blank_page', { source });
+    await doubleTap();
+    expect(mockRouter.replace.mock.calls).toEqual([['/camera']]);
+  }
 });
 
 test('a retake shows the reading card for what it reads, and a read that fails says why in a dialog', async () => {
@@ -1236,7 +1247,7 @@ test('a retake shows the reading card for what it reads, and a read that fails s
   expect(screen.getByText('Reading…')).toBeOnTheScreen();
   expect(screen.getByText('Reading the PDF')).toBeOnTheScreen();
   await act(async () => refuse(Object.assign(new Error('refused'), { code: 'pdf_password' })));
-  expect(alert.mock.calls).toEqual([['That PDF has a password.', 'Save a copy without one, then import it.']]);
+  expect(dialogWords(alert)).toEqual([['That PDF has a password.', 'Save a copy without one, then import it.']]);
   expect(screen.queryByText('Reading…')).toBeNull();
   expect(mockRouter.replace).not.toHaveBeenCalled();
   expect(mockToast).not.toHaveBeenCalled(); // a dialog, not the snackbar
@@ -1246,6 +1257,6 @@ test('a retake shows the reading card for what it reads, and a read that fails s
   await show('inv_0007', { source: 'gallery' });
   mockLibrary.mockRejectedValueOnce(new Error('the picker failed'));
   await press(button('Retake'));
-  expect(alert.mock.calls).toStrictEqual([["Couldn't open that photo."]]); // one sentence: a title alone
+  expect(dialogWords(alert)).toStrictEqual([["Couldn't open that photo."]]); // one sentence: a title alone
   expect(mockToast).not.toHaveBeenCalled();
 });

@@ -128,6 +128,28 @@ test('openSaved and deleteSaved', async () => {
   expect([...memoryFs.files.keys()].some((k) => k.startsWith(`file:///docs/saved/${id}/`))).toBe(false);
 });
 
+test("a delete writes saved.json first: one that can't be written keeps the scan, here as at the next start (final review, Important 2)", async () => {
+  const m = load();
+  const { File } = require('expo-file-system'); // this registry's, as lib/jsonFile has it
+  const id = cameraScan(m);
+  await m.saved.saveScan(id, DETAILS);
+  const listener = jest.fn();
+  m.saved.subscribeSaved(listener);
+  // a full phone: no file can be written. The caller hears it (the snackbar says so: lib/confirmDelete), and Saved
+  // still lists it, as saved.json does
+  const write = jest.spyOn(File.prototype, 'write').mockRejectedValue(new Error('No space left on device'));
+  await expect(m.saved.deleteSaved(id)).rejects.toThrow('No space left on device');
+  expect(m.saved.savedSummary(id)).toBeDefined();
+  expect(m.scans.getScan(id)).toBeDefined();
+  expect(listener).not.toHaveBeenCalled();
+  // with room again, it goes
+  write.mockRestore();
+  await m.saved.deleteSaved(id);
+  expect(m.saved.savedSummary(id)).toBeUndefined();
+  expect(m.scans.getScan(id)).toBeUndefined();
+  expect(listener).toHaveBeenCalledTimes(1);
+});
+
 test('a scan saved before PDFs opens as a photo', async () => {
   const first = load();
   const id = cameraScan(first);
