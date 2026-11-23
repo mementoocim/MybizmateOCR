@@ -268,6 +268,36 @@ test("useKeyboardHeight: the open keyboard's height, 0 while hidden, and no list
   expect(screen.getByText('keyboard 0')).toBeOnTheScreen();
 });
 
+test("useKeyboardHeight in a scope that gives its own window's keyboard (a sheet's): that height, not RN's events", async () => {
+  function Probe() {
+    return <Text>{`keyboard ${useKeyboardHeight()}`}</Text>;
+  }
+  const scope = (height: number) => (
+    <ScrollIntoViewScope scrollRef={null} keyboard={height}>
+      <Probe />
+    </ScrollIntoViewScope>
+  );
+  await render(scope(0));
+  expect(screen.getByText('keyboard 0')).toBeOnTheScreen();
+  await screen.rerender(scope(300)); // the sheet's own window reports a keyboard
+  expect(screen.getByText('keyboard 300')).toBeOnTheScreen();
+  // RN's keyboard events are the app window's: inside the scope they change nothing.
+  await keyboard(280);
+  expect(screen.getByText('keyboard 300')).toBeOnTheScreen();
+
+  // A scope that gives none (a Screen's, a menu's) leaves it to RN's events, inside one that does too.
+  await screen.rerender(
+    <ScrollIntoViewScope scrollRef={null} keyboard={300}>
+      <ScrollIntoViewScope scrollRef={null}>
+        <Probe />
+      </ScrollIntoViewScope>
+    </ScrollIntoViewScope>,
+  );
+  expect(screen.getByText('keyboard 280')).toBeOnTheScreen();
+  await keyboard(0);
+  expect(screen.getByText('keyboard 0')).toBeOnTheScreen();
+});
+
 test('useEndPadding: a screen with its own list pads it the same way', async () => {
   function OwnList({ bar }: { bar: boolean }) {
     const end = useEndPadding(bar);

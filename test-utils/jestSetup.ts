@@ -17,3 +17,8 @@ PlatformConstants.getConstants = () => ({ ...platformConstants, isDisableAnimati
 // again (__tests__/snackbar.test.tsx).
 const { AccessibilityInfo } = require('react-native');
 jest.mocked(AccessibilityInfo.getRecommendedTimeoutMillis).mockImplementation(async (ms: number) => ms);
+
+// The scanner module's keyboard view (modules/scanner/src/ImeInsetsNativeView.ts) is native code, which jest doesn't
+// have: a host component of its name stands in for it. A sheet renders it on Android, and a test fires imeChange on it
+// for what the keyboard does in the sheet's own window (test-utils/keyboard's sheetKeyboard).
+jest.mock('../modules/scanner/src/ImeInsetsNativeView', () => ({ __esModule: true, default: 'ImeInsetsView' }));

@@ -5,6 +5,7 @@ import {
   Animated,
   Easing,
   Modal,
+  Platform,
   ScrollView,
   type ScrollViewInstance,
   StyleSheet,
@@ -18,6 +19,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useReducedMotion } from '../lib/motion';
 import { colors, durations, elevation, radius, space, touch, type } from '../lib/theme';
+// From its own file, not the module's index: that one loads the scanner's native module, which jest suites mock.
+import { ImeInsetsView } from '../modules/scanner/src/ImeInsetsView';
 import { ButtonRow } from './BottomBar';
 import type { ButtonProps } from './Buttons';
 import { IconButton } from './IconButton';
@@ -32,12 +35,16 @@ import { Tap } from './Tap';
 // most 90% of the screen: a title row (a step's Back, the title, Close; there's no drag handle), an optional subtitle,
 // the scroll (its sides on the 16 dp gutter, unless a list of full-bleed rows pads its own: gutter={false}, ruling
 // T13-1), then the action row pinned under it. The Modal is edge to edge, so the action row pads by the navigation
-// bar's inset and by the open keyboard, whose height RN 0.88 reports above that bar (ruling T5-1); a sheet with no
-// action row pads the end of its scroll instead. The scroll is its fields' scroll-into-view: they never scroll the
-// Screen behind the Modal. Back, Close, the scrim and system back ask before typing is lost (dirty). TalkBack focus
-// moves to the title once the sheet is up, and again when it shows a new step (focusKey), and to returnFocus once it
-// has gone. While it's open, the panel is the snackbar's host (the plan's call 4), so a message shows above the action
-// row, not dimmed behind the scrim; it goes back to the host under the sheet as the sheet starts to close.
+// bar's inset and by the open keyboard's height above that bar (ruling T5-1); a sheet with no action row pads the end
+// of its scroll instead, and the snackbar in it follows. On Android that's the keyboard in the Modal's own window, as
+// the sheet's IME view reports it (modules/scanner's ImeInsetsView): RN 0.88's keyboard events come only from the app's
+// window. It's 0 again once the sheet has gone, so it opens without one. Elsewhere it's RN's events (useKeyboardHeight:
+// iOS's aren't a window's). The scroll is its fields' scroll-into-view: they never scroll the Screen behind the Modal,
+// and it gives them that keyboard, so a focused field scrolls into view again as the keyboard grows (ruling T5-2).
+// Back, Close, the scrim and system back ask before typing is lost (dirty). TalkBack focus moves to the title once the
+// sheet is up, and again when it shows a new step (focusKey), and to returnFocus once it has gone. While it's open,
+// the panel is the snackbar's host (the plan's call 4), so a message shows above the action row, not dimmed behind the
+// scrim; it goes back to the host under the sheet as the sheet starts to close.
 // The exit motion needs the Sheet kept mounted, with `visible` driving it: useLingering keeps a caller's last content
 // for it while it closes. A caller that unmounts the Sheet to close it gets no exit motion, but focus still goes back,
 // once, from the unmount.
@@ -92,12 +99,18 @@ export function Sheet({
   testID?: string; // the Modal's
 }) {
   const insets = useSafeAreaInsets();
-  const keyboard = useKeyboardHeight();
   const reduced = useReducedMotion();
   const { height } = useWindowDimensions();
   // Up from the moment the sheet opens until its closing animation ends.
   const [shown, setShown] = useState(visible);
   if (visible && !shown) setShown(true);
+  // The open keyboard's height above the navigation bar. On Android, in the Modal's own window, as the IME view in it
+  // reports it; it stays through the closing animation (the panel goes down whole), then goes back to 0 with the
+  // window. Elsewhere, RN's keyboard events.
+  const fromEvents = useKeyboardHeight();
+  const [inWindow, setInWindow] = useState(0);
+  if (!shown && inWindow !== 0) setInWindow(0);
+  const keyboard = Platform.OS === 'android' ? inWindow : fromEvents;
   const [scrim] = useState(() => new Animated.Value(0));
   const [panel] = useState(() => new Animated.Value(0)); // 1: up; 0: below the screen, or clear with reduced motion
   const slide = useMemo(() => panel.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }), [panel, height]);
@@ -165,6 +178,8 @@ export function Sheet({
         pointerEvents={closing ? 'none' : 'auto'}
         importantForAccessibility={closing ? 'no-hide-descendants' : 'auto'}
         accessibilityElementsHidden={closing}>
+        {/* In the Modal, so in its window: the keyboard there (Android only; it takes no room) */}
+        <ImeInsetsView testID="sheet-ime" onImeChange={(e) => setInWindow(e.nativeEvent.height)} />
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: scrim }]}>
           <Tap
             testID="sheet-scrim"
@@ -187,7 +202,7 @@ export function Sheet({
             <IconButton icon={Close} label="Close" onPress={close} />
           </View>
           {subtitle ? <Text style={[type.body, styles.subtitle]}>{subtitle}</Text> : null}
-          <ScrollIntoViewScope scrollRef={scrollRef}>
+          <ScrollIntoViewScope scrollRef={scrollRef} keyboard={keyboard}>
             <ScrollView
               ref={scrollRef}
               testID="sheet-scroll"

@@ -26,7 +26,8 @@ import { colors, space } from '../lib/theme';
 // what's pinned under it outside the scroll (the Scan screen's status strip), the scroll, then the bottom bar (it takes
 // the navigation bar's inset). The app is edge-to-edge and Android no longer resizes the window for the keyboard, so
 // the end of the scroll clears the navigation bar when there's no bottom bar, and the open keyboard. A field that
-// takes focus asks the nearest ScrollIntoViewScope to scroll it into view: the Screen's own, or a sheet's.
+// takes focus asks the nearest ScrollIntoViewScope to scroll it into view: the Screen's own, or a sheet's. A sheet's
+// scope also gives the fields in it the keyboard of its own window (useKeyboardHeight).
 
 type ScrollTarget = ViewInstance | TextInputInstance;
 type ScrollRef = RefObject<ScrollViewInstance | null>;
@@ -40,13 +41,33 @@ type ScrollRef = RefObject<ScrollViewInstance | null>;
 const ScrollIntoView = createContext<(target: ScrollTarget | null) => void>(() => {});
 
 /**
+ * The open keyboard's height in the window of the nearest ScrollIntoViewScope, when the scope gives it: a sheet's,
+ * whose Modal is a window of its own. Null: RN's keyboard events, which are the app's window's.
+ */
+const ScopeKeyboard = createContext<number | null>(null);
+
+/**
  * Scroll-into-view for the fields inside it, in one ScrollView: a target is measured against the scroll's content and
  * scrolled to 24 dp under its top, never past the top. With scrollRef null it gives a no-op, so a modal that doesn't
- * scroll still cuts its fields off from the Screen behind it.
+ * scroll still cuts its fields off from the Screen behind it. A sheet gives its own window's keyboard too, which
+ * useKeyboardHeight returns inside it, so a focused field scrolls into view again as that keyboard grows. A scope that
+ * gives none (a Screen's, a menu's) leaves useKeyboardHeight to RN's keyboard events.
  */
-export function ScrollIntoViewScope({ scrollRef, children }: { scrollRef: ScrollRef | null; children?: ReactNode }) {
+export function ScrollIntoViewScope({
+  scrollRef,
+  keyboard,
+  children,
+}: {
+  scrollRef: ScrollRef | null;
+  keyboard?: number; // dp above the navigation bar, as useKeyboardHeight
+  children?: ReactNode;
+}) {
   const scrollIntoView = useCallback((target: ScrollTarget | null) => scrollIntoViewOf(scrollRef, target), [scrollRef]);
-  return <ScrollIntoView value={scrollIntoView}>{children}</ScrollIntoView>;
+  return (
+    <ScrollIntoView value={scrollIntoView}>
+      <ScopeKeyboard value={keyboard ?? null}>{children}</ScopeKeyboard>
+    </ScrollIntoView>
+  );
 }
 
 /**
@@ -106,9 +127,11 @@ export function Screen({
 
 /**
  * The open keyboard's height in dp, 0 while it's hidden. On Android this is its height above the navigation bar
- * (keyboardDidShow's endCoordinates.height); it's sent again when the height changes while it stays open.
+ * (keyboardDidShow's endCoordinates.height); it's sent again when the height changes while it stays open. Inside a
+ * scope that gives its own window's keyboard (a sheet's), it's that one: RN's events come only from the app's window.
  */
 export function useKeyboardHeight(): number {
+  const inScope = useContext(ScopeKeyboard);
   // Mounted while the keyboard is open (a sheet opened from a field, say), it starts from the keyboard's last report.
   const [height, setHeight] = useState(() => Keyboard.metrics()?.height ?? 0);
   useEffect(() => {
@@ -119,7 +142,7 @@ export function useKeyboardHeight(): number {
       hidden.remove();
     };
   }, []);
-  return height;
+  return inScope ?? height;
 }
 
 /**
