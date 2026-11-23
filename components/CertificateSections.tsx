@@ -1,26 +1,34 @@
-import { StyleSheet, Text, View } from 'react-native';
-
 import type { CertView, PayorStatus } from '../lib/cert';
 import type { CertRow } from '../lib/checks/bir2307';
-import { peso, prettyDate, qty } from '../lib/format';
-import { formFields } from '../lib/forms';
+import { PAYOR_ROW } from '../lib/flagTargets';
+import { amount, peso, prettyDate, qty } from '../lib/format';
 import { formatTin, partyName } from '../lib/lists';
 import { boxValue } from '../lib/sale';
 import type { StoredScan } from '../lib/scans';
-import { colors, sectionLabel } from '../lib/theme';
-import { SaleRow } from './SaleRow';
+import type { FormName } from '../modules/scanner';
+import { boxesOf, editedIn, type LedgerRowSpec, type LedgerSection } from './InvoiceLedger';
+
+// Design B §9.5 and the plan's call 14: the Scan screen's BIR 2307 as a ledger, drawn by InvoiceLedger's Ledger as the
+// invoice is. Today's sections (the period, the payee, the payor, Part III's income payments, its business-tax rows
+// when it has any, and each table's totals) as row descriptors, with today's words, flags and boxes. The quarter is a
+// badge beside the period. A payment row has its tax on the right, under the section's "Tax", its total in the
+// sub-line, and its flags' words as its reason. Amounts in rows lose the peso sign; the total rows keep it (§6). Rows
+// are keyed as lib/flagTargets keys them ('period', `ewt${n}`, 'ewt_total', …), so a flag chip finds its row. The
+// one-row sections' rows (Period, Payee, Payor) show no key, as their strips name them, but say it to TalkBack, which
+// can land on them from a chip or a closing sheet (ruling T12-1).
 
 type Table = CertRow['table'];
 
+const FORM: FormName = 'bir_2307';
 const PERIOD_BOXES = ['period_from', 'period_to'];
 const partyBoxes = (who: 'payee' | 'payor') => ['tin', 'name', 'address', 'zip'].map((c) => `${who}_${c}`);
 const ROW_COLUMNS = ['payment', 'atc', 'm1', 'm2', 'm3', 'total', 'tax'];
 const TOTAL_COLUMNS = ['m1', 'm2', 'm3', 'total', 'tax'];
 
-/** Each table's words: its section, its line in the totals, a row's name, and whose ATCs it takes. */
-const TABLES: Record<Table, { section: string; total: string; row: string; atcFor: string }> = {
-  ewt: { section: 'INCOME PAYMENTS', total: 'Income payments', row: 'Row', atcFor: 'income payments' },
-  bt: { section: 'BUSINESS TAX', total: 'Business tax', row: 'Business tax row', atcFor: 'business tax' },
+/** Each table's words: its name (its section's, and its line in the totals), a row's name, and whose ATCs it takes. */
+const TABLES: Record<Table, { name: string; row: string; atcFor: string }> = {
+  ewt: { name: 'Income payments', row: 'Row', atcFor: 'income payments' },
+  bt: { name: 'Business tax', row: 'Business tax row', atcFor: 'business tax' },
 };
 
 const PAYOR_SUB: Record<PayorStatus, string> = {
@@ -35,9 +43,27 @@ const PAYOR_SUB: Record<PayorStatus, string> = {
 const payorSub = ({ status, listParty }: CertView['payor']) =>
   status === 'unsure' && listParty ? `Closest match: ${partyName(listParty)}` : PAYOR_SUB[status];
 
-/** "Oct 1 – Dec 31, 2026 (Q4)": a quarter's first and last days, its year said once. */
-function quarterText(from: string, to: string, quarter: string): string {
-  return `${prettyDate(from)!.replace(/, \d+$/, '')} – ${prettyDate(to)} (${quarter.split('-')[1]})`;
+/**
+ * The payor sheet's read-only line, under its boxes (§9.5): whether the payor is in the customers, and as which.
+ * There's no payor chooser, so an unsure match names only the closest customer.
+ */
+export function payorLine({ status, listParty }: CertView['payor']): string {
+  switch (status) {
+    case 'auto':
+      return listParty?.tin ? `In your customers · TIN ${formatTin(listParty.tin)}` : 'In your customers';
+    case 'unsure':
+      return listParty ? `Closest match in your customers: ${partyName(listParty)}` : PAYOR_SUB.unsure;
+    case 'new':
+    case 'none':
+      return 'Not in your customers';
+    case 'unlisted':
+      return PAYOR_SUB.unlisted;
+  }
+}
+
+/** "Oct 1 – Dec 31, 2026": a quarter's first and last days, its year said once (the quarter is the row's badge). */
+function quarterDays(from: string, to: string): string {
+  return `${prettyDate(from)!.replace(/, \d+$/, '')} – ${prettyDate(to)}`;
 }
 
 /** A party's TIN as the BIR writes it, then its ZIP code; a box that wasn't read is a dash. */
@@ -53,139 +79,137 @@ function realTotal(row: CertRow | null): CertRow | null {
 }
 
 /**
- * A BIR 2307's sections: the period, the payee (the business), the payor (matched like a sale's customer), Part III's
- * income payments, its business-tax rows when it has any, and each table's totals. Every row opens what the camera
- * saw in its boxes (openBoxes), each box fixable, and the checks run again.
+ * A BIR 2307's sections, in today's order: the period, the payee (the business), the payor (matched like a sale's
+ * customer), the income payments, the business-tax rows when it has any, and the totals. Every row but "No income
+ * payments read" opens what the camera saw in its boxes, each box fixable, and the checks run again.
  */
-export function CertificateSections({
-  scan,
-  view,
-  openBoxes,
-}: {
-  scan: StoredScan;
-  view: CertView;
-  openBoxes: (title: string, boxes: string[]) => void;
-}) {
+export function certSections(scan: StoredScan, view: CertView): LedgerSection[] {
   const { cert, payor } = view;
   const has = (flag: string) => cert.flags.includes(flag);
-  const fields = formFields('bir_2307');
-  const boxesOf = (title: string, names: readonly string[]) => () =>
-    openBoxes(title, fields.filter((f) => names.includes(f)));
   const rowsOf = (table: Table) => cert.rows.filter((r) => r.table === table);
 
-  const read = [boxValue(scan, 'period_from'), boxValue(scan, 'period_to')];
-  const period =
+  // The period: a quarter's days, with the quarter as a badge; else the boxes as read, a box that wasn't read a dash.
+  const quarter =
     cert.quarter !== null && cert.from !== null && cert.to !== null
-      ? quarterText(cert.from, cert.to, cert.quarter)
-      : read.some((v) => v)
-        ? read.map((v) => v || '—').join(' – ')
-        : null;
+      ? { days: quarterDays(cert.from, cert.to), badge: cert.quarter.split('-')[1] }
+      : null;
+  const read = [boxValue(scan, 'period_from'), boxValue(scan, 'period_to')];
+  const period = boxesOf(FORM, 'Period', PERIOD_BOXES);
+  const periodRow: LedgerRowSpec = {
+    key: 'period',
+    section: 'Period',
+    spokenLabel: 'Period',
+    value: quarter ? quarter.days : read.some((v) => v) ? read.map((v) => v || '—').join(' – ') : null,
+    valueStyle: 'figure', // dates (§5.2)
+    badge: quarter ? { label: quarter.badge, tone: 'neutral' } : null,
+    reason: has('period') ? 'Not one calendar quarter' : null,
+    flagged: has('period'),
+    edited: editedIn(scan, period.boxes),
+    open: period,
+  };
 
-  const paymentRow = (row: CertRow) => {
-    const name = `${row.table}${row.row}`; // the row's boxes and flags: ewt1_total, ewt1_sum
+  const payee = boxesOf(FORM, 'Payee', partyBoxes('payee'));
+  const payeeRow: LedgerRowSpec = {
+    key: 'payee',
+    section: 'Payee',
+    spokenLabel: 'Payee',
+    value: cert.payee.name || null,
+    sub: tinAndZip(cert.payee),
+    subMono: true,
+    flagged: has('payee_tin'),
+    edited: editedIn(scan, payee.boxes),
+    open: payee,
+  };
+
+  const payorBoxes = boxesOf(FORM, 'Payor', partyBoxes('payor'));
+  const payorRow: LedgerRowSpec = {
+    key: PAYOR_ROW,
+    section: 'Payor',
+    spokenLabel: 'Payor',
+    value: payor.shown || null,
+    sub: `${payorSub(payor)}\n${tinAndZip(cert.payor)}`,
+    flagged: has('payor_tin') || has('payor_new') || has('payor_unsure'),
+    edited: editedIn(scan, payorBoxes.boxes),
+    open: payorBoxes,
+  };
+
+  /** A payment row: its ATC and payment, its total under them, its tax on the right, and its flags' words. */
+  const paymentRow = (row: CertRow, section: string): LedgerRowSpec => {
+    const name = `${row.table}${row.row}`; // its key, and its boxes' and flags' prefix: ewt1_total, ewt1_sum
     const words = TABLES[row.table];
     const title = [row.atc, row.payment].filter((s) => s).join(' · ') || `${words.row} ${row.row}`;
-    const sub =
-      `Tax withheld ${peso(row.tax)}` +
-      (has(`${name}_sum`) ? " · the months don't add up to the total" : '') +
-      (has(`${name}_tax`) && row.rate !== null ? ` · not ${percent(row.rate)} of the total` : '') +
-      (has(`${name}_atc`) ? (row.atc === null ? ' · no ATC' : ` · not an ATC for ${words.atcFor}`) : '');
-    return (
-      <SaleRow
-        key={name}
-        value={title}
-        sub={sub}
-        amount={peso(row.total)}
-        flagged={has(`${name}_sum`) || has(`${name}_tax`) || has(`${name}_atc`)}
-        onPress={boxesOf(
-          title,
-          ROW_COLUMNS.map((c) => `${name}_${c}`),
-        )}
-      />
-    );
+    const why = [
+      has(`${name}_sum`) ? "The months don't add up to the total" : null,
+      has(`${name}_tax`) && row.rate !== null ? `Not ${percent(row.rate)} of the total` : null,
+      has(`${name}_atc`) ? (row.atc === null ? 'No ATC' : `Not an ATC for ${words.atcFor}`) : null,
+    ].filter((s) => s !== null);
+    const open = boxesOf(FORM, title, ROW_COLUMNS.map((c) => `${name}_${c}`));
+    return {
+      key: name,
+      section,
+      value: title,
+      sub: `Total ${amount(row.total)}`,
+      subMono: true,
+      amount: amount(row.tax),
+      reason: why.length > 0 ? why.join(' · ') : null,
+      flagged: has(`${name}_sum`) || has(`${name}_tax`) || has(`${name}_atc`),
+      edited: editedIn(scan, open.boxes),
+      open,
+    };
   };
+
   const income = rowsOf('ewt');
   const business = rowsOf('bt');
+  const incomeTitle = `${TABLES.ewt.name} · ${income.length}`;
+  const noPayments: LedgerRowSpec = {
+    key: 'no_payments',
+    section: incomeTitle,
+    value: 'No income payments read',
+    flagged: false,
+    edited: false,
+    open: null,
+  };
+  const sections: LedgerSection[] = [
+    { title: 'Period', rows: [periodRow] },
+    { title: 'Payee', rows: [payeeRow] },
+    { title: 'Payor', rows: [payorRow] },
+    {
+      title: incomeTitle,
+      right: 'Tax',
+      rows: income.length === 0 ? [noPayments] : income.map((row) => paymentRow(row, incomeTitle)),
+    },
+  ];
+  if (business.length > 0) {
+    const businessTitle = `${TABLES.bt.name} · ${business.length}`;
+    sections.push({ title: businessTitle, right: 'Tax', rows: business.map((row) => paymentRow(row, businessTitle)) });
+  }
+
   // a table's total, when it has rows or its total row doesn't add up (so it can be fixed)
   const totals = (['ewt', 'bt'] as const).filter((t) => rowsOf(t).length > 0 || has(`${t}_total`));
-
-  return (
-    <>
-      <Text style={[sectionLabel, styles.first]}>PERIOD</Text>
-      <View style={styles.card}>
-        <SaleRow
-          value={period}
-          sub={has('period') ? 'Not one calendar quarter' : null}
-          flagged={has('period')}
-          onPress={boxesOf('Period', PERIOD_BOXES)}
-        />
-      </View>
-
-      <Text style={[sectionLabel, styles.section]}>PAYEE</Text>
-      <View style={styles.card}>
-        <SaleRow
-          value={cert.payee.name || null}
-          sub={tinAndZip(cert.payee)}
-          flagged={has('payee_tin')}
-          onPress={boxesOf('Payee', partyBoxes('payee'))}
-        />
-      </View>
-
-      <Text style={[sectionLabel, styles.section]}>PAYOR</Text>
-      <View style={styles.card}>
-        <SaleRow
-          value={payor.shown || null}
-          sub={`${payorSub(payor)}\n${tinAndZip(cert.payor)}`}
-          flagged={has('payor_tin') || has('payor_new') || has('payor_unsure')}
-          onPress={boxesOf('Payor', partyBoxes('payor'))}
-        />
-      </View>
-
-      <Text style={[sectionLabel, styles.section]}>{TABLES.ewt.section}</Text>
-      <View style={styles.card}>
-        {income.length === 0 ? <SaleRow value="No income payments read" /> : income.map(paymentRow)}
-      </View>
-
-      {business.length > 0 && (
-        <>
-          <Text style={[sectionLabel, styles.section]}>{TABLES.bt.section}</Text>
-          <View style={styles.card}>{business.map(paymentRow)}</View>
-        </>
-      )}
-
-      {totals.length > 0 && (
-        <>
-          <Text style={[sectionLabel, styles.section]}>TOTALS</Text>
-          <View style={styles.card}>
-            {totals.map((table) => {
-              const total = realTotal(cert.totals[table]);
-              const words = TABLES[table];
-              const off = has(`${table}_total`);
-              const sub = `Tax withheld ${peso(total?.tax ?? null)}`;
-              return (
-                <SaleRow
-                  key={table}
-                  value={words.total}
-                  sub={off ? `${sub} · the rows don't add up to the total row` : sub}
-                  amount={peso(total?.total ?? null)}
-                  flagged={off}
-                  onPress={boxesOf(
-                    words.total,
-                    TOTAL_COLUMNS.map((c) => `${table}_total_${c}`),
-                  )}
-                />
-              );
-            })}
-          </View>
-        </>
-      )}
-    </>
-  );
+  if (totals.length > 0) {
+    sections.push({
+      title: 'Totals',
+      right: 'Tax',
+      rows: totals.map((table): LedgerRowSpec => {
+        const total = realTotal(cert.totals[table]);
+        const { name } = TABLES[table];
+        const flagged = has(`${table}_total`);
+        const open = boxesOf(FORM, name, TOTAL_COLUMNS.map((c) => `${table}_total_${c}`));
+        return {
+          key: `${table}_total`,
+          section: 'Totals',
+          value: name,
+          sub: `Total ${peso(total?.total ?? null)}`,
+          subMono: true, // a figure, as a payment row's total (§5.2, ruling T12-2)
+          amount: peso(total?.tax ?? null),
+          amountStrong: true,
+          reason: flagged ? "The rows don't add up to the total row" : null,
+          flagged,
+          edited: editedIn(scan, open.boxes),
+          open,
+        };
+      }),
+    });
+  }
+  return sections;
 }
-
-// as the sale's sections (app/result.tsx)
-const styles = StyleSheet.create({
-  first: { marginBottom: 8 },
-  section: { marginTop: 24, marginBottom: 8 },
-  card: { backgroundColor: colors.panel, borderRadius: 18, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
-});

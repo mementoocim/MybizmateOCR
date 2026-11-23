@@ -6,11 +6,11 @@ import { readJson, writeJson } from './jsonFile';
 import type { TaxType } from './settings';
 import { APP_VERSION, modelVersion } from './versions';
 
-// Recent scans: the newest 6, kept on the phone so they survive closing the app, with what the person did to each:
+// Recent scans: the newest 20, kept on the phone so they survive closing the app, with what the person did to each:
 // the boxes they fixed (kept apart from the readings) or checked, the terms they picked, sale or purchase (a BIR 2307
 // is always a 2307), the customer or supplier they chose, and whether they saved it (in annotation mode, with its
-// source tag). Each scan's files live in its own folder (the scanner keeps the newest 6 folders too); the list is a
-// JSON file in the app's documents. A saved scan opened from Saved invoices is kept here too while the app runs.
+// source tag). Each scan's files live in its own folder (the scanner keeps the newest 20 folders too); the list is a
+// JSON file in the app's documents. A saved scan opened from Saved is kept here too while the app runs.
 
 /** How the scan came in. Not the result's own source, which is what the scanner read: a photo or a PDF. */
 export type ScanSource = 'camera' | 'camera_app' | 'gallery' | 'sample' | 'pdf';
@@ -60,6 +60,14 @@ export type KeptResult = Omit<ScanResult, 'source' | 'pageCount' | 'picture' | '
     reads: (Omit<BoxRead, 'fromText'> & { fromText?: boolean })[];
   };
 
+/**
+ * A text PDF: a PDF whose page isn't a picture, so its boxes come from its own text, not a camera. The Scan screen's
+ * subtitle says so ("FROM THE PDF'S TEXT"), and so do its boxes' sheets.
+ */
+export function isTextPdf(r: Pick<ScanResult, 'source' | 'picture'>): boolean {
+  return r.source === 'pdf' && r.picture === false;
+}
+
 /** A kept result with every field: one from before PDFs is a photo's, as parseScanResult reads an old JSON. */
 export function withPdfFields(r: KeptResult): ScanResult {
   return {
@@ -71,10 +79,10 @@ export function withPdfFields(r: KeptResult): ScanResult {
   };
 }
 
-const KEEP = 6;
+const KEEP = 20;
 const FILE = 'recent.json';
 let recent: readonly StoredScan[] = []; // replaced, never changed in place: screens subscribe to it
-const opened = new Map<string, StoredScan>(); // saved scans opened from Saved invoices
+const opened = new Map<string, StoredScan>(); // saved scans opened from Saved
 let counter = 0;
 const listeners = new Set<() => void>();
 
@@ -184,7 +192,7 @@ export function confirmBox(id: string, box: string): void {
   if (!confirmed.includes(box)) updateScan(id, { confirmed: [...confirmed, box] });
 }
 
-/** Keeps a saved scan opened from Saved invoices, so its screen can find and change it. */
+/** Keeps a saved scan opened from Saved, so its screen can find and change it. */
 export function cacheScan(scan: StoredScan): void {
   opened.set(scan.id, scan);
   changed();
@@ -200,7 +208,7 @@ export function forgetScan(id: string): void {
   changed();
 }
 
-/** Newest first, 6 at most; the same list until it changes. */
+/** Newest first, 20 at most; the same list until it changes. */
 export function recentScans(): readonly StoredScan[] {
   return recent;
 }

@@ -10,6 +10,8 @@
     "expo-crypto": "~58.0.8",
     "expo-dev-client": "~58.0.21",
     "expo-file-system": "~58.0.14",
+    "expo-font": "~58.0.12",
+    "expo-haptics": "~58.0.8",
     "expo-image-picker": "~58.0.10",
     "expo-linking": "~58.0.17",
     "expo-router": "~58.0.32",
@@ -41,10 +43,17 @@
     "test": "jest",
     "test:core": "node scripts/core-test.mjs",
     "check:apk": "node scripts/check-apk.mjs",
+    "licenses": "node scripts/collect-licenses.mjs",
     "lint": "expo lint"
   },
   "private": true,
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "setupFiles": [
+      "<rootDir>/test-utils/jestSetup.ts"
+    ],
+    "moduleNameMapper": {
+      "\\.txt$": "<rootDir>/test-utils/assetStub.js"
+    }
   }
 }

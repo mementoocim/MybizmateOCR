@@ -45,9 +45,14 @@ const listeners = new Set<() => void>();
 let counter = 0;
 const newId = (prefix: string) => `${prefix}${Date.now().toString(36)}-${(++counter).toString(36)}`;
 
-function commit(parties: readonly Party[], items: readonly ListItem[]): Promise<void> {
+/** The lists the app shows: replaced, and the screens told. */
+function show(parties: readonly Party[], items: readonly ListItem[]): void {
   current = { parties, items, version: current.version + 1 };
   listeners.forEach((listener) => listener());
+}
+
+function commit(parties: readonly Party[], items: readonly ListItem[]): Promise<void> {
+  show(parties, items);
   return writeJson(FILE, { parties, items });
 }
 
@@ -330,13 +335,16 @@ export function newParties(l: Lists, includeSent: boolean): Party[] {
   return l.parties.filter((p) => p.fromScan && p.code === '' && (includeSent || p.exportedAt === null));
 }
 
-/** Notes that these parties went out in a Parties import file. */
-export function markPartiesExported(ids: readonly string[], at: Date): Promise<void> {
+/**
+ * Notes that these parties went out in a Parties import file: in lists.json first, then in the app. A write that fails
+ * marks none, so none shows as exported until it's kept, and the caller says so (the final review's Important 2).
+ */
+export async function markPartiesExported(ids: readonly string[], at: Date): Promise<void> {
   const when = at.toISOString();
-  return commit(
-    current.parties.map((p) => (ids.includes(p.id) ? { ...p, exportedAt: when } : p)),
-    current.items,
-  );
+  const { items } = current;
+  const parties = current.parties.map((p) => (ids.includes(p.id) ? { ...p, exportedAt: when } : p));
+  await writeJson(FILE, { parties, items });
+  show(parties, items);
 }
 
 /** Removes that type's parties; a party that is both keeps its other side. */

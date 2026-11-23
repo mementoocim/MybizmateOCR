@@ -1,258 +1,271 @@
-import { type Href, useRouter } from 'expo-router';
-import { useState, useSyncExternalStore } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Image, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 
-import { OutlinedButton, PrimaryButton, TextButton } from '../components/Buttons';
-import { Camera, ChevronRight, DocumentIcon, ImageIcon, Lock, More } from '../components/icons';
+import { ButtonRow } from '../components/BottomBar';
+import { Button } from '../components/Buttons';
+import { Header } from '../components/Header';
+import { IconButton } from '../components/IconButton';
+import { Camera, FileText, ImageIcon, ListIcon, Lock, SettingsIcon } from '../components/icons';
+import { ListRow } from '../components/ListRow';
 import { ReadingOverlay } from '../components/ReadingOverlay';
 import { RecentRow } from '../components/RecentRow';
-import { ScanIllustration } from '../components/ScanIllustration';
+import { Screen } from '../components/Screen';
+import { SectionHeader } from '../components/SectionHeader';
 import { Sheet } from '../components/Sheet';
-import { savedList, subscribeSaved } from '../lib/saved';
+import { totalOf, waitingOf } from '../lib/exportFile';
+import { peso } from '../lib/format';
+import { lists, subscribeLists } from '../lib/lists';
+import { usePushOnce } from '../lib/navigation';
+import { type SavedSummary, savedList, subscribeSaved } from '../lib/saved';
 import { SAMPLES } from '../lib/samples';
 import { useScanFlow } from '../lib/scanFlow';
-import { recentScans, subscribeRecent } from '../lib/scans';
-import { bold, colors, sectionLabel } from '../lib/theme';
+import { type Kind, recentScans, subscribeRecent } from '../lib/scans';
+import { settings, subscribeSettings, updateSettings } from '../lib/settings';
+import { colors, radius, space, touch, type } from '../lib/theme';
 
-const TIPS = [
-  'The whole form in the photo: every corner square, or the whole table',
-  'Flat on a table, in good light',
-  'Phone held straight above it, no strong shadows',
+// Design B §9.2: Home as a workspace. The header has the wordmark, and Your lists and Settings as icon buttons. Then,
+// top to bottom: capture (Take photo; From gallery and Import PDF; what the app reads); on a first run, the tips; "Get
+// set up" until both its steps are done, once; what's waiting to export, per kind; the recent scans, each with its
+// state; then the samples and the footer. The reading card shows over all of it while a capture is read, and a capture
+// that fails says why in a dialog (lib/scanFlow).
+
+const TIPS = ['The whole form in the photo', 'Flat on a table, in good light', 'Phone straight above it, no shadows'];
+
+/** The To export rows, one per kind with anything waiting, in this order. */
+const EXPORTS: readonly { kind: Kind; title: string; sub: (n: number) => string }[] = [
+  { kind: 'sale', title: 'Sales', sub: (n) => `${n} to export` },
+  { kind: 'purchase', title: 'Purchases', sub: (n) => `${n} to export` },
+  { kind: '2307', title: '2307s', sub: (n) => `${n} to export · Tax withheld` },
 ];
+
+const LOCK = 16; // dp: the footer's lock, beside its overline
 
 const handwriting = (font: string) => `${font === 'PatrickHand' ? 'Patrick Hand' : font} handwriting`;
 
-// Home (the test app's activity_home.xml and HomeActivity.java), with the menu to the saved invoices, the lists and
-// Settings, and a row for the saved invoices still to export.
 export default function Home() {
-  const router = useRouter();
+  const push = usePushOnce();
   const flow = useScanFlow();
   const recent = useSyncExternalStore(subscribeRecent, recentScans); // a scan read on any screen shows at once
   const saved = useSyncExternalStore(subscribeSaved, savedList);
-  const toExport = saved.filter((s) => s.exportedAt === null).length;
-  const menu: { label: string; to: Href }[] = [
-    { label: 'Saved invoices', to: '/saved' },
-    { label: 'Your lists', to: '/lists' },
-    { label: 'Settings', to: '/settings' }, // a team build's own tools are in Settings › Team tools
-  ];
+  const theLists = useSyncExternalStore(subscribeLists, lists);
+  const theSettings = useSyncExternalStore(subscribeSettings, settings);
   const [samplesOpen, setSamplesOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const samplesButton = useRef<ViewInstance>(null); // TalkBack focus goes back to it when the sheet closes
+
+  // Get set up: any rows in the lists, and the export defaults (a VAT status chosen and a revenue account)
+  const listsDone = theLists.parties.length + theLists.items.length > 0;
+  const defaultsDone = theSettings.vatRegistered !== null && theSettings.revenueAccount.trim() !== '';
+  const settingUp = !theSettings.setupDone;
+  useEffect(() => {
+    // Both done: the section goes for good (the plan's call 12), whether or not anything was scanned. It's set once:
+    // the store's own value, so a second run before the re-render doesn't write it again.
+    if (settingUp && listsDone && defaultsDone && !settings().setupDone) void updateSettings({ setupDone: true });
+  }, [settingUp, listsDone, defaultsDone]);
+
+  const firstRun = recent.length === 0 && saved.length === 0; // a sample counts as a scan
+  // Saved, for one kind (Saved reads the kind) or every kind
+  const showSaved = (kind?: Kind) => (kind ? push({ pathname: '/saved', params: { kind } }) : push('/saved'));
+
+  const header = (
+    <Header
+      brand
+      onBack={null}
+      right={
+        <>
+          <IconButton icon={ListIcon} label="Your lists" onPress={() => push('/lists')} />
+          <IconButton icon={SettingsIcon} label="Settings" onPress={() => push('/settings')} />
+        </>
+      }
+    />
+  );
 
   return (
-    <View style={styles.screen}>
-      <View style={styles.toolbar}>
-        <Image source={require('../assets/brand/logo_mark.png')} style={styles.logo} />
-        <Text style={styles.wordmark}>
-          mybizmate<Text style={styles.io}>.io</Text>
-        </Text>
-        <View style={styles.spacer} />
-        <Pressable testID="menu" accessibilityLabel="More" hitSlop={8} onPress={() => setMenuOpen(true)}>
-          <More color={colors.ink} />
-        </Pressable>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Scan an invoice</Text>
-        <Text style={styles.description}>
-          {"Take a photo of a filled-in MyBizMate Sales Invoice or Service Invoice. It's read right here on your " +
-            'phone, in a second or two, even without internet.'}
-        </Text>
-
-        <View style={styles.card}>
-          <View style={styles.illustration}>
-            <ScanIllustration />
-          </View>
-          <PrimaryButton label="Take photo" icon={Camera} disabled={flow.reading} onPress={() => router.push('/camera')} />
-          <OutlinedButton
-            label="Choose from gallery"
-            icon={ImageIcon}
+    <View style={styles.root}>
+      <Screen header={header}>
+        <View style={styles.capture}>
+          <Button
+            label="Take photo"
+            size="large"
+            icon={Camera}
             disabled={flow.reading}
-            onPress={() => flow.fromGallery()}
+            onPress={() => push('/camera')}
           />
-          <OutlinedButton
-            label="Import PDF"
-            icon={DocumentIcon}
-            disabled={flow.reading}
-            onPress={() => flow.fromPdf()}
+          <ButtonRow
+            buttons={[
+              {
+                label: 'From gallery',
+                variant: 'secondary',
+                icon: ImageIcon,
+                disabled: flow.reading,
+                onPress: () => flow.fromGallery(),
+              },
+              {
+                label: 'Import PDF',
+                variant: 'secondary',
+                icon: FileText,
+                disabled: flow.reading,
+                onPress: () => flow.fromPdf(),
+              },
+            ]}
           />
+          {/* caps by the overline style: MYBIZMATE INVOICE · SERVICE INVOICE · BIR 2307, the form's name kept on one
+              line by a no-break space */}
+          <Text style={[type.overline, styles.caption]}>{'MyBizMate invoice · Service Invoice · BIR\u00A02307'}</Text>
         </View>
 
-        {saved.length > 0 && (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/saved')}
-            style={({ pressed }) => [styles.savedRow, pressed && styles.pressed]}>
-            <View style={styles.savedWords}>
-              <Text style={styles.savedTitle}>Saved invoices</Text>
-              <Text style={styles.savedStatus}>{toExport > 0 ? `${toExport} to export` : 'All exported'}</Text>
-            </View>
-            <ChevronRight size={20} color={colors.mute} />
-          </Pressable>
-        )}
+        {firstRun && <Tips />}
 
-        <Text style={[sectionLabel, styles.section]}>FOR THE BEST SCAN</Text>
-        {TIPS.map((tip, i) => (
-          <View key={tip} style={styles.tip}>
-            <View style={styles.tipNumber}>
-              <Text style={styles.tipNumberText}>{i + 1}</Text>
-            </View>
-            <Text style={styles.tipText}>{tip}</Text>
-          </View>
-        ))}
-
-        {recent.length > 0 && (
+        {settingUp && (
           <>
-            <Text style={[sectionLabel, styles.section]}>RECENT SCANS</Text>
-            <View style={styles.list}>
-              {recent.map((scan) => (
-                <RecentRow
-                  key={scan.id}
-                  scan={scan}
-                  onPress={() => router.push({ pathname: '/result', params: { id: scan.id, from: 'recent' } })}
-                />
-              ))}
-            </View>
+            <SectionHeader title="Get set up" right={`${Number(listsDone) + Number(defaultsDone)} of 2`} />
+            <ListRow
+              title="Import your customers and items"
+              sub="So scans can check names, TINs and prices"
+              chevron
+              checked={listsDone}
+              onPress={() => push('/lists')}
+            />
+            <ListRow
+              title="Set your export defaults"
+              sub="VAT status and accounts for MyBizMate"
+              chevron
+              checked={defaultsDone}
+              onPress={() => push('/settings')}
+            />
           </>
         )}
 
-        <View style={styles.samples}>
-          <TextButton label="No form handy? Try a sample invoice" onPress={() => setSamplesOpen(true)} />
-        </View>
+        {saved.length > 0 && <ToExport saved={saved} onOpen={showSaved} />}
 
-        <View style={styles.footer}>
-          <Lock size={14} color={colors.mute} />
-          <Text style={styles.footerText}>Read on this phone · no internet access</Text>
+        {recent.length > 0 && (
+          <>
+            <SectionHeader title="Recent scans" />
+            {recent.map((scan) => (
+              <RecentRow
+                key={scan.id}
+                scan={scan}
+                onPress={() => push({ pathname: '/result', params: { id: scan.id, from: 'recent' } })}
+              />
+            ))}
+            <Text style={[type.label, styles.note]}>The last 20 scans stay here. Save a scan to keep it.</Text>
+          </>
+        )}
+
+        <View style={styles.end}>
+          <Button ref={samplesButton} variant="text" label="Try a sample invoice" onPress={() => setSamplesOpen(true)} />
+          <View style={styles.footer}>
+            <Lock size={LOCK} color={colors.mute} />
+            {/* caps by the overline style: READ ON THIS PHONE · NO INTERNET */}
+            <Text style={[type.overline, styles.footerText]}>Read on this phone · no internet</Text>
+          </View>
         </View>
-      </ScrollView>
+      </Screen>
 
       <Sheet
         visible={samplesOpen}
         title="Sample invoices"
         subtitle="Filled in with 2 handwriting styles the model never trained on, photographed like a phone would."
-        onClose={() => setSamplesOpen(false)}>
+        onClose={() => setSamplesOpen(false)}
+        returnFocus={samplesButton}
+        gutter={false}>
         {SAMPLES.map((s) => (
-          <Pressable
+          <ListRow
             key={s.id}
-            accessibilityRole="button"
-            style={({ pressed }) => [styles.sample, pressed && styles.pressed]}
+            title={s.label}
+            sub={handwriting(s.font)}
+            leading={<Image source={s.source} style={styles.thumb} />}
             onPress={() => {
               setSamplesOpen(false);
               void flow.fromSample(s.id);
-            }}>
-            <Image source={s.source} style={styles.thumb} />
-            <View>
-              <Text style={styles.sampleLabel}>{s.label}</Text>
-              <Text style={styles.sampleFont}>{handwriting(s.font)}</Text>
-            </View>
-          </Pressable>
+            }}
+          />
         ))}
       </Sheet>
 
-      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
-        <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)}>
-          <View style={styles.menu} testID="menu-items">
-            {menu.map((item) => (
-              <Pressable
-                key={item.label}
-                accessibilityRole="button"
-                style={styles.menuItem}
-                onPress={() => {
-                  setMenuOpen(false);
-                  router.push(item.to);
-                }}>
-                <Text style={styles.menuText}>{item.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
-
-      <ReadingOverlay visible={flow.reading} />
+      <ReadingOverlay visible={flow.reading} what={flow.readingWhat ?? 'photo'} />
     </View>
   );
 }
 
+/** Before the first scan: three numbered tips, each one stop for TalkBack. */
+function Tips() {
+  return (
+    <>
+      <SectionHeader title="Before your first scan" />
+      <View style={styles.tips}>
+        {TIPS.map((tip, i) => (
+          <View key={tip} accessible style={styles.tip}>
+            <Text style={[type.figure, styles.tipNumber]}>{`${i + 1}`}</Text>
+            <Text style={[type.body, styles.tipText]}>{tip}</Text>
+          </View>
+        ))}
+      </View>
+    </>
+  );
+}
+
+/**
+ * The saved scans: a row per kind with any waiting to export (lib/exportFile's waitingOf, as Export counts them), with
+ * their count (figureSmall) and total (figure), each opening Saved for its kind; or, with none waiting, one row saying
+ * everything is exported.
+ */
+function ToExport({ saved, onOpen }: { saved: readonly SavedSummary[]; onOpen: (kind?: Kind) => void }) {
+  if (waitingOf(null, saved).length === 0) {
+    return (
+      <>
+        <SectionHeader title="Saved" />
+        <ListRow title="Everything is exported" chevron onPress={() => onOpen()} />
+      </>
+    );
+  }
+  return (
+    <>
+      <SectionHeader title="To export" action={{ label: 'All saved', onPress: () => onOpen() }} />
+      {EXPORTS.map(({ kind, title, sub }) => {
+        const mine = waitingOf(kind, saved);
+        if (mine.length === 0) return null;
+        return (
+          <ListRow
+            key={kind}
+            title={title}
+            sub={sub(mine.length)}
+            subMono
+            amount={peso(totalOf(mine))}
+            chevron
+            onPress={() => onOpen(kind)}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.paper },
-  toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 12,
-    backgroundColor: colors.paper,
-  },
-  logo: { width: 30, height: 30 },
-  wordmark: { ...bold, fontSize: 20, color: colors.ink },
-  io: { color: colors.coralText },
-  spacer: { flex: 1 },
-  content: { padding: 16, paddingBottom: 32 },
-  title: { ...bold, fontSize: 30, color: colors.ink, marginTop: 4 },
-  description: { fontSize: 15, color: colors.mute, lineHeight: 22, marginTop: 8, marginBottom: 20 },
-  card: {
+  root: { flex: 1 },
+  capture: { padding: space.l, gap: space.s },
+  caption: { color: colors.mute, textAlign: 'center' },
+  tips: {
+    gap: space.s,
+    paddingVertical: space.m,
+    paddingHorizontal: space.l,
     backgroundColor: colors.panel,
-    borderRadius: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.hairline,
+  },
+  tip: { flexDirection: 'row', gap: space.m },
+  tipNumber: { color: colors.brandText },
+  tipText: { flex: 1, color: colors.ink },
+  note: { color: colors.mute, paddingTop: space.s, paddingHorizontal: space.l },
+  end: { alignItems: 'center', gap: space.s, paddingTop: space.l, paddingHorizontal: space.l },
+  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs },
+  footerText: { flexShrink: 1, color: colors.mute, textAlign: 'center' },
+  // as the Scan screen's photo thumbnail
+  thumb: {
+    width: touch.thumbW,
+    height: touch.thumbH,
     borderWidth: 1,
-    borderColor: colors.line,
-    padding: 16,
-    gap: 12,
+    borderColor: colors.hairline,
+    borderRadius: radius.badge,
+    backgroundColor: colors.crop, // until the picture has loaded
   },
-  illustration: { alignItems: 'center', paddingVertical: 4 },
-  savedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 12,
-    backgroundColor: colors.panel,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  savedWords: { flex: 1 },
-  savedTitle: { ...bold, fontSize: 15, color: colors.ink },
-  savedStatus: { fontSize: 13, color: colors.mute, marginTop: 2 },
-  section: { marginTop: 28, marginBottom: 8 },
-  tip: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
-  tipNumber: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: colors.coralTint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tipNumberText: { ...bold, fontSize: 13, color: colors.coralText },
-  tipText: { flex: 1, fontSize: 15, color: colors.ink, lineHeight: 21 },
-  list: {
-    backgroundColor: colors.panel,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 16,
-  },
-  samples: { alignItems: 'center', marginTop: 20 },
-  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 20 },
-  footerText: { fontSize: 13, color: colors.mute },
-  sample: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10 },
-  pressed: { opacity: 0.6 },
-  thumb: { width: 52, height: 64, borderRadius: 6, backgroundColor: colors.imageBg },
-  sampleLabel: { ...bold, fontSize: 15, color: colors.ink },
-  sampleFont: { fontSize: 13, color: colors.mute, marginTop: 2 },
-  menuBackdrop: { flex: 1 },
-  menu: {
-    position: 'absolute',
-    top: 88,
-    right: 16,
-    backgroundColor: colors.panel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingVertical: 4,
-    elevation: 4,
-  },
-  menuItem: { paddingVertical: 12, paddingHorizontal: 20 },
-  menuText: { fontSize: 15, color: colors.ink },
 });

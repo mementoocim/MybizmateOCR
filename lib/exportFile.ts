@@ -7,8 +7,9 @@ import { type SavedSummary, savedList, summaryRows } from './saved';
 import type { Kind } from './scans';
 import { workbook } from './xlsx';
 
-// The export: which saved invoices (or 2307s) go in a file, the names to check in MyBizMate first, and the .xlsx
-// itself, written to the app's cache (cache/exports, emptied first) for the share sheet.
+// The export: which saved invoices (or 2307s) wait to go out and what they add up to, which go in a file, the names to
+// check in MyBizMate first, and the .xlsx itself, written to the app's cache (cache/exports, emptied first) for the
+// share sheet.
 
 /** Each kind's import: the words in its file's name, and its template's header row. */
 const IMPORTS: Record<Kind, { name: string; columns: readonly string[] }> = {
@@ -20,19 +21,32 @@ const IMPORTS: Record<Kind, { name: string; columns: readonly string[] }> = {
 export type ExportRange = 'new' | 'this_month' | 'last_month' | 'all';
 
 const monthOf = (d: Date) => localIsoDate(d).slice(0, 7);
+const oldestFirst = (list: SavedSummary[]) =>
+  list.sort((a, b) => a.date.localeCompare(b.date) || a.savedAt.localeCompare(b.savedAt));
+
+/**
+ * The saved ones waiting to export, of one kind or of every kind (null): those never in an import file. Home's To
+ * export and Export's list of files count these, and the export's "Not exported yet" is them (ruling T17-3).
+ */
+export function waitingOf(kind: Kind | null, saved: readonly SavedSummary[]): SavedSummary[] {
+  return saved.filter((s) => (kind === null || s.kind === kind) && s.exportedAt === null);
+}
+
+/** What saved ones add up to, as a summary shows it: the invoices' gross, the 2307s' tax withheld. */
+export function totalOf(saved: readonly SavedSummary[]): number {
+  return saved.reduce((sum, s) => sum + (s.kind === '2307' ? s.tax : s.gross), 0);
+}
 
 /** That kind's saved invoices (or 2307s) for the choice, by their date (then the time saved), oldest first. */
 export function exportChoice(kind: Kind, range: ExportRange, today: Date): SavedSummary[] {
+  if (range === 'new') return oldestFirst(waitingOf(kind, savedList()));
   const month =
     range === 'this_month'
       ? monthOf(today)
       : range === 'last_month'
         ? monthOf(new Date(today.getFullYear(), today.getMonth() - 1, 1))
         : null;
-  return savedList()
-    .filter((s) => s.kind === kind)
-    .filter((s) => (range === 'new' ? s.exportedAt === null : month === null || s.date.slice(0, 7) === month))
-    .sort((a, b) => a.date.localeCompare(b.date) || a.savedAt.localeCompare(b.savedAt));
+  return oldestFirst(savedList().filter((s) => s.kind === kind && (month === null || s.date.slice(0, 7) === month)));
 }
 
 /** The names in the rows MyBizMate may not have yet: not a list party with a code, and not sent in a Parties file. */

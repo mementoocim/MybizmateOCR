@@ -19,25 +19,40 @@ so Android and iPhone will read a photo or a PDF the same way.
 
 ### Reading a form (milestone 2)
 
+- **Home:** the logo and "mybizmate.io", with Your lists and Settings as icons on the right. Then Take photo, and
+  From gallery and Import PDF. On a first run, three tips ("Before your first scan") show until the first scan (a
+  sample counts), and "Get set up" asks to import your customers and items and to set your export defaults; once
+  both are done, it goes for good. Then what's waiting to export, per kind (Sales, Purchases, 2307s, each with its
+  count and total, and "All saved", which opens Saved), or "Everything is exported" once it has all gone; the recent
+  scans; and "Try a sample invoice".
 - **The camera:** the live picture in 3:4 with the form's outline (the Sales Invoice by its 4 corner squares, the
   Service Invoice by its table), a status line ("MyBizMate Sales Invoice · hold still"), and the photo taken by
-  itself once the outline holds still and sharp. Manual mode, the torch on phones that have one, the gallery from
-  the camera, and the phone's own camera app when the scanner's camera can't be used (no permission, or a camera
-  that won't start).
-- **Both forms:** the Sales Invoice and the Service Invoice, every box read, with its crop, confidence and backup
-  readings.
+  itself once the outline holds still and sharp, with one haptic tap as it's taken. The Auto switch turns that off,
+  for the round button. The flashlight shows on phones that have one, and the gallery sits under the picture. When
+  the scanner's camera can't be used, a panel says why, with what to do: no permission yet ("Allow the camera"), the
+  permission refused for good ("Open settings"), or a camera that won't start ("Try again"), each with the phone's own
+  camera app as a fallback; a phone with no camera gets "Choose from gallery".
+- **Both forms:** the Sales Invoice and the Service Invoice, every box read, with its crop and the other readings it
+  could be. A reading the scanner was unsure of (a score under 0.90) says "Hard to read"; no percentage is shown.
 - **The photo checks:** a dark or blurry photo is the first thing to check, with a retake; a photo where no form is
   found says what to get in the picture. Turned and sideways photos are read upright.
-- **The scan view:** the straightened page as Enhanced, B&W or the Original photo with the found outline; Save puts
-  the page in Pictures/MyBizMate Scan.
-- **Recent scans:** the newest 6, kept on the phone between launches; each opens its result again and says where it
-  stands: Form not found, Saved as a sale (or a purchase), N to check, or Ready to post.
-- **Samples:** 8 synthetic sample invoices to try without a form.
-- **Brand splash:** the logo while the scanner loads and reads one sample, so the first real scan is quick.
+- **The photo viewer:** the photo's thumbnail sits in the Scan screen's header and opens it full screen: the
+  straightened page as Enhanced or B&W, or the Original photo with the found outline. For Enhanced and B&W, "Save to
+  Pictures" copies the page into Pictures/MyBizMate Scan (Android 10 and later). Close, or Back, closes it.
+- **Recent scans:** the newest 20, kept on the phone between launches; Home says so under them ("The last 20 scans
+  stay here. Save a scan to keep it."). Each opens its scan again, and its badge says where it stands, the first that
+  applies: Changed (since it was saved), Saved, Sample, Couldn't find the form, N to check, Can't save yet, or Checks
+  passed.
+- **Samples:** 8 synthetic sample invoices to try without a form ("Try a sample invoice", at the end of Home).
+- **Brand splash:** the logo and a loading bar while the scanner loads and reads one sample, so the first real scan
+  is quick; it stays at least half a second, so it doesn't flash. A start that fails says "The scanner couldn't
+  start", with Try again; team builds also show the error itself.
+- **Messages** show in a snackbar at the bottom of the screen, above an open sheet or the photo viewer when one is
+  up, and some carry an action ("View", after a save).
 - **Privacy:** nothing leaves the phone and nothing is logged. The app's files are kept out of Android's backups. A
   camera photo, or the gallery's copy of one, is deleted once read, whether or not it could be; any left by a closed
   app are cleared at the next start. Each kept scan's files (its page, crops and original) live in the app's own
-  storage, the newest 6 only. A JPEG over twice the 2400 px cap is decoded smaller first, so a 50 MP photo doesn't
+  storage, the newest 20 only. A JPEG over twice the 2400 px cap is decoded smaller first, so a 50 MP photo doesn't
   need 150 MB.
 
 ### Checking, saving and exporting (milestone 3)
@@ -46,19 +61,25 @@ so Android and iPhone will read a photo or a PDF the same way.
   (`../prototype/benchmark/postprocess.py`, with rapidfuzz 3.14.6's scores and Python's rounding and `sum()`), the
   same as the Python on every fixture (`fixtures/checks/`). They check the date, the customer against your customers
   (by TIN, then by name), the terms, each row's quantity × price, each row's item and price against your items, the
-  rows against the total, and the VAT breakdown. The status card lists what to check, or says "Ready to post". A
-  sample is checked as of 2026-11-18, the day the samples were made; any other scan as of the day it was read. The
-  name matching counts common subsequences bit-parallel, as rapidfuzz does, so long lists stay quick: against 3,000
-  customers and 1,000 items, one check takes about 0.1 s on a laptop (it took 2.5 s before the final review).
-- **Fixing a box:** tap any box and type what it says; the checks run again at once. Terms has its own sheet ("Cash"
-  or "On account").
-- **A sale or a purchase:** a scan is a sale, to the form's customer. "A purchase" asks who sold it: the business
-  printed at the top of the invoice, which the scanner doesn't read, so it's chosen from your suppliers, typed, or
-  "Various suppliers". The form's customer boxes then show as "Sold to". Switching between a sale and a purchase
-  drops the party chosen for the other.
-- **Your lists** (⋮ → Your lists): customers, suppliers and items, imported from CSV files and kept on the phone. In
-  MyBizMate, export your parties, open the file in Excel or Google Sheets, save it as CSV, copy it to the phone, then
-  Import CSV.
+  rows against the total, and the VAT breakdown. The status strip, pinned under the Scan screen's header, says "N to
+  check" with a chip for each thing (a chip opens the row it's about), what the scan still needs before it can be
+  saved ("Can't save yet"), or "Checks passed". A sample is checked as of 2026-11-18, the day the samples were made;
+  any other scan as of the day it was read. The name matching counts common subsequences bit-parallel, as rapidfuzz
+  does, so long lists stay quick: against 3,000 customers and 1,000 items, one check takes about 0.1 s on a laptop (it
+  took 2.5 s before the final review).
+- **Fixing a box:** tap a row. A row with one box opens straight at its editor; a row with several lists its boxes,
+  each with its crop, and one opens its editor. Type what the box says, or tap one of the other readings, then Save:
+  the checks run again at once. Typing that wasn't saved asks "Discard what you typed?" before it goes, and
+  autocorrect is off, since an edit means "the box says this". Terms has its own sheet ("Cash" or "On account").
+- **A sale or a purchase:** the switch "Sale | Purchase", under the status strip. A scan is a sale, to the form's
+  customer. "Purchase" asks who sold it: the business printed at the top of the invoice, which the scanner doesn't
+  read, so it's chosen from your suppliers, typed, or "Various suppliers". The form's customer boxes then show as
+  "Sold to". Switching between a sale and a purchase drops the party chosen for the other.
+- **Your lists** (the list icon in Home's header): customers, suppliers and items, in tabs with their counts,
+  imported from CSV files and kept on the phone. A search finds a party by its name, TIN or code, and an item by its
+  name. In MyBizMate, export your parties, open the file in Excel or Google Sheets, save it as CSV, copy it to the
+  phone, then Import CSV; "How to import" explains the file. The snackbar says what was imported. A tab's Clear, at
+  the end of its list, says how many it clears and asks first.
   - Customers and suppliers: MyBizMate's Parties import columns, by their header names: Code, Type, Entity type,
     Registered name, Last name, First name, Middle name, Trade name, TIN, Sub-street, Street, Barangay, City /
     Municipality, Province, ZIP, VAT status and Payment terms. Other columns are skipped, and contact numbers and
@@ -70,31 +91,56 @@ so Android and iPhone will read a photo or a PDF the same way.
     it up once the file has been read.
   - Excel's plain "CSV (Comma delimited)" (Windows-1252) and "CSV UTF-8", and Google Sheets' download, all keep their
     ñ: the file is read as UTF-8 when it is valid UTF-8, else as Windows-1252.
-- **Saving** (Save, on a scan): the date, the customer or supplier, Gross (VAT included), the tax type (suggested
-  from the VAT boxes and whether the business is VAT-registered, which the first save asks), the account (a code or
-  name from your chart of accounts, remembered in Settings), the terms, and the ATC code when tax was withheld. A
-  saved invoice keeps its own files (page, crops, original), apart from the 6 recent scans. A saved invoice changed
-  afterwards says "Changed since it was saved. The export still has the saved version: tap Save changes." Samples
-  can't be saved, and their names can't be added to the lists: they're made up. Saved invoices (⋮, or the row on
-  Home) lists them, "To export" or "Exported"; long-press one to delete it.
-- **The exports** (Saved invoices): .xlsx files in MyBizMate's own import layouts (the "Import" sheet with the
-  template's header row, word for word), sent with the phone's share sheet (email, Drive, chat):
-  - **Export sales** (the Sales import) and **Export purchases** (the Purchases import): one row per invoice: Date,
+- **Saving** ("Save sale" or "Save purchase" at the bottom of a scan, "Save changes" once it's saved): the save sheet
+  sums up the row it makes (the date, the customer or supplier, marked "New" when it goes out as written, and Gross,
+  VAT included), then asks the tax type (suggested from the VAT boxes and whether the business is VAT-registered,
+  which the first save asks), the account (a code or name from your chart of accounts, remembered in Settings), the
+  terms, and the ATC code when tax was withheld. Things still marked to check don't stop a save: the sheet says how
+  many are left. Once saved, the snackbar says "Saved as a sale" (or a purchase; "Changes saved" for a scan saved
+  before), and its "View" opens Saved. A saved scan keeps its own files (page, crops, original), apart from the 20
+  recent scans. A saved scan changed afterwards says "Changed since it was saved. The export still has the saved
+  version. Save changes to update it." Samples can't be saved, and their names can't be added to the lists: they're
+  made up.
+- **Saved** (Home's To export rows or "All saved", or a save's "View"): the saved sales, purchases and 2307s, with a
+  chip per kind to show one, grouped by the month of each document's date (an invoice's date, a 2307's period end),
+  newest first. Each row says "To export" or "Exported" and opens its scan. A saved scan is deleted from its ⋮ menu on
+  the Scan screen ("Delete saved scan"), or with a long press in Saved, after "Delete this saved scan?".
+- **The exports** (Saved's "Export…"): .xlsx files in MyBizMate's own import layouts (the "Import" sheet with the
+  template's header row, word for word), sent with the phone's share sheet (email, Drive, chat). Export… opens one
+  sheet, in steps: which file (each with how many wait to export, or "All exported", since a file can go again), then
+  that file (when Saved shows one kind with scans saved, the sheet opens at its file), then the question after
+  sharing:
+  - **Sales** (the Sales import) and **Purchases** (the Purchases import): one row per invoice: Date,
     Customer or Supplier (its code when it's in your list, else the name as written; a blank customer is
     `VARIOUS-CUST`), Gross (the VAT-inclusive total before the discount and the withholding), Type, the account, the
     ATC code (CWT IT on sales, EWT on purchases), Terms, the invoice number, Description (the items) and Discount.
-  - **Export new customers and suppliers** (the Parties import): those added from scans, which have no MyBizMate code
+  - **New customers and suppliers** (the Parties import): those added from scans, which have no MyBizMate code
     yet. Before importing it, fill in each one's City / Municipality, Province and ZIP, and its TIN where it's blank.
-  - Sales and purchases go out by the ones not exported yet, this month's, last month's, or all; new customers and
-    suppliers by the ones not sent yet, or all added from scans. After the share sheet, the app
-    asks "Did the file go where you wanted?": only "Mark as exported" marks them, so a share that didn't go through
-    loses nothing. A file holding invoices exported before says so, since importing them again adds them twice.
+  - Sales and purchases go out by the ones not exported yet, this month's, last month's, or all ("Which ones"); new
+    customers and suppliers by the ones not sent yet, or all added from scans. "Share the file" opens the share sheet;
+    once it closes, the export sheet asks "Did the file go where you wanted?": only "Mark N as exported" marks them,
+    and the snackbar says so ("Marked 4 sales as exported."), so a share that didn't go through loses nothing. A file
+    holding invoices exported before says so, since importing them again adds them twice.
   - **In MyBizMate, import the Parties file first** (Masters → Parties → Import), so the new customers and suppliers
-    exist, **then the Sales and Purchases files.** The sales and purchases sheet says so when a file names a party
-    that hasn't gone out yet.
-- **Settings** (⋮ → Settings): whether the business is VAT-registered, the revenue account for sales, the expense
-  account for purchases, and the withholding tax ATC.
-- **Privacy:** the lists, Settings and saved invoices stay in the app's own storage, kept out of Android's backups.
+    exist, **then the Sales and Purchases files.** When a file names a party that hasn't gone out yet, the export
+    sheet lists the parties' file first and says why, and that file's step says so too.
+- **Settings** (the gear in Home's header), in groups:
+  - Your business: whether it's VAT-registered;
+  - Export defaults: the revenue account for sales, the expense account for purchases, the withholding tax ATC and
+    the offset account for 2307s, each saved as it's typed. An ATC that isn't 2 letters and 3 digits gets the hint
+    "Like WC158: 2 letters, 3 digits", and is saved all the same;
+  - About: Privacy, in plain words; Open-source licenses (below); and the version;
+  - in team builds, Team tools (milestone 4, below).
+- **Open-source licenses** (Settings › About): what the app ships, a row each with its license and version, which
+  opens the license's full text: the libraries (React Native, React, Expo, react-native-svg, react-native-screens and
+  react-native-safe-area-context), the scanner's native ones (OpenCV, ONNX Runtime, CameraX, PDFium with the
+  notices of the code it holds, and nlohmann/json, which the scanner core compiles in), the reading model (PP-OCRv6
+  small, Latin, from PaddleOCR), Lucide's icons and the two fonts (Schibsted Grotesk and IBM Plex Mono, under the
+  OFL). The texts ship with the app, in `assets/licenses`: `npm run licenses` (`scripts/collect-licenses.mjs`)
+  gathers them again after a dependency changes; commit what it changed. A test fails when a dependency in
+  `package.json`, a library the scanner module's `build.gradle` implements, or one its C++ core compiles in has no
+  entry.
+- **Privacy:** the lists, Settings and saved scans stay in the app's own storage, kept out of Android's backups.
   Nothing leaves the phone but the files the person shares. An export is written to the app's cache for the share
   sheet, and the next export replaces it.
 
@@ -108,14 +154,14 @@ so Android and iPhone will read a photo or a PDF the same way.
   box then takes the PDF's own text inside it (typed text, or a value typed into a fillable PDF's field), exact, with
   no OCR; the box's sheet says "From the PDF's text". A box with no text is read from the page. The footnote says
   "Read from the PDF: N boxes from its text, M read from the page." Typed values are checked like written ones. When
-  no form is found on page 1, the card says "Page 1 of this PDF isn't a MyBizMate Sales Invoice, a Service Invoice or
-  a BIR Form 2307. Import another PDF."
+  no form is found on page 1, the Scan screen says "Couldn't find the form", then "Page 1 of this PDF isn't a
+  MyBizMate Sales Invoice, a Service Invoice or a BIR Form 2307. Import another PDF."
 - **A picture PDF** (a scan, or a photo saved as a PDF) has no visible text. It is read like a photo, photo checks
   included, and says "The PDF is a picture: read like a photo." The hidden text a scanner app lays over its scans is
   that app's own OCR, so it is ignored: text that is never painted (render mode 3, invisible, or 7, clip only), and
   text drawn under an image that covers most of the page (80% of its area or more). Text drawn on top of such an
   image, as a background, is the page's own.
-- **Refused, each with its message** (a toast, and no scan is added):
+- **Refused, each with its message** (a dialog, and no scan is added):
   - over 20 MB (20 × 1024 × 1024 bytes): "That PDF is over 20 MB. Choose a smaller file." It is refused before any
     of it is copied when its app gives its size, else as soon as the copy passes 20 MB;
   - a page over 14,400 pt (200 inches, the PDF format's own limit) on its long side: "That PDF's page is too big to
@@ -137,9 +183,10 @@ so Android and iPhone will read a photo or a PDF the same way.
   row. It is found by its printed border, like the Service Invoice, in the camera, a photo or a PDF; the camera's
   status line says "BIR Form 2307 · hold still". The ticks and grey dash cells between the period's, TINs' and ZIPs'
   digits are erased before reading.
-- **On the scan screen:** PERIOD ("Oct 1 – Dec 31, 2026 (Q4)"), PAYEE, PAYOR (matched against your customers, like
-  an invoice's customer), INCOME PAYMENTS (one row per payment: "<ATC> · <payment>", its total and the tax withheld),
-  BUSINESS TAX (when that table has rows) and TOTALS. Every row opens its boxes, as on an invoice.
+- **On the scan screen:** PERIOD ("Oct 1 – Dec 31, 2026", with a Q4 badge), PAYEE, PAYOR (matched against your
+  customers, like an invoice's customer), INCOME PAYMENTS (one row per payment: "<ATC> · <payment>", with the tax
+  withheld on the right, under TAX, and its total under it), BUSINESS TAX (when that table has rows) and TOTALS. Every
+  row opens its boxes, as on an invoice.
 - **The checks** (`lib/checks/bir2307.ts`): the period is one calendar quarter; each TIN is 9 digits, or 9 and a
   3-, 4- or 5-digit branch code (MyBizMate prints 4), one rule shared with the TIN as the app shows it and as the
   Parties export writes it (`lib/checks/tin.ts`); the payor is in your customers (when you have a list); each row's 3
@@ -149,30 +196,32 @@ so Android and iPhone will read a photo or a PDF the same way.
   "-", counts as 0, and a total row with nothing printed is flagged when its rows add up to something); and a photo, or
   a PDF with a box read from its page, gets the photo checks (a PDF whose boxes all came from its text gets none). An
   unsure payor is shown as written, the name that goes out, with "Closest match: <the customer>" under it, until a
-  2307's payor can be chosen. The card lists what to check, or says "Ready to save". The ATC list
+  2307's payor can be chosen. The status strip lists what to check, or says "Checks passed". The ATC list
   (`lib/checks/atc2307.json`, 161 codes) is MyBizMate's own (its income tax codes for the income payments, its VAT and
   business tax codes for the second table, with their rates), plus the 12 codes only the form's page 2 prints; a code
   with no rate skips the tax check.
 - **Save 2307:** the payor, the period, the tax withheld, and the offset account MyBizMate's import needs, asked at the
-  first save and then kept (⋮ → Settings → "Offset account for 2307s"). A 2307 can't be saved without its period
-  ("Add the period first: tap Period."), a payor ("Add the payor first: tap Payor.") or a payment ("No income
-  payments were read."). Saved 2307s are in Saved invoices ("2307 · Q4 2026 · Tax ₱…" under the payor), and a recent
-  scan says "Ready to save" or "Saved as a 2307".
-- **Export 2307s** (Saved invoices, under Export sales and Export purchases): `MyBizMate 2307-CWT import <date>.xlsx`,
-  in MyBizMate's 2307-CWT import layout (Sheets → CWT → Import), one row per payment: Date * (the period's last day),
-  Customer * (the payor's code when it matched one of your customers, else the name as written), Tax Base (Net) (the
-  payment's total), CWT IT and IT Amt for an income payment or CWT VT and VT Amt for a business tax, Offset Account *,
-  and Particulars ("BIR 2307 for Oct–Dec 2026"). Cert No. and Branch stay blank: the paper has no certificate number,
-  and the branch is the business's own. The ranges, the warning for 2307s exported before and the "Mark as exported"
-  question are the same as for sales; the ranges go by the period's last day.
+  first save and then kept (Settings › Export defaults › "Offset account for 2307s"). A 2307 can't be saved without
+  its period ("Add the period first: tap Period."), a payor ("Add the payor first: tap Payor.") or a payment ("No
+  income payments were read."). Once saved, the snackbar says "Saved as a 2307". Saved 2307s are in Saved ("2307 · Q4
+  2026" under the payor, with the tax withheld on the right), and a recent scan's badge says "Checks passed" or
+  "Saved".
+- **Exporting 2307s** (the 2307s file in Saved's "Export…", beside Sales and Purchases):
+  `MyBizMate 2307-CWT import <date>.xlsx`, in MyBizMate's 2307-CWT import layout (Sheets → CWT → Import), one row
+  per payment: Date * (the period's last day), Customer * (the payor's code when it matched one of your customers,
+  else the name as written), Tax Base (Net) (the payment's total), CWT IT and IT Amt for an income payment or CWT VT
+  and VT Amt for a business tax, Offset Account *, and Particulars ("BIR 2307 for Oct–Dec 2026"). Cert No. and Branch
+  stay blank: the paper has no certificate number, and the branch is the business's own. The ranges, the warning for
+  2307s exported before and the question after sharing are the same as for sales; the ranges go by the period's last
+  day.
 
 ### Annotation mode and the training export (milestone 4)
 
 For the reading model's first fine-tune: in team builds, the team checks every box of a scan in the app itself, then
 sends the checked boxes in one zip. People's own scans aren't sent yet: they wait for consent (milestone 6).
 
-- **Team tools** (⋮ → Settings → TEAM TOOLS, team builds only): the Annotation mode switch, Training data and the
-  Speed test.
+- **Team tools** (Settings › Team tools, team builds only): the Annotation mode switch, Training data and the Speed
+  test.
 - **The install ID:** a random ID (expo-crypto's version 4 UUID), made at the app's first start and kept in
   `install.json`. It comes from nothing about the business or the phone, and no client screen shows it. In the
   training data it groups a phone's scans that have no tag (people's, from milestone 6), and its first 4 characters
@@ -192,12 +241,13 @@ sends the checked boxes in one zip. People's own scans aren't sent yet: they wai
   A blank box has no reading, so it isn't one either. Only training boxes need checking, and only they are exported.
 - **Annotation mode** (the switch's note: "Every box must be checked before a scan saves, and each scan gets a client
   and writer code."):
-  - Each training box's row says "Not checked yet", "Checked" or "Corrected". The box editor adds **Looks right**,
-    which checks the box as it stands. It shows only while the field still holds the box's value: once another
-    reading is picked or something else is typed, it goes, and Save makes the box corrected. Taking an edit back
-    leaves the box not checked.
+  - Each training box shows its state as a badge, "Not checked yet", "Checked" or "Corrected", where "Edited" would
+    be. The box editor adds **Looks right**, which checks the box as it stands. It shows only while the field still
+    holds the box's value: once another reading is picked or something else is typed, it goes, and Save makes the box
+    corrected. Taking an edit back leaves the box not checked.
   - Save waits for every training box: it opens the list of the boxes still to check (boxes no section shows
-    included), and the card says "Check every box first: N left" when nothing else is to check.
+    included), and the status strip says "Check every box first: N left" (Can't save yet) when nothing else is to
+    check.
   - Then the save sheet asks a **Client code** and a **Writer code**: the scan's source tag. A code starts with a
     letter, holds 1 to 6 digits, and is 1 to 12 characters of A–Z, 0–9 and "-". It is upper-cased. So C014, W03 and
     W-03 are codes, and a name, a phone number or a TIN isn't, even after a letter (P09171234567). Under the fields:
@@ -207,11 +257,11 @@ sends the checked boxes in one zip. People's own scans aren't sent yet: they wai
   - A scan saved in annotation mode is annotated, with its tag. Saved again with the mode off, it's a plain save: no
     tag, and out of later training exports (a copy already sent stays in its zip). Turning the mode off by itself
     drops nothing.
-  - A saved scan changed since its save says "Changed since it was saved. The export still has the saved version: tap
-    Save changes." In annotation mode that goes for any box's edit or check, not only what changes its import rows,
-    since the training export has the boxes as saved. For this, each save keeps a short hash of the scan's edits and
-    checks (`savedMarks`), never what a box says. A scan saved before the hash was kept has none, so only its import
-    rows count.
+  - A saved scan changed since its save says "Changed since it was saved. The export still has the saved version.
+    Save changes to update it." In annotation mode that goes for any box's edit or check, not only what changes its
+    import rows, since the training export has the boxes as saved. For this, each save keeps a short hash of the
+    scan's edits and checks (`savedMarks`), never what a box says. A scan saved before the hash was kept has none, so
+    only its import rows count.
   - The mode works in team builds only. A phone moved to a client build keeps the setting, but nothing there asks for
     codes or waits for checks.
   - Samples can't be saved. A scan from the camera's test photo made since milestone 4 is marked as a test image: it
@@ -322,12 +372,14 @@ sends the checked boxes in one zip. People's own scans aren't sent yet: they wai
 
 Debug builds are team builds. A release is a client build unless it's built with `EXPO_PUBLIC_TEAM_BUILD=1`:
 
-- client: Home's ⋮ menu has Saved invoices, Your lists and Settings;
-- team: Settings also has **Team tools** (Annotation mode, Training data and the Speed test: milestone 4, above), and
-  the Result's footnote shows the straighten and read times.
+- client: Home's header has Your lists and Settings, and Saved opens from Home's To export (or Saved) rows;
+- team: Settings also has **Team tools** (Annotation mode, Training data and the Speed test: milestone 4, above), the
+  Scan screen's footnote shows the straighten and read times, and the brand splash and the camera show the error
+  itself when they couldn't start.
 
 A link (`mybizmatescan://speed`, say) opens the Speed test or Training data screen in any build, but outside team
-builds those screens show only "This is for team builds."
+builds those screens show only "This is for team builds." A link opened when the app isn't running, to any screen,
+has Home under it, so Back goes Home.
 
 Build a team release for a phone (PowerShell, phone connected with USB debugging):
 
@@ -370,7 +422,15 @@ no path is given) checks the first two items and lists the network permissions; 
   `ACCESS_NETWORK_STATE`), and so does the app's own manifest. Whether client release builds remove it (a config
   plugin's `tools:node="remove"`) is decided here. Debug builds keep it: Metro needs it. Debug builds also carry the
   dev launcher's ML Kit barcode scanner and Google's `datatransport`, as debug-only dependencies.
-- **Open-source notices:** a release carries pdfium's (see below) and those of the other libraries it ships.
+- **Open-source notices:** the app shows them in Settings › About › Open-source licenses: each library it ships,
+  CameraX and nlohmann/json included, with its license, its version and the full text (pdfium's with the notices of
+  the code it holds; see below). After a dependency changes, run `npm run licenses` to gather the texts again into
+  `assets/licenses`, and commit what changed; the tests fail when something the app ships has no entry.
+- **The notices still missing:** before a client release, the notices also need to cover the libraries OpenCV's `.so`
+  builds in (libjpeg-turbo, OpenJPEG, libwebp, protobuf, ITT, carotene and KleidiCV) and the transitive libraries the
+  app ships (react-navigation, AndroidX, Kotlin's standard library and Hermes). Gather their texts with
+  `npm run licenses` (or add them to its sources), and check them in Settings › About › Open-source licenses. This was
+  the user's call on 2026-11-23: "Before release".
 
 ## Run it on the Android emulator
 
@@ -387,11 +447,11 @@ The debug APK is about 245 MB (the full OpenCV, ONNX Runtime and pdfium, CameraX
 If an install fails with `INSUFFICIENT_STORAGE`, remove the core tests' files with
 `adb shell rm -rf /data/local/tmp/scanner_tests` (in PowerShell as it is; in Git Bash, run `export MSYS_NO_PATHCONV=1`
 first, or Git Bash turns the path into a Windows one and nothing is removed). If that isn't enough, the old build has
-to be uninstalled first, and uninstalling deletes the app's data (the lists, Settings, saved invoices and recent
-scans): to keep it, see "Reinstalling without losing the app's data", below.
+to be uninstalled first, and uninstalling deletes the app's data (the lists, Settings, saved scans and recent scans):
+to keep it, see "Reinstalling without losing the app's data", below.
 
-In a debug build, the dev client's Tools button starts over Home's ⋮ menu: drag it aside. On the emulator, a tap sent
-with `adb shell input` can open Gboard's "Try out your stylus" once; Cancel it.
+In a debug build, the dev client's Tools button starts over the icons in Home's header (Your lists and Settings): drag
+it aside. On the emulator, a tap sent with `adb shell input` can open Gboard's "Try out your stylus" once; Cancel it.
 
 `uiautomator dump` writes the screen's text to the log: never dump a screen showing a real scan.
 
@@ -501,7 +561,8 @@ run the same `scan_file` again.
   (MIT, Copyright 2014-2025 Benoit Blanchon), and `libpdfium.so` also holds third-party code under its own licenses
   (FreeType, HarfBuzz, ICU, libjpeg-turbo, OpenJPEG, libpng, Little CMS, zlib, Abseil and others). Every text is in
   each ABI's folder (below): `LICENSE` and `licenses/`. BSD-3-Clause asks for its notice to go with the binary, so a
-  release has to carry it: the app doesn't show any notices yet.
+  release has to carry it: the app shows all of them as PDFium's text in Settings › About › Open-source licenses
+  (`npm run licenses` gathers them from that folder).
 - **The fetch script:** `scripts/fetch-pdfium.mjs` downloads the release's four Android archives, checks each against
   the SHA-256 pinned in the script, and unpacks it into a cache folder outside the repo, one folder per ABI with
   `include/` and `lib/libpdfium.so`: `%LOCALAPPDATA%\mbs-cxx\pdfium\chromium-8125\<ABI>` on Windows,
@@ -543,6 +604,90 @@ run the same `scan_file` again.
   synthetic 2307s and PDFs) and `test_export_core_fixtures.py` (everything the core's exporter writes).
 - From `../prototype/training`: `..\..\.venv\Scripts\python.exe -I test_read_scan_exports.py`: the tests of the
   training exports' reader.
+
+## Checked on the emulator (UI pass)
+
+Design B (`../docs/2026-11-22-mybizmate-scan-ui-ux-design.md`, whose § the items cite), as a debug build on
+`UI_QA_Phone`, an AVD made for this check with made-up data only (the user's call, "Separate QA AVD"): Android 16 (API
+36), 1080×2400 at 420 dpi, x86_64, no hardware keyboard; 2026-11-23 and 24. Built from `ce4e67d` (with 26a's keyboard
+view); the JavaScript came from Metro, through the fixes below (26a to 26d) up to `ebb1e79`. On that final tree every
+suite passed: jest (75 suites, 693 tests), the typecheck and ESLint, and the core's doctest (`npm run test:core`: 73
+test cases, 9102 assertions). Every scan and list is synthetic: the samples, `?test=` images, and the fixtures' photos,
+PDFs and CSVs. The captures sit outside git, with their `index.md`, in `../.superpowers/brainstorm/ui-2026-11-22/qa/`.
+
+1. **The rebuild and install:** `npm run check:apk` passed on the new debug APK (241 MB): no `TelemetryInitializer`, and
+   no socket imports in ONNX Runtime's libraries or pdfium's. Its first start showed the first-run Home: the tips, and
+   "Get set up · 0 of 2".
+2. **Sheets above the keyboard** (26a, `ce4e67d`; the user's call, "Native IME view"): a sheet is a window of its own,
+   where React Native's keyboard height stays 0, so the keyboard covered its field. A native view in the scanner module
+   (`ImeInsetsView`) now reads it there, and the sheet's actions rise by it. On the device the field, Cancel and Save
+   sat above the docked Gboard (`defaults-boxsheet-keyboard-ime.png`), at 200% and on 3-button navigation too.
+3. **Pass 1, defaults** (86 captures): headers clear the status bar, bars and sheets' actions the gesture handle, and
+   contrast as rendered matches §5.1 (danger text, the lowest, 5.16:1). Its issues, fixed in 26b (`051e5ab`):
+   - "VAT 12%" showed as "VAT" on one-line VAT rows: the key now ends in a space, which gives Android's layout room.
+   - The status-bar icons were white over the reading card's light wash (1.44:1): they're dark while it shows.
+   - Home's caption split "BIR" / "2307": a no-break space keeps the form's name together.
+   - A text PDF's empty box spoke of the camera, and its list lines showed no value: both name the PDF's text now.
+   - The party sheet had no heading over its boxes: it now says where they were read.
+   - Reads under a second showed in ms ("214 ms"): read times are now in seconds ("0.2 s").
+4. **Pass 2, font size 200%** (76 captures): pass 1's fixes held, and none of about 90 values, badges and keys measured
+   lost its last word. Its issues, fixed in 26c (`67c5587`, `26b6a66`; pinned in jest, not re-checked at 200%):
+   - Segmented options split words ("Custo" / "mers" / "21"). They now stack, one full-width option per row: from 150%
+     (ruling T26-2), then when width over font scale is under 310 dp (T26-3, for 130% on a 360 dp phone), and since 26d
+     under 104 dp per option (T26-5), so Sale | Purchase keeps one row at 130% on 360 dp.
+   - A focused field scrolled its label under the header: the whole field now comes into view.
+   - The read time split from its unit ("3.7" / "S"): a no-break space keeps them together.
+   - A restart with a sheet open logged a dev error from the sheet's focus return: it now skips a view that's gone.
+   - Accepted as a limit: Your lists' search placeholder is cut ("Search name, TIN or co…"); a one-line hint can't wrap.
+5. **Pass 3, 3-button navigation** (25 captures): every bottom bar's and sheet's buttons end about 12 dp above the bar,
+   and the ends of sheets and scrolls clear it. That answers the audit's p3-01, p3-02, p3-02b, p3-03, p3-04 and p3-04b.
+   Under the camera and the photo viewer the bar stays the system's light grey, as §8 leaves it (p3-05).
+6. **Pass 4, 360 dp wide** (24 captures; it answers p4-01 to p4-03). Its issues, fixed in 26d (`ebb1e79`): Back after
+   the display-size change restarted the screen (item 7), and a saved scan's subtitle splitting its date ("NOV" / "23"),
+   now kept whole. Accepted: Your lists' "Customers 21" wraps to two lines (audit p4-04). The wrap falls between words,
+   whichever tab is chosen, and nothing clips; §5.2 and §5.6 let a label wrap.
+7. **Back after the screen restarts (26d):** a font-size or display-size change makes Android rebuild the app's screen
+   while its JavaScript keeps running, so a new root mounts before the old one goes. expo-router 58 shares one global
+   `router` between them, and the old root's late unmount left it unbound for good, so Back threw "The imperative router
+   is unavailable before the first render has finished." Going back now uses the screen's own navigation
+   (`useGoBackOrHome`), a test bans the global `router`, and `navigation.test.tsx` replays the restart. On the device
+   the old code threw; with the fix, Back went where it should after display-size and font-size restarts, as did the
+   camera's Close and a sample's Retake after one; eight restarts left no router error in the log.
+8. **Keyboard states:** an amount box (Gboard's visible-password layout: letters with a number row), a name box, the
+   save sheet's Revenue account, Settings' Offset account (nearest the end) and Your lists' search: each field, and each
+   sheet's actions, sat above the keyboard. The emulator's touch counts as a stylus, so plain fields got Gboard's
+   floating handwriting toolbar: stylus handwriting was off for those, then unset.
+9. **Accessibility, as text:** 29 compressed uiautomator dumps, Home to the team screens, had no failing control: each
+   has a name, the 12 option groups are radio groups with one checked, badges are part of their row's name, and the
+   sheets' scrim is hidden. A dump can't show headings, hints or live regions (jest covers them), and Saved's long-press
+   delete isn't among TalkBack's actions (the Scan screen's ⋮ has it). TalkBack wasn't run: the user's call.
+10. **Font size in place:** a font-size change restarts the app, splash to Home, in the same process: the Scan screen
+    and its sheet close and what was typed there is lost; the scan doesn't change, and Back works (item 7). Ruling T0-4
+    (Task 0) is why: with the config-changes plugin the screen survived, but its text didn't grow.
+11. **Recent scans keep 20:** after 30 scans, Home lists 20 and the scans folder holds 20.
+12. **The scale check:** 500 made-up saved scans and 2,000 made-up parties, written through the app's own stores by a
+    temporary team-only screen. `dumpsys gfxinfo` over ten flings a run, as janky frames and the 50th/90th/95th/99th
+    percentile in ms: Saved (508 scans) 94.5% (69/113/133/200) and 95.6% (65/117/150/150); Your lists' Customers (1,021)
+    88.8% (65/105/133/150) and 93.0% (61/101/121/150); Home's light list, the baseline, 94.0% (53/101/133/250) and 92.1%
+    (57/113/150/300). This debug build runs Metro's JavaScript on an emulated GPU, so each is an upper bound; Home's are
+    about the same, so the emulator sets the floor, and these can't show the lists' own jank: a phone has to. No blank
+    areas showed. The transition starts 0.89 s after the press for Saved and 1.09 s for Your lists (0.67 s for Settings,
+    with no list); a search in Your lists settles 0.26 s after the last keystroke.
+
+**Still open:**
+- **A real phone:** the feel and speed; the keyboard view (and Android 8 to 10, where it relies on androidx's own
+  inset); and a hardware Back with the keyboard up: adb's Back closed the keyboard and the sheet together.
+- **The real camera** (and its flashlight: the emulator's has none), and **iOS** (milestone 9).
+- **TalkBack**, on the user's phone: the Scan screen's fix loop, and whether a message that appears with its text is
+  announced (T8-2).
+- **A release build:** none was run. expo-router's two warnings after a restart are dev-only, and an uncaught error,
+  which a debug build shows in LogBox, would likely close a release.
+- **Home's first-run tips:** captured only under the dev client's menu note.
+- **Android's system dialogs** (Discard, Clear, Delete, the PDF refusals): teal all-caps buttons, no danger colour, and
+  an empty band when there's no message: a native theme question, with the user.
+- **The font-size restart** loses what was typed in an open sheet (item 10).
+- **Not reached here:** marking scans as exported (every share was backed out of), the camera's refused-for-good panel,
+  and a 2307 with no payments.
 
 ## Checked on the emulator (milestone 4)
 
@@ -839,5 +984,5 @@ adb shell content call --uri content://media --method scan_file --arg /sdcard/Do
 adb shell content call --uri content://media --method scan_file --arg /sdcard/Download/items.csv
 ```
 
-Then, on the phone, ⋮ → Your lists → Import CSV → Downloads: `parties.csv` on Customers gives 21 customers and 2
-suppliers (1 row skipped: no name), and `items.csv` on Items gives 18 items.
+Then, on the phone, Your lists (the list icon in Home's header) → Import CSV → Downloads: `parties.csv` on Customers
+gives 21 customers and 2 suppliers (1 row skipped: no name), and `items.csv` on Items gives 18 items.

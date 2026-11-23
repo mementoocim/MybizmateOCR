@@ -1,8 +1,19 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { type Party, partyName } from '../lib/lists';
-import { bold, colors } from '../lib/theme';
+import { matchesParty } from '../lib/search';
+import { colors, space, type } from '../lib/theme';
+import { Search } from './icons';
+import { ListRow } from './ListRow';
+import { TextField } from './TextField';
+
+// Design B §9.5: the party picker, in the Customer and Supplier sheets. A search field at the top finds a party by its
+// name, trade name or code, case and accents aside, or by its TIN's digits (lib/search); then the parties as list
+// rows, the name over its TIN and code in figures, and tapping one picks it. The search is focused on open where the
+// picker is what the person came for (Choose another); the Supplier sheet shows its other choices first, which the
+// keyboard would cover (ruling T14-1). Its rows are full-bleed, so it pads its own field and notes: its sheet has no
+// gutter.
 
 const SHOWN = 50; // rows shown at a time: a long list is narrowed by typing
 
@@ -11,69 +22,52 @@ export function partyLine(p: Party): string {
   return [p.tin && `TIN ${p.tin}`, p.code].filter(Boolean).join(' · ');
 }
 
-/** A search over the parties by name, trade name, code or TIN digits; tapping one picks it. */
 export function PartyPicker({
   parties,
-  placeholder,
+  label,
   onPick,
+  autoFocus = true,
 }: {
   parties: readonly Party[];
-  placeholder: string;
+  label: string; // the search's spoken name and placeholder: "Search your customers"
   onPick: (p: Party) => void;
+  autoFocus?: boolean; // default true: the search takes the focus (and the keyboard) on open
 }) {
   const [query, setQuery] = useState('');
-  const text = query.trim().toLowerCase();
-  const digits = query.replace(/\D/g, '');
-  const found = parties.filter(
-    (p) =>
-      !text ||
-      partyName(p).toLowerCase().includes(text) ||
-      p.tradeName.toLowerCase().includes(text) ||
-      p.code.toLowerCase().includes(text) ||
-      (digits !== '' && p.tin.replace(/\D/g, '').includes(digits)),
-  );
+  const found = parties.filter((p) => matchesParty(p, query));
   return (
     <View>
-      <TextInput
-        accessibilityLabel={placeholder}
-        placeholder={placeholder}
-        placeholderTextColor={colors.mute}
-        value={query}
-        onChangeText={setQuery}
-        autoCorrect={false}
-        style={styles.input}
-      />
-      {found.length === 0 && <Text style={styles.none}>No match.</Text>}
+      <View style={styles.search}>
+        <TextField
+          label={label}
+          placeholder={label}
+          hideLabel
+          leading={Search}
+          clearLabel="Clear the search"
+          autoFocus={autoFocus}
+          value={query}
+          onChangeText={setQuery}
+        />
+      </View>
+      {found.length === 0 ? <Text style={[type.body, styles.note]}>No match.</Text> : null}
       {found.slice(0, SHOWN).map((p) => (
-        <Pressable
+        <ListRow
           key={p.id}
-          accessibilityRole="button"
+          testID={`party-${p.id}`}
+          title={partyName(p)}
+          sub={partyLine(p) || null}
+          subMono
           onPress={() => onPick(p)}
-          style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-          <Text style={styles.name}>{partyName(p)}</Text>
-          {partyLine(p) !== '' && <Text style={styles.line}>{partyLine(p)}</Text>}
-        </Pressable>
+        />
       ))}
-      {found.length > SHOWN && <Text style={styles.none}>Showing the first 50. Type to find the others.</Text>}
+      {found.length > SHOWN ? (
+        <Text style={[type.body, styles.note]}>Showing the first 50. Type to find the others.</Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  input: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: colors.ink,
-    backgroundColor: colors.panel,
-    marginVertical: 8,
-  },
-  none: { fontSize: 14, color: colors.mute, paddingVertical: 8 },
-  row: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  pressed: { opacity: 0.6 },
-  name: { ...bold, fontSize: 15, color: colors.ink },
-  line: { fontSize: 13, color: colors.mute, marginTop: 2 },
+  search: { paddingHorizontal: space.l, paddingVertical: space.m },
+  note: { paddingHorizontal: space.l, paddingVertical: space.m, color: colors.mute },
 });

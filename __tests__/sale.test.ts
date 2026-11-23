@@ -1,7 +1,7 @@
 import type { Final, Raw } from '../lib/checks/finalize';
 import { pyRound } from '../lib/checks/num';
 import type { Lists, Party } from '../lib/lists';
-import { checkDay, isInvoice, problemWords, rawFromScan, saleOf, suggestTaxType } from '../lib/sale';
+import { checkDay, isInvoice, problemWords, rawFromScan, saleOf, suggestTaxType, taxTypeFromBoxes } from '../lib/sale';
 import { addScan, getScan, setEdit, type StoredScan, updateScan } from '../lib/scans';
 import type { Settings } from '../lib/settings';
 import type { ScanResult } from '../modules/scanner';
@@ -23,6 +23,7 @@ const SETTINGS: Settings = {
   annotation: false,
   clientCode: '',
   writerCode: '',
+  setupDone: false,
 };
 const EMPTY: Lists = { parties: [], items: [], version: 0 };
 
@@ -243,6 +244,14 @@ test('suggestTaxType', () => {
   expect(suggestTaxType('purchase', raw({ vat_exempt: '100.00' }), false)).toBe('EXEMPT');
   expect(suggestTaxType('sale', raw({}), null)).toBe('NONVAT');
   expect(suggestTaxType('sale', raw({ vat: '1.00' }), null)).toBe('VAT');
+});
+
+test('taxTypeFromBoxes: every suggestion comes from the VAT boxes but a non-VAT-registered business sale', () => {
+  // ruling T15-1: that sale is NONVAT by the business's status, so the save sheet doesn't say the boxes suggested it
+  expect(taxTypeFromBoxes('sale', false)).toBe(false);
+  expect(taxTypeFromBoxes('sale', true)).toBe(true);
+  expect(taxTypeFromBoxes('sale', null)).toBe(true); // the question not answered yet
+  for (const vatRegistered of [true, false, null]) expect(taxTypeFromBoxes('purchase', vatRegistered)).toBe(true);
 });
 
 test("problemWords keeps the test app's order", () => {

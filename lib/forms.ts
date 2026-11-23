@@ -1,4 +1,4 @@
-import type { FormName } from '../modules/scanner';
+import type { FieldType, FormName } from '../modules/scanner';
 
 // Each form's words on screen (the test app's OcrEngine.java:222, service_invoice.json and bir_2307.json).
 export const FORMS: Record<FormName, { title: string; cash: string; account: string; number: string }> = {
@@ -28,27 +28,51 @@ const LABELS: Record<string, string> = {
   total_due_2: 'Total due (left column)',
 };
 
-type Template = { fields: { name: string; type: string; label?: string }[] };
-const BIR_2307 = require('../modules/scanner/assets/scanner/bir_2307.json') as Template;
+type Field = { name: string; type: FieldType; label?: string };
+type Template = { fields: (Field | { name: string; type: 'checkbox' })[] };
+/** The templates the scanner reads each form with: its boxes, in order, with their types (and the 2307's words). */
+const TEMPLATES: Record<FormName, Template> = {
+  sales_invoice: require('../modules/scanner/assets/scanner/field_map.json'),
+  service_invoice: require('../modules/scanner/assets/scanner/service_invoice.json'),
+  bir_2307: require('../modules/scanner/assets/scanner/bir_2307.json'),
+};
+/** A template's boxes, without the tick boxes. */
+const boxesOf = (form: FormName) => TEMPLATES[form].fields.filter((f): f is Field => f.type !== 'checkbox');
+
 const FIELDS: Record<FormName, string[]> = {
-  sales_invoice: (require('../modules/scanner/assets/scanner/field_map.json') as Template).fields
-    .filter((f) => f.type !== 'checkbox')
-    .map((f) => f.name),
+  sales_invoice: boxesOf('sales_invoice').map((f) => f.name),
   // amount_words2 is read into amount_words (the scanner merges the two lines)
-  service_invoice: (require('../modules/scanner/assets/scanner/service_invoice.json') as Template).fields
-    .filter((f) => f.type !== 'checkbox' && f.name !== 'amount_words2')
+  service_invoice: boxesOf('service_invoice')
+    .filter((f) => f.name !== 'amount_words2')
     .map((f) => f.name),
-  bir_2307: BIR_2307.fields.filter((f) => f.type !== 'checkbox').map((f) => f.name),
+  bir_2307: boxesOf('bir_2307').map((f) => f.name),
+};
+
+const typesOf = (form: FormName): Readonly<Record<string, FieldType>> =>
+  Object.fromEntries(boxesOf(form).map((f) => [f.name, f.type]));
+/** Each form's boxes' types, as their templates give them, built once. */
+const TYPES: Record<FormName, Readonly<Record<string, FieldType>>> = {
+  sales_invoice: typesOf('sales_invoice'),
+  service_invoice: typesOf('service_invoice'),
+  bir_2307: typesOf('bir_2307'),
 };
 
 /** The words a template gives its own boxes: the 2307's are the official form's. */
 const TEMPLATE_LABELS: Partial<Record<FormName, Readonly<Record<string, string>>>> = {
-  bir_2307: Object.fromEntries(BIR_2307.fields.flatMap((f) => (f.label ? [[f.name, f.label]] : []))),
+  bir_2307: Object.fromEntries(boxesOf('bir_2307').flatMap((f) => (f.label ? [[f.name, f.label]] : []))),
 };
 
 /** A form's boxes in its template's order, without the tick boxes. */
 export function formFields(form: FormName): string[] {
   return FIELDS[form];
+}
+
+/**
+ * What kind of box it is, as the form's template says: an amount, a date, a TIN, a 2307's ATC (code)… It picks the
+ * box's keyboard. 'text' for a name the form has no box for (a tick box among them).
+ */
+export function fieldType(form: FormName, name: string): FieldType {
+  return Object.prototype.hasOwnProperty.call(TYPES[form], name) ? TYPES[form][name] : 'text';
 }
 
 const COLUMNS: Record<string, string> = {

@@ -146,6 +146,40 @@ test('adding a party or an item from a scan', async () => {
   expect(lists().items).toMatchObject([{ name: 'Eggs', unit: 'tray', price: 260 }]);
 });
 
+test("marking parties exported writes first: a write that fails marks none, and tells no screen (final review, Important 2)", async () => {
+  const { addParty, lists, markPartiesExported, subscribeLists } = L();
+  const { File } = require('expo-file-system'); // this registry's, as lib/jsonFile has it
+  const party = await addParty({
+    code: '',
+    type: 'customer',
+    entity: 'company',
+    registeredName: 'Bagong Tindahan',
+    lastName: '',
+    firstName: '',
+    middleName: '',
+    tradeName: '',
+    tin: '900-000-003',
+    address: '',
+    vatStatus: '',
+    terms: '',
+    fromScan: true,
+  });
+  const before = lists();
+  const listener = jest.fn();
+  subscribeLists(listener);
+  // a full phone: no file can be written
+  const write = jest.spyOn(File.prototype, 'write').mockRejectedValue(new Error('No space left on device'));
+  const at = new Date(2026, 9, 5, 10, 0);
+  await expect(markPartiesExported([party.id], at)).rejects.toThrow('No space left on device');
+  expect(lists()).toBe(before); // still not exported: the next file has it, as lists.json does
+  expect(listener).not.toHaveBeenCalled();
+  // with room again, it's written, then marked
+  write.mockRestore();
+  await markPartiesExported([party.id], at);
+  expect(lists().parties).toEqual([{ ...party, exportedAt: at.toISOString() }]);
+  expect(listener).toHaveBeenCalledTimes(1);
+});
+
 test('the lists survive a restart', async () => {
   await L().importItemsCsv(ITEMS);
   jest.resetModules();
