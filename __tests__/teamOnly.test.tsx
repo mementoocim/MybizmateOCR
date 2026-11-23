@@ -14,7 +14,7 @@ jest.mock('../lib/build', () => ({
   },
 }));
 jest.mock('../lib/speedTest', () => ({ runSpeedTest: jest.fn() })); // the runner needs the scanner's native module
-jest.mock('expo-router', () => ({ router: { back: () => mockBack() } }));
+jest.mock('expo-router', () => ({ router: { back: () => mockBack(), canGoBack: () => true } }));
 
 beforeEach(() => {
   mockTeam = false;

@@ -18,7 +18,7 @@ import { coreJson } from '../test-utils/coreJson';
 let mockFocused = true;
 let mockParams: Record<string, string> = {};
 let mockTeam = false;
-const mockRouter = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
+const mockRouter = { push: jest.fn(), replace: jest.fn(), back: jest.fn(), canGoBack: jest.fn(() => true) };
 const mockScanPhoto = jest.fn();
 const mockTakePhoto = jest.fn(async () => {});
 const mockGetPermission = jest.fn();
@@ -98,6 +98,7 @@ beforeEach(() => {
   mockFocused = true;
   mockParams = {};
   mockTeam = false;
+  mockRouter.canGoBack.mockReturnValue(true); // a screen under this one, as when Home opened it
   mockDeleted.length = 0;
   mockGetPermission.mockResolvedValue(granted);
   mockRequestPermission.mockResolvedValue(granted);
@@ -248,6 +249,18 @@ test('Close goes back once, however fast it is tapped twice', async () => {
     await fireEvent.press(button('Close'));
   });
   expect(mockRouter.back).toHaveBeenCalledTimes(1);
+});
+
+test('with nothing under it, Close goes Home, once (ruling T24-1)', async () => {
+  // Opened first, with nothing under it: the Stack is anchored on Home (app/_layout), so this is the fallback.
+  mockRouter.canGoBack.mockReturnValue(false);
+  await open();
+  await act(async () => {
+    await fireEvent.press(button('Close'));
+    await fireEvent.press(button('Close'));
+  });
+  expect(mockRouter.replace.mock.calls).toEqual([['/']]);
+  expect(mockRouter.back).not.toHaveBeenCalled();
 });
 
 test('the shutter is disabled while the camera starts', async () => {
@@ -417,7 +430,8 @@ test('a photo is read', async () => {
 });
 
 test('auto-capture confirms with one haptic; a shutter photo has none', async () => {
-  // jest runs as iOS, so the haptic is the success notification; on Android it's the engine's Confirm (haptics.test)
+  // jest runs as iOS, so the haptic is the success notification; on Android it's the engine's Confirm from Android 11,
+  // and Long_Press below it (haptics.test)
   const haptic = jest.mocked(Haptics.notificationAsync);
   let cardUp: boolean | null = null; // whether the reading card showed as the haptic came
   haptic.mockImplementationOnce(async () => {

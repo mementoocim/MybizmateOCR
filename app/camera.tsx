@@ -132,11 +132,15 @@ export default function CameraScreen() {
 
   useEffect(() => () => clearTimeout(errorTimer.current), []);
 
-  /** Back, once: router.back() queues a GO_BACK per call, so a fast double tap would leave the next screen too. */
+  /**
+   * Back, once: router.back() queues a GO_BACK per call, so a fast double tap would leave the next screen too. With
+   * nothing to go back to, Home (ruling T24-1).
+   */
   function close() {
     if (closing.current) return;
     closing.current = true;
-    router.back();
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
   }
 
   async function allow() {

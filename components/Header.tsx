@@ -7,12 +7,12 @@ import { colors, space, touch, type } from '../lib/theme';
 import { IconButton } from './IconButton';
 import { ArrowLeft, Close } from './icons';
 
-// Design B §5.6 and §8: every screen's header, in place of the Stack's own (each migrated route hides it) and Home's
-// fixed 48 dp top padding. The app is edge-to-edge, so its fill reaches under the status bar and it pads by the bar's
-// inset. Under that, a row at least 56 dp tall: Back or Close; the title (headerTitle, a TalkBack header), which wraps
-// and grows with the font size, with an optional overline under it; then up to two icon buttons, or the photo
-// thumbnail, on the right. A hairline sits under it. Home shows the logo and "mybizmate.io" in place of a title. Dark is
-// the photo viewer's: the viewer fill, light text and icons, no hairline.
+// Design B §5.6 and §8: every screen's header, in place of the Stack's own (the root layout hides it on every route)
+// and Home's fixed 48 dp top padding. The app is edge-to-edge, so its fill reaches under the status bar and it pads by
+// the bar's inset. Under that, a row at least 56 dp tall: Back or Close; the title (headerTitle, a TalkBack header),
+// which wraps and grows with the font size, with an optional overline under it; then up to two icon buttons, or the
+// photo thumbnail, on the right. A hairline sits under it. Home shows the logo and "mybizmate.io" in place of a title.
+// Dark is the photo viewer's: the viewer fill, light text and icons, no hairline.
 
 const LOGO = 30; // dp: the brand mark, as Home shows it today
 
@@ -28,7 +28,7 @@ export function Header({
   title?: string;
   subtitle?: string | null;
   brand?: boolean; // Home: the logo and "mybizmate.io" in place of a title
-  onBack?: (() => void) | null; // default router.back(); null: no back button
+  onBack?: (() => void) | null; // default router.back(), or Home with nothing to go back to; null: no back button
   backIcon?: 'back' | 'close'; // spoken "Back" or "Close"
   right?: ReactNode; // up to two IconButtons, or the photo thumbnail
   tone?: 'light' | 'dark'; // dark: the photo viewer (viewer fill, cameraText)
@@ -76,9 +76,13 @@ export function Header({
   );
 }
 
-/** The default Back. The router is read when Back is pressed, so a test's expo-router mock needs no `router`. */
+/**
+ * The default Back: to the screen under this one, or Home when there's none (ruling T24-1). The router is read when
+ * Back is pressed, so a test's expo-router mock needs no `router`.
+ */
 function goBack() {
-  router.back();
+  if (router.canGoBack()) router.back();
+  else router.replace('/');
 }
 
 const styles = StyleSheet.create({

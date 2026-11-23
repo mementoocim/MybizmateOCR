@@ -27,7 +27,8 @@ import { standIn } from '../test-utils/scrollStandIn';
 // the window for the keyboard, so the end of the scroll clears it too. Bottom bars stack their buttons when a label
 // wraps. This file's insets: 24 dp at the top, 34 at the bottom.
 
-let mockRouter: { back: jest.Mock } | undefined;
+let mockRouter: { back: jest.Mock; canGoBack: jest.Mock; replace: jest.Mock } | undefined;
+const freshRouter = () => ({ back: jest.fn(), canGoBack: jest.fn(() => true), replace: jest.fn() });
 jest.mock('expo-router', () => ({
   get router() {
     return mockRouter; // read when Back is pressed, never at render
@@ -75,7 +76,7 @@ function fieldAt(y: number) {
 }
 
 beforeEach(() => {
-  mockRouter = { back: jest.fn() };
+  mockRouter = freshRouter();
 });
 
 test('Header: the title is a header, the subtitle an overline, back goes back', async () => {
@@ -106,9 +107,21 @@ test("Header: Back defaults to expo-router's back, which it reads only when pres
   await render(<Header title="Settings" />);
   expect(button('Back')).toBeOnTheScreen();
 
-  mockRouter = { back: jest.fn() };
+  mockRouter = freshRouter();
   await fireEvent.press(button('Back'));
   expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  expect(mockRouter.replace).not.toHaveBeenCalled();
+});
+
+test('Header: with nothing to go back to, Back goes Home (ruling T24-1)', async () => {
+  // A screen with nothing under it: the Stack is anchored on Home (app/_layout), so this is the fallback.
+  mockRouter = freshRouter();
+  mockRouter.canGoBack.mockReturnValue(false);
+  await render(<Header title="Speed test" />);
+  await fireEvent.press(button('Back'));
+  expect(mockRouter.replace).toHaveBeenCalledWith('/');
+  expect(mockRouter.replace).toHaveBeenCalledTimes(1);
+  expect(mockRouter.back).not.toHaveBeenCalled();
 });
 
 test('Header: at least 56 dp tall, it grows and wraps with the text, with icon buttons on the right', async () => {

@@ -6,10 +6,17 @@ import { View } from 'react-native';
 
 import { BrandSplash } from '../components/BrandSplash';
 import { SnackbarHost } from '../components/Snackbar';
-import { bold, colors } from '../lib/theme';
+import { colors } from '../lib/theme';
 
 // The phone's own splash stays up until the brand splash has drawn; that one stays until the scanner is ready.
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+/**
+ * Home is always at the bottom of the Stack (ruling T24-1): a link opened cold (mybizmatescan://camera?test=…,
+ * mybizmatescan://speed) has Home under it, so Back and Close have somewhere to go. expo-router 58 calls this the
+ * anchor; its older name, initialRouteName, still works but warns that it's deprecated.
+ */
+export const unstable_settings = { anchor: 'index' };
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
@@ -17,23 +24,9 @@ export default function RootLayout() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
       <StatusBar style="dark" />
-      <Stack
-        screenOptions={{
-          headerTintColor: colors.coralText,
-          headerTitleStyle: { ...bold, color: colors.ink },
-          headerStyle: { backgroundColor: colors.panel },
-          contentStyle: { backgroundColor: colors.paper },
-        }}>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="camera" options={{ headerShown: false, contentStyle: { backgroundColor: '#000000' } }} />
-        <Stack.Screen name="result" options={{ headerShown: false }} />
-        <Stack.Screen name="speed" options={{ headerShown: false }} />
-        <Stack.Screen name="training" options={{ headerShown: false }} />
-        <Stack.Screen name="settings" options={{ headerShown: false }} />
-        <Stack.Screen name="saved" options={{ headerShown: false }} />
-        <Stack.Screen name="lists" options={{ headerShown: false }} />
-        <Stack.Screen name="licenses" options={{ headerShown: false }} />
-        <Stack.Screen name="license" options={{ headerShown: false }} />
+      {/* Every screen draws its own Header, so no route shows the Stack's. */}
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.paper } }}>
+        <Stack.Screen name="camera" options={{ contentStyle: { backgroundColor: colors.camera } }} />
       </Stack>
       {/* The snackbar's root host, over every screen; an open sheet or the photo viewer has its own. */}
       <SnackbarHost />
