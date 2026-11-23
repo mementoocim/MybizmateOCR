@@ -43,6 +43,7 @@
     "test": "jest",
     "test:core": "node scripts/core-test.mjs",
     "check:apk": "node scripts/check-apk.mjs",
+    "licenses": "node scripts/collect-licenses.mjs",
     "lint": "expo lint"
   },
   "private": true,
@@ -50,6 +51,9 @@
     "preset": "jest-expo",
     "setupFiles": [
       "<rootDir>/test-utils/jestSetup.ts"
-    ]
+    ],
+    "moduleNameMapper": {
+      "\\.txt$": "<rootDir>/test-utils/assetStub.js"
+    }
   }
 }

@@ -32,6 +32,8 @@ export default function RootLayout() {
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         <Stack.Screen name="saved" options={{ headerShown: false }} />
         <Stack.Screen name="lists" options={{ headerShown: false }} />
+        <Stack.Screen name="licenses" options={{ headerShown: false }} />
+        <Stack.Screen name="license" options={{ headerShown: false }} />
       </Stack>
       {/* The snackbar's root host, over every screen; an open sheet or the photo viewer has its own. */}
       <SnackbarHost />
