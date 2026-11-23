@@ -42,9 +42,9 @@ import { Tap } from './Tap';
 // iOS's aren't a window's). The scroll is its fields' scroll-into-view: they never scroll the Screen behind the Modal,
 // and it gives them that keyboard, so a focused field scrolls into view again as the keyboard grows (ruling T5-2).
 // Back, Close, the scrim and system back ask before typing is lost (dirty). TalkBack focus moves to the title once the
-// sheet is up, and again when it shows a new step (focusKey), and to returnFocus once it has gone. While it's open,
-// the panel is the snackbar's host (the plan's call 4), so a message shows above the action row, not dimmed behind the
-// scrim; it goes back to the host under the sheet as the sheet starts to close.
+// sheet is up, and again when it shows a new step (focusKey), and to returnFocus once it has gone, if that's still a
+// mounted view. While it's open, the panel is the snackbar's host (the plan's call 4), so a message shows above the
+// action row, not dimmed behind the scrim; it goes back to the host under the sheet as the sheet starts to close.
 // The exit motion needs the Sheet kept mounted, with `visible` driving it: useLingering keeps a caller's last content
 // for it while it closes. A caller that unmounts the Sheet to close it gets no exit motion, but focus still goes back,
 // once, from the unmount.
@@ -229,11 +229,16 @@ export function Sheet({
   );
 }
 
-/** Sends TalkBack focus to the opener a sheet owes it to, and settles the debt, so it's sent once at most. */
+/**
+ * Sends TalkBack focus to the opener a sheet owes it to, and settles the debt, so it's sent once at most. An opener
+ * that's no longer a mounted native view gets nothing, quietly: RN logs an error for an event sent to one. A caller can
+ * keep its opener by hand (the Scan screen's rows), which nothing clears when it goes, and when a whole screen goes at
+ * once (Android restarting the activity for a new font size), the opener goes before the sheet's own cleanup runs.
+ */
 function giveFocusBack(owed: RefObject<RefObject<ViewInstance | null> | null>) {
   const opener = owed.current?.current;
   owed.current = null;
-  if (opener) AccessibilityInfo.sendAccessibilityEvent(opener, 'focus');
+  if (opener?.isConnected) AccessibilityInfo.sendAccessibilityEvent(opener, 'focus');
 }
 
 const styles = StyleSheet.create({

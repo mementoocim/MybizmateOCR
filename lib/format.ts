@@ -3,9 +3,12 @@ export function formatMs(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
-/** How long a read took, as the Scan screen says it (design §9.5): seconds with one decimal, under a second too. */
+/**
+ * How long a read took, as the Scan screen says it (design §9.5): seconds with one decimal, under a second too. A
+ * no-break space joins the number and its unit, so a line never breaks between them ("READ IN 3.7" / "S").
+ */
 export function formatSeconds(ms: number): string {
-  return `${(ms / 1000).toFixed(1)} s`;
+  return `${(ms / 1000).toFixed(1)}\u00A0s`;
 }
 
 /** A clock time: "2:41 PM". */

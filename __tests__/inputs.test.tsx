@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { createRef } from 'react';
-import { type ScrollViewInstance, StyleSheet, type TextInputInstance } from 'react-native';
+import { Dimensions, type ScrollViewInstance, StyleSheet, TextInput, View } from 'react-native';
 
 import { ChoiceChips } from '../components/ChoiceChips';
 import { Search } from '../components/icons';
@@ -14,9 +14,10 @@ import { standIn } from '../test-utils/scrollStandIn';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §5.6 and §7: the inputs. Segmented and ChoiceChips are radio groups that TalkBack names, with the chosen
-// option in ink with a paper label (§5.1: selection is ink). A TextField has its label above, an outline border that
-// becomes a 2 dp focus border, and one note under it, which is also the field's hint. Taking focus, it scrolls itself
-// into view in the Screen, and again when the keyboard opens or grows (ruling T5-2).
+// option in ink with a paper label (§5.1: selection is ink); from 150% font size, Segmented stacks its options (ruling
+// T26-2). A TextField has its label above, an outline border that becomes a 2 dp focus border, and one note under it,
+// which is also the field's hint. Taking focus, it scrolls its whole field (label, box and note) into view in the
+// Screen, and again when the keyboard opens or grows (ruling T5-2).
 
 const noop = () => {};
 type Instance = ReturnType<typeof screen.getByRole>;
@@ -40,30 +41,55 @@ const TAX_TYPES = [
   { value: 'NA', label: 'Not applicable' },
 ] as const;
 const SUGGESTED = "Suggested from the invoice's VAT boxes";
+const OFFSET_HELPER = 'Code or name, as in MyBizMate';
+
+/** The window as jest starts it, at a font scale of 2. */
+const WINDOW = Dimensions.get('window');
+/** The phone's font size, as the window reports it once it changes in Android's settings. */
+const atFontScale = (fontScale: number) =>
+  act(() => {
+    Dimensions.set({ window: { ...WINDOW, fontScale }, screen: Dimensions.get('screen') });
+  });
 
 /**
- * A TextField in a Screen. jest's ScrollView and TextInput have no layout, so this stands in the scroll's content
- * view and records its scrolls, and puts the field `y` dp down that content.
+ * jest's views have no layout, and share their native methods: measureLayout is one jest.fn on View's and TextInput's
+ * prototypes alike, and each call keeps the instance it was made on (mock.contexts).
+ */
+const measureLayout = (View.prototype as unknown as { measureLayout: jest.Mock }).measureLayout;
+/** At 200%, how far a field's input sits under the top of the field: the label's line and the gap under it. */
+const UNDER_LABEL = 44;
+
+afterEach(async () => {
+  measureLayout.mockReset(); // as the preset made it: nothing laid out
+  await atFontScale(WINDOW.fontScale);
+});
+
+/**
+ * A TextField, with a helper, in a Screen. jest's ScrollView and views have no layout, so this stands in the scroll's
+ * content view and records its scrolls, and stands in Android's measurements: the field's own view (its label, box and
+ * helper) `y` dp down that content, and its input lower, under the label.
  */
 async function fieldInScreen(y: number) {
   const scrollRef = createRef<ScrollViewInstance>();
-  const inputRef = createRef<TextInputInstance>();
   await render(
     <Screen header={null} scrollRef={scrollRef}>
-      <TextField label="Offset account for 2307s" value="" onChangeText={noop} inputRef={inputRef} />
+      <TextField label="Offset account for 2307s" value="" onChangeText={noop} helper={OFFSET_HELPER} />
     </Screen>,
   );
   const { content, scrollTo } = standIn(scrollRef.current);
-  const measureLayout = jest.fn(
-    (_relativeTo: unknown, onSuccess: (x: number, y: number, w: number, h: number) => void) =>
-      onSuccess(0, y, 328, touch.target),
-  );
-  Object.assign(inputRef.current!, { measureLayout }); // the TextField's own input: the caller's ref gets the same one
-  return { input: screen.getByLabelText('Offset account for 2307s'), content, scrollTo, measureLayout };
+  measureLayout.mockImplementation(function (
+    this: object,
+    _relativeTo: unknown,
+    onSuccess: (x: number, y: number, w: number, h: number) => void,
+  ) {
+    onSuccess(0, this instanceof TextInput ? y + UNDER_LABEL : y, 328, touch.target);
+  });
+  return { input: screen.getByLabelText('Offset account for 2307s'), content, scrollTo };
 }
 
 test('Segmented is a labelled radio group with an ink selection', async () => {
   const onChange = jest.fn();
+  await atFontScale(1); // 100%: the options side by side in one row
   await render(<Segmented label="List" options={LISTS} value="suppliers" onChange={onChange} />);
   const group = screen.getByRole('radiogroup', { name: 'List' });
   expect(group).toHaveStyle({
@@ -75,7 +101,8 @@ test('Segmented is a labelled radio group with an ink selection', async () => {
   });
   const options = within(group).getAllByRole('radio');
   expect(options).toHaveLength(3);
-  for (const option of options) expect(option).toHaveStyle({ minHeight: touch.target, height: undefined });
+  // each an equal share of the row
+  for (const option of options) expect(option).toHaveStyle({ flex: 1, minHeight: touch.target, height: undefined });
 
   const chosen = screen.getByRole('radio', { name: 'Suppliers 2' });
   expect(chosen.props.accessibilityState).toMatchObject({ checked: true });
@@ -93,6 +120,57 @@ test('Segmented is a labelled radio group with an ink selection', async () => {
   // Options sit edge to edge inside the outline, so the keyboard's focus ring goes on the option's own edge.
   await fireEvent(other, 'focus');
   expect(screen.getByTestId('focus-ring')).toHaveStyle({ top: 0, left: 0, right: 0, bottom: 0 });
+});
+
+test('from 150% font size, Segmented stacks its options: one full-width option per row (ruling T26-2)', async () => {
+  // Side by side, each option has a third of the row: at 200% Android broke the words inside it ("Custo / mers / 21").
+  const onChange = jest.fn();
+  await atFontScale(2);
+  await render(<Segmented label="List" options={LISTS} value="suppliers" onChange={onChange} />);
+  const group = () => screen.getByRole('radiogroup', { name: 'List' });
+  const options = () => within(group()).getAllByRole('radio');
+  // The same outline, as a column. Each option has a row of its own, full width (no share of a row), at least 48 dp,
+  // with nothing fixing its height: a label too long for the width still wraps between words.
+  expect(group()).toHaveStyle({
+    flexDirection: 'column',
+    borderWidth: 1,
+    borderColor: colors.outline,
+    borderRadius: radius.field,
+    backgroundColor: colors.panel,
+  });
+  expect(options().map((option) => option.props.accessibilityLabel)).toEqual(['Customers 21', 'Suppliers 2', 'Items 18']);
+  for (const option of options()) {
+    expect(option).toHaveStyle({ flex: undefined, minHeight: touch.target, height: undefined });
+  }
+  expect(screen.getByText('Customers 21').props.numberOfLines).toBeUndefined();
+  // The same ink selection, roles and states: radio buttons in a radio group, the chosen one checked.
+  expect(screen.getByRole('radio', { name: 'Suppliers 2', checked: true })).toHaveStyle({ backgroundColor: colors.ink });
+  expect(screen.getByText('Suppliers 2')).toHaveStyle({ ...type.button, color: colors.paper });
+  const other = screen.getByRole('radio', { name: 'Customers 21', checked: false });
+  expect(other).toHaveStyle({ backgroundColor: undefined });
+  expect(screen.getByText('Customers 21')).toHaveStyle({ ...type.button, color: colors.ink });
+  await fireEvent.press(other);
+  expect(onChange).toHaveBeenCalledWith('customers');
+
+  // From 150%; under it, one row again (Android's next size down is 130%). It follows the font size as it changes.
+  await atFontScale(1.5);
+  expect(group()).toHaveStyle({ flexDirection: 'column' });
+  await atFontScale(1.3);
+  expect(group()).toHaveStyle({ flexDirection: 'row' });
+  for (const option of options()) expect(option).toHaveStyle({ flex: 1 });
+
+  // The photo viewer's views stack the same way, in their dark tone.
+  await atFontScale(2);
+  await screen.rerender(<Segmented tone="dark" label="View" options={VIEWS} value="enhanced" onChange={noop} />);
+  expect(screen.getByRole('radiogroup', { name: 'View' })).toHaveStyle({
+    flexDirection: 'column',
+    backgroundColor: undefined,
+  });
+  expect(screen.getByRole('radio', { name: 'Enhanced', checked: true })).toHaveStyle({
+    flex: undefined,
+    backgroundColor: colors.cameraText,
+  });
+  expect(screen.getByRole('radio', { name: 'Original', checked: false })).toHaveStyle({ flex: undefined });
 });
 
 test('Segmented dark: for the photo viewer', async () => {
@@ -268,7 +346,7 @@ test('TextField: a search field with a clear button', async () => {
 });
 
 test('TextField scrolls itself into view when focused inside a Screen', async () => {
-  const { input, content, scrollTo, measureLayout } = await fieldInScreen(420);
+  const { input, content, scrollTo } = await fieldInScreen(420);
   expect(scrollTo).not.toHaveBeenCalled();
 
   await fireEvent(input, 'focus');
@@ -279,15 +357,35 @@ test('TextField scrolls itself into view when focused inside a Screen', async ()
   expect(input.parent).toHaveStyle({ borderWidth: 2, borderColor: colors.focus });
 });
 
+test('TextField brings its whole field into view: the label above its box and the helper under it', async () => {
+  // QA pass 2, at 200% with the keyboard up: Settings scrolled the ATC field's input 24 dp under the top, and its label,
+  // over the input, sat half under the header. What's measured is the field's own view, from its label to its helper.
+  const { input, scrollTo } = await fieldInScreen(420);
+  await fireEvent(input, 'focus');
+  const field = screen.getByText('Offset account for 2307s').parent!; // the label's parent: the field's own view
+  expect(within(field).getByLabelText('Offset account for 2307s')).toBe(input);
+  expect(within(field).getByText(OFFSET_HELPER)).toBeOnTheScreen();
+  const measured = measureLayout.mock.contexts as { props: { children?: unknown } }[];
+  expect(measured).toHaveLength(1);
+  expect(measured[0]).toBeInstanceOf(View);
+  expect(measured[0]).not.toBeInstanceOf(TextInput);
+  // jest's View draws its host view with the children it was given: the view measured is that field's own
+  expect(measured[0].props.children).toBe(field.props.children);
+  // So the field's top, its label's, goes 24 dp under the scroll's top: the input's own place, lower, isn't used.
+  expect(scrollTo).toHaveBeenCalledTimes(1);
+  expect(scrollTo).toHaveBeenLastCalledWith({ y: 420 - space.xl, animated: true });
+});
+
 test('TextField scrolls into view again when the keyboard opens or grows while it has focus (ruling T5-2)', async () => {
   const { input, scrollTo } = await fieldInScreen(420);
   await fireEvent(input, 'focus');
   expect(scrollTo).toHaveBeenCalledTimes(1);
 
-  // The keyboard opens after the focus, and the end of the scroll grows with it: the field scrolls again.
+  // The keyboard opens after the focus, and the end of the scroll grows with it: the field scrolls again, whole.
   await keyboard(300);
   expect(scrollTo).toHaveBeenCalledTimes(2);
   expect(scrollTo).toHaveBeenLastCalledWith({ y: 420 - space.xl, animated: true });
+  expect(measureLayout.mock.contexts[1]).toBe(measureLayout.mock.contexts[0]); // the same view: the field's own
   await keyboard(320); // the emoji panel: taller
   expect(scrollTo).toHaveBeenCalledTimes(3);
   await keyboard(300); // shorter again: the field is still in view

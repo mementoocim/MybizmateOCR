@@ -15,8 +15,30 @@ PlatformConstants.getConstants = () => ({ ...platformConstants, isDisableAnimati
 // own jest mock resolves false, which took a message down at the next timer tick. This is that mock's own
 // implementation, not a spy over it, so jest.restoreAllMocks() leaves it; a test that wants another answer mocks it
 // again (__tests__/snackbar.test.tsx).
-const { AccessibilityInfo } = require('react-native');
+const { AccessibilityInfo, Text, TextInput, View } = require('react-native');
 jest.mocked(AccessibilityInfo.getRecommendedTimeoutMillis).mockImplementation(async (ms: number) => ms);
+
+// On the device a view is a DOM node (RN's ReactNativeElement): once it has gone, its isConnected is false, and RN logs
+// an error for an accessibility event sent to it. jest's View, Text and TextInput are mock classes with no DOM: this
+// gives their instances the same isConnected, true from mount until unmount, so a test can tell a view that has gone
+// (components/Sheet's focus return checks it).
+const mounted = new WeakSet<object>();
+for (const Host of [View, Text, TextInput]) {
+  Object.assign(Host.prototype, {
+    componentDidMount(this: object) {
+      mounted.add(this);
+    },
+    componentWillUnmount(this: object) {
+      mounted.delete(this);
+    },
+  });
+  Object.defineProperty(Host.prototype, 'isConnected', {
+    configurable: true,
+    get(this: object) {
+      return mounted.has(this);
+    },
+  });
+}
 
 // The scanner module's keyboard view (modules/scanner/src/ImeInsetsNativeView.ts) is native code, which jest doesn't
 // have: a host component of its name stands in for it. A sheet renders it on Android, and a test fires imeChange on it

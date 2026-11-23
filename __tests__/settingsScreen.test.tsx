@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
-import { AccessibilityInfo, Platform, ScrollView, TextInput } from 'react-native';
+import { AccessibilityInfo, Platform, ScrollView, TextInput, View } from 'react-native';
 
 import SettingsScreen from '../app/settings';
 import * as store from '../lib/settings';
@@ -241,20 +241,30 @@ test('the ATC hint warns without blocking, and the value saves as typed', async 
   expect(screen.getByText(ATC_WARNING)).toBeOnTheScreen();
 });
 
-test('a field scrolls into view above the keyboard', async () => {
+test('a field scrolls into view above the keyboard, whole: its label, its input and its helper', async () => {
   await render(<SettingsScreen />);
-  const offset = field('Offset account for 2307s');
-  expect(within(screen.getByTestId('screen-scroll')).getByLabelText('Offset account for 2307s')).toBe(offset);
-  // jest's scroll views and inputs have no layout, and share their native methods: Android's measurements stand in
+  const atc = field('Withholding tax ATC');
+  expect(within(screen.getByTestId('screen-scroll')).getByLabelText('Withholding tax ATC')).toBe(atc);
+  // jest's scroll views and views have no layout, and share their native methods: Android's measurements stand in
   const scrollMethods = ScrollView.prototype as unknown as { getInnerViewRef: jest.Mock; scrollTo: jest.Mock };
-  const inputMethods = TextInput.prototype as unknown as { measureLayout: jest.Mock };
+  const viewMethods = View.prototype as unknown as { measureLayout: jest.Mock };
   const content = {};
   scrollMethods.getInnerViewRef.mockReturnValueOnce(content);
   scrollMethods.scrollTo.mockClear();
-  inputMethods.measureLayout.mockImplementationOnce(
-    (relativeTo, onSuccess) => relativeTo === content && onSuccess(0, 600, 328, touch.target),
+  viewMethods.measureLayout.mockClear();
+  viewMethods.measureLayout.mockImplementationOnce(
+    (relativeTo, onSuccess) => relativeTo === content && onSuccess(0, 600, 328, 3 * touch.target),
   );
-  await act(async () => fireEvent(offset, 'focus'));
+  await act(async () => fireEvent(atc, 'focus'));
+  // What's measured is the field's own view, its label's parent: the label, the input and the helper. (QA pass 2: at
+  // 200%, measuring the input alone left the label half under the header.)
+  const own = screen.getByText('Withholding tax ATC').parent!;
+  expect(within(own).getByLabelText('Withholding tax ATC')).toBe(atc);
+  expect(within(own).getByText(ATC_HELPER)).toBeOnTheScreen();
+  const measured = viewMethods.measureLayout.mock.contexts as { props: { children?: unknown } }[];
+  expect(measured).toHaveLength(1);
+  expect(measured[0]).not.toBeInstanceOf(TextInput);
+  expect(measured[0].props.children).toBe(own.props.children); // jest's View draws its host view with these
   // the Screen's scroll-into-view: measured against the scroll's content, then 24 dp under its top
   expect(scrollMethods.scrollTo).toHaveBeenCalledWith({ y: 600 - space.xl, animated: true });
   // the open keyboard: the end of the scroll grows by its height, so the last field can sit above it

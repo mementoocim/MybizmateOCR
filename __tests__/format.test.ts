@@ -71,11 +71,17 @@ test('times under a second in ms, longer ones in seconds', () => {
 
 test("a read's time in seconds with one decimal, under a second too", () => {
   // design §9.5: the Scan screen's "FROM THE PDF'S TEXT · 0.7 S" and "Read on this phone in 3.2 s"
-  expect(formatSeconds(214)).toBe('0.2 s');
-  expect(formatSeconds(700)).toBe('0.7 s');
-  expect(formatSeconds(3240)).toBe('3.2 s');
-  expect(formatSeconds(12345)).toBe('12.3 s');
-  expect(formatSeconds(0)).toBe('0.0 s');
+  expect(formatSeconds(214)).toBe('0.2\u00A0s');
+  expect(formatSeconds(700)).toBe('0.7\u00A0s');
+  expect(formatSeconds(3240)).toBe('3.2\u00A0s');
+  expect(formatSeconds(12345)).toBe('12.3\u00A0s');
+  expect(formatSeconds(0)).toBe('0.0\u00A0s');
+});
+
+test("a read's time keeps its unit on its line: a no-break space, never a plain one", () => {
+  // QA pass 2, at 100%: a Service Invoice's subtitle wrapped as "INVOICE NO. 8195852 · READ IN 3.7" / "S"
+  expect(formatSeconds(3700)).toBe('3.7\u00A0s');
+  expect(formatSeconds(3700)).not.toContain(' ');
 });
 
 test('a clock time', () => {

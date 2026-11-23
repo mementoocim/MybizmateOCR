@@ -12,7 +12,6 @@ import {
   type ScrollViewInstance,
   StyleSheet,
   Text,
-  type TextInputInstance,
   View,
   type ViewInstance,
 } from 'react-native';
@@ -34,12 +33,17 @@ import { standIn } from '../test-utils/scrollStandIn';
 // action row is pinned under the scroll, above the bottom inset and the keyboard. On Android that's the keyboard in the
 // sheet's own window, as its IME view reports it (RN's keyboard events are the app window's); jest runs as iOS, where
 // the sheet keeps RN's events. Back, Close, the scrim and system back ask before typing is lost. TalkBack focus moves
-// to the title, and back to the opener on close. The ⋮ menu opens under its anchor, over a light scrim. This file's
-// insets: 24 dp at the top, 34 at the bottom. The test setup runs every animation to its end at once; a test that needs
-// the frames or the end stubs Animated.timing or Animated.parallel.
+// to the title, and back to the opener on close, if the opener is still there. The ⋮ menu opens under its anchor, over
+// a light scrim. This file's insets: 24 dp at the top, 34 at the bottom. The test setup runs every animation to its end
+// at once; a test that needs the frames or the end stubs Animated.timing or Animated.parallel.
 
 const BOTTOM = 34;
 const noop = () => {};
+/**
+ * jest's views have no layout, and share their native methods: measureLayout is one jest.fn on every view's prototype,
+ * a TextField's own view's too. A test that stands in a measurement resets it after.
+ */
+const viewMethods = View.prototype as unknown as { measureLayout: jest.Mock };
 const DISCARD = 'Discard what you typed?';
 type EndCallback = NonNullable<Parameters<Animated.CompositeAnimation['start']>[0]>;
 
@@ -386,19 +390,20 @@ test('on iOS a sheet keeps useKeyboardHeight', async () => {
 
 test("a field focused in the sheet scrolls into view again as the sheet's keyboard grows", async () => {
   onAndroid();
-  const input = createRef<TextInputInstance>();
   await show(
     <Sheet visible title="Supplier" onClose={noop} actions={cancelAndSave()}>
-      <TextField label="Supplier's name" value="" onChangeText={noop} inputRef={input} />
+      <TextField label="Supplier's name" value="" onChangeText={noop} />
     </Sheet>,
   );
   // No ref reaches the sheet's own ScrollView, but jest's ScrollViews take their methods from the prototype.
   const scrollViews = (ScrollView as unknown as { prototype: ScrollViewInstance }).prototype;
   const own = { getInnerViewRef: scrollViews.getInnerViewRef, scrollTo: scrollViews.scrollTo };
   const sheet = standIn(scrollViews);
+  // Android's measurement of the field's own view (its label, box and note), 140 dp down the sheet's scroll
+  const measureLayout = viewMethods.measureLayout.mockImplementation(
+    (_relativeTo: unknown, onSuccess: (x: number, y: number) => void) => onSuccess(0, 140),
+  );
   try {
-    const measureLayout = jest.fn((_relativeTo: unknown, onSuccess: (x: number, y: number) => void) => onSuccess(0, 140));
-    Object.assign(input.current!, { measureLayout });
     await fireEvent(screen.getByLabelText("Supplier's name"), 'focus');
     expect(sheet.scrollTo).toHaveBeenCalledTimes(1);
 
@@ -418,6 +423,7 @@ test("a field focused in the sheet scrolls into view again as the sheet's keyboa
     await keyboard(0);
   } finally {
     Object.assign(scrollViews, own);
+    measureLayout.mockReset();
   }
 });
 
@@ -447,13 +453,12 @@ test("the body's sides: the 16 dp gutter, or none for full-bleed rows (ruling T1
 
 test("its fields scroll the sheet's own scroll, never the Screen behind it", async () => {
   const behindRef = createRef<ScrollViewInstance>();
-  const input = createRef<TextInputInstance>();
   await show(
     <Screen header={null} scrollRef={behindRef}>
       <Text>The Scan screen</Text>
       {/* A sheet, rendered from the screen's children: a Modal, which React context passes through. */}
       <Sheet visible title="Supplier" onClose={noop}>
-        <TextField label="Supplier's name" value="" onChangeText={noop} inputRef={input} />
+        <TextField label="Supplier's name" value="" onChangeText={noop} />
       </Sheet>
     </Screen>,
   );
@@ -462,9 +467,11 @@ test("its fields scroll the sheet's own scroll, never the Screen behind it", asy
   const scrollViews = (ScrollView as unknown as { prototype: ScrollViewInstance }).prototype;
   const own = { getInnerViewRef: scrollViews.getInnerViewRef, scrollTo: scrollViews.scrollTo };
   const sheet = standIn(scrollViews);
+  // Android's measurement of the field's own view (its label, box and note), 140 dp down the sheet's scroll
+  const measureLayout = viewMethods.measureLayout.mockImplementation(
+    (_relativeTo: unknown, onSuccess: (x: number, y: number) => void) => onSuccess(0, 140),
+  );
   try {
-    const measureLayout = jest.fn((_relativeTo: unknown, onSuccess: (x: number, y: number) => void) => onSuccess(0, 140));
-    Object.assign(input.current!, { measureLayout });
     await fireEvent(screen.getByLabelText("Supplier's name"), 'focus');
     expect(measureLayout).toHaveBeenCalledTimes(1);
     expect(measureLayout.mock.calls[0][0]).toBe(sheet.content); // measured in the sheet's scroll, not the Screen's
@@ -472,6 +479,7 @@ test("its fields scroll the sheet's own scroll, never the Screen behind it", asy
     expect(behind.scrollTo).not.toHaveBeenCalled();
   } finally {
     Object.assign(scrollViews, own);
+    measureLayout.mockReset();
   }
 });
 
@@ -607,6 +615,59 @@ test('once a sheet has closed and given focus back, unmounting it sends nothing 
   expect(focus).toHaveBeenLastCalledWith(opener.current, 'focus');
   await screen.rerender(ui('gone'));
   expect(focus).toHaveBeenCalledTimes(2);
+});
+
+test('an opener that has gone before the sheet gets no focus back, and nothing is logged', async () => {
+  // QA pass 2: as Android restarted the activity for a new font size, with the Scan screen's box sheet up, the dev
+  // build logged "sendAccessibilityEvent was called with a ref that isn't a native component". On the device, RN logs
+  // that for a view that has gone; the mock does the same here. (The test setup gives jest's views isConnected.)
+  const focus = jest.mocked(AccessibilityInfo.sendAccessibilityEvent).mockImplementation((view) => {
+    if (!(view as ViewInstance).isConnected) {
+      console.error("sendAccessibilityEvent was called with a ref that isn't a native component.");
+    }
+  });
+  const error = jest.spyOn(console, 'error').mockImplementation(noop);
+  const warn = jest.spyOn(console, 'warn').mockImplementation(noop);
+  // The Scan screen keeps each sheet's opener by hand (the row it opened from), which nothing clears when the row goes.
+  const opener = createRef<ViewInstance>();
+  const keep = (view: ViewInstance | null) => {
+    if (view) opener.current = view;
+  };
+  const ui = (row: boolean, visible = true) => (
+    <>
+      {row && <View ref={keep} />}
+      <Sheet visible={visible} title="SI no." onClose={noop} returnFocus={opener} />
+    </>
+  );
+  try {
+    // The whole screen goes at once, the row and the sheet up over it.
+    await show(ui(true));
+    expect(focus).toHaveBeenCalledTimes(1); // the title, once it was up
+    focus.mockClear();
+    await screen.unmount();
+    expect(opener.current).not.toBeNull(); // still kept, as the Scan screen keeps it
+    expect(focus).not.toHaveBeenCalled();
+
+    // The row goes while the sheet is up, then the sheet closes.
+    await show(ui(true));
+    focus.mockClear();
+    await screen.rerender(ui(false));
+    await screen.rerender(ui(false, false)); // its exit motion ends at once here
+    expect(screen.queryByTestId('sheet', { includeHiddenElements: true })).toBeNull();
+    expect(focus).not.toHaveBeenCalled();
+
+    // Kept the same way but still there as the sheet closes, the opener gets the focus back.
+    await screen.rerender(ui(true));
+    focus.mockClear();
+    await screen.rerender(ui(true, false));
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(focus).toHaveBeenLastCalledWith(opener.current, 'focus');
+
+    expect(error).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+  } finally {
+    focus.mockReset(); // the preset's mock again, with nothing of its own
+  }
 });
 
 test('useLingering keeps the last value it was given, follows a new one, and holds it through a null', async () => {

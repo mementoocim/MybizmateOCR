@@ -8,6 +8,7 @@ import {
   type TextInputInstance,
   type TextInputProps,
   View,
+  type ViewInstance,
 } from 'react-native';
 
 import { colors, radius, space, touch, type } from '../lib/theme';
@@ -22,9 +23,10 @@ import { useKeyboardHeight, useScrollIntoView } from './Screen';
 // also what TalkBack hears as the field's hint. Autocorrect is always off: an edit means "the box says this". A search
 // field leads with its icon, and ends with a clear button while there's text, which gives the field the focus as it
 // goes.
-// Taking focus, the field asks the nearest ScrollIntoViewScope (the Screen's, or a sheet's) to scroll it into view.
-// The keyboard opens after that, and the end of the scroll grows with it, so the field asks again whenever the
-// keyboard grows while it has focus (ruling T5-2).
+// Taking focus, the field asks the nearest ScrollIntoViewScope (the Screen's, or a sheet's) to scroll it into view:
+// the whole field, its label, box and note, not only the box, whose label would sit above the scroll's top, under the
+// header, at a large font size (QA pass 2). The keyboard opens after that, and the end of the scroll grows with it, so
+// the field asks again whenever the keyboard grows while it has focus (ruling T5-2).
 
 const BORDER = 1;
 const FOCUS_BORDER = 2;
@@ -91,11 +93,12 @@ export function TextField({
   const input = useRef<TextInputInstance>(null);
   // The caller's ref gets the same input.
   useImperativeHandle<TextInputInstance | null, TextInputInstance | null>(inputRef, () => input.current);
+  const field = useRef<ViewInstance>(null); // the whole field: what scrolls into view
   const scrollIntoView = useScrollIntoView();
   const keyboard = useKeyboardHeight();
   const lastKeyboard = useRef(keyboard);
   useEffect(() => {
-    if (focused && keyboard > lastKeyboard.current) scrollIntoView(input.current);
+    if (focused && keyboard > lastKeyboard.current) scrollIntoView(field.current);
     lastKeyboard.current = keyboard;
   }, [focused, keyboard, scrollIntoView]);
 
@@ -108,7 +111,7 @@ export function TextField({
         : null;
 
   return (
-    <View style={styles.field}>
+    <View ref={field} style={styles.field}>
       {hideLabel ? null : <Text style={[type.label, styles.label]}>{label}</Text>}
       <View style={[styles.box, focused && styles.boxFocused]}>
         {Leading ? <Leading size={touch.iconSmall} color={colors.chevron} /> : null}
@@ -128,7 +131,7 @@ export function TextField({
           underlineColorAndroid="transparent" // the box is the field: no EditText underline inside it
           onFocus={() => {
             setFocused(true);
-            scrollIntoView(input.current);
+            scrollIntoView(field.current);
             onFocus?.();
           }}
           onBlur={() => {
