@@ -1,4 +1,4 @@
-import { amount, formatClock, formatMs, monthDay, monthSpan, peso, prettyDate, qty } from '../lib/format';
+import { amount, formatClock, formatMs, monthDay, monthSpan, monthYear, peso, prettyDate, qty } from '../lib/format';
 
 test('amount: rows without the peso sign', () => {
   expect(amount(5810.5)).toBe('5,810.50');
@@ -10,6 +10,15 @@ test('amount: rows without the peso sign', () => {
 test('monthDay', () => {
   expect(monthDay('2026-11-22')).toBe('Nov 22');
   expect(monthDay('2026-01-05')).toBe('Jan 5');
+});
+
+test('monthYear', () => {
+  // Saved's month sections: a date's first 7 characters, the month in full
+  expect(monthYear('2026-11')).toBe('November 2026');
+  expect(monthYear('2026-03')).toBe('March 2026');
+  expect(monthYear('2026-01')).toBe('January 2026');
+  expect(monthYear('2025-12')).toBe('December 2025');
+  expect(monthYear('2026-09-20'.slice(0, 7))).toBe('September 2026');
 });
 
 test('pesos, quantities and dates as the test app writes them', () => {

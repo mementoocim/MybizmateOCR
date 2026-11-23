@@ -1,23 +1,76 @@
-import { useRouter } from 'expo-router';
-import { useState, useSyncExternalStore } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { SectionList, StyleSheet, View, type ViewInstance } from 'react-native';
 
-import { OutlinedButton, TextButton } from '../components/Buttons';
+import type { BadgeSpec } from '../components/Badge';
+import { BottomBar } from '../components/BottomBar';
+import { ChoiceChips } from '../components/ChoiceChips';
+import { EmptyState } from '../components/EmptyState';
 import { ExportSheet } from '../components/ExportSheet';
-import { peso, prettyDate } from '../lib/format';
-import { lists, newParties, subscribeLists } from '../lib/lists';
-import { deleteSaved, openSaved, type SavedSummary, savedList, subscribeSaved } from '../lib/saved';
+import { Header } from '../components/Header';
+import { Share } from '../components/icons';
+import { ListRow } from '../components/ListRow';
+import { Screen, useEndPadding } from '../components/Screen';
+import { SectionHeader } from '../components/SectionHeader';
+import { useLingering } from '../components/Sheet';
+import { confirmDeleteSaved } from '../lib/confirmDelete';
+import { waitingOf } from '../lib/exportFile';
+import { amount, monthDay, monthYear } from '../lib/format';
+import { openSaved, type SavedSummary, savedList, subscribeSaved } from '../lib/saved';
 import type { Kind } from '../lib/scans';
-import { bold, colors } from '../lib/theme';
+import { space } from '../lib/theme';
 import { toast } from '../lib/toast';
 
-// Saved invoices: the scans saved as sales, purchases or 2307s, newest first, each ready to export to MyBizMate.
+// Design B §9.7: Saved, the scans saved as sales, purchases and 2307s. The header says how many wait to export, by the
+// export's own rule (lib/exportFile's waitingOf: ruling T17-3). Chips filter the list by kind, each with its count, a
+// kind with nothing saved left out; Saved opens at the kind Home's To export row or a save's View asked for. The list
+// (virtualized) goes by the month of each document's date (an invoice's date, a 2307's period end: the month the
+// export's This month and Last month count it in), newest first; within a month, by that date, then the time saved,
+// newest first. A row says the party, its kind, date and number, the amount (a 2307's tax withheld) and To export or
+// Exported. It opens the scan, and a long press asks to delete it, in the Scan screen's ⋮ words (lib/confirmDelete).
+// The bottom bar's one Export… opens the export at the filtered kind, or at its list of files.
+
+type Filter = Kind | 'all';
+
+/** Each kind's chip, in this order. */
+const KINDS: readonly { kind: Kind; chip: string }[] = [
+  { kind: 'sale', chip: 'Sales' },
+  { kind: 'purchase', chip: 'Purchases' },
+  { kind: '2307', chip: '2307s' },
+];
+/** A filter with nothing to show: "No purchases saved". */
+const PLURALS: Record<Kind, string> = { sale: 'sales', purchase: 'purchases', '2307': '2307s' };
+
+const TO_EXPORT: BadgeSpec = { label: 'To export', tone: 'brand' };
+const EXPORTED: BadgeSpec = { label: 'Exported', tone: 'neutral' };
+
+/** A month's section: the month ("2026-11") and its saved scans, newest first. */
+type Month = { month: string; key: string; data: SavedSummary[] };
+
 export default function SavedScreen() {
   const router = useRouter();
+  const { kind } = useLocalSearchParams<{ kind?: Kind }>();
   const all = useSyncExternalStore(subscribeSaved, savedList);
-  const theLists = useSyncExternalStore(subscribeLists, lists);
-  const [exporting, setExporting] = useState<Kind | 'parties' | null>(null);
-  const fromScans = newParties(theLists, true).length > 0;
+  // Home's To export row and a save's View ask for a kind; anything else, or none, is All
+  const [filter, setFilter] = useState<Filter>(() => KINDS.find((k) => k.kind === kind)?.kind ?? 'all');
+  // The export: the kind it opens at, and a key per opening, so each starts afresh; kept while it slides away.
+  const [exportOpen, setExportOpen] = useState<{ n: number; kind: Kind | null } | null>(null);
+  const exporting = useLingering(exportOpen);
+  const openings = useRef(0);
+  const exportButton = useRef<ViewInstance>(null); // Export…: TalkBack focus goes back to it once the sheet has gone
+  const anySaved = all.length > 0;
+  const end = useEndPadding(anySaved);
+
+  const waiting = useMemo(() => new Set(waitingOf(null, all)), [all]);
+  const sections = useMemo(() => byMonth(filter === 'all' ? all : all.filter((s) => s.kind === filter)), [all, filter]);
+  const options: { value: Filter; label: string }[] = [
+    { value: 'all', label: `All ${all.length}` },
+    ...KINDS.flatMap(({ kind: k, chip }) => {
+      const n = all.filter((s) => s.kind === k).length;
+      return n > 0 ? [{ value: k, label: `${chip} ${n}` }] : [];
+    }),
+  ];
+  const subtitle = !anySaved ? null : waiting.size > 0 ? `${waiting.size} to export` : 'All exported';
 
   async function open(id: string) {
     const scan = await openSaved(id);
@@ -28,97 +81,105 @@ export default function SavedScreen() {
     router.push({ pathname: '/result', params: { id, from: 'saved' } });
   }
 
-  function remove(id: string) {
-    Alert.alert('Delete this saved invoice?', "It's removed from this phone. Files you already exported don't change.", [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => void deleteSaved(id) },
-    ]);
+  function openExport() {
+    openings.current += 1;
+    setExportOpen({ n: openings.current, kind: filter === 'all' ? null : filter });
   }
 
   return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content}>
-        {all.length === 0 ? (
-          <Text style={styles.empty}>
-            No saved invoices yet. Save a scan as a sale or a purchase, and it shows here, ready to export to MyBizMate.
-          </Text>
-        ) : (
-          <View style={styles.list}>
-            {all.map((s) => (
-              <Pressable
-                key={s.id}
-                accessibilityRole="button"
-                accessibilityHint="Long-press to delete"
-                onPress={() => void open(s.id)}
-                onLongPress={() => remove(s.id)}
-                style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-                <View style={styles.words}>
-                  <Text style={styles.name}>{s.partyName}</Text>
-                  <Text style={styles.line}>{lineOf(s)}</Text>
-                </View>
-                <Text style={s.exportedAt ? styles.done : styles.todo}>{s.exportedAt ? 'Exported' : 'To export'}</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-      {fromScans && (
-        <View style={styles.parties}>
-          <TextButton label="Export new customers and suppliers" onPress={() => setExporting('parties')} />
-        </View>
-      )}
-      {all.length > 0 && (
-        <View style={styles.bottom}>
-          <View style={styles.pair}>
-            <View style={styles.button}>
-              <OutlinedButton label="Export sales" onPress={() => setExporting('sale')} />
-            </View>
-            <View style={styles.button}>
-              <OutlinedButton label="Export purchases" onPress={() => setExporting('purchase')} />
-            </View>
-          </View>
-          <OutlinedButton label="Export 2307s" onPress={() => setExporting('2307')} />
-        </View>
-      )}
-      {exporting && <ExportSheet visible kind={exporting} onClose={() => setExporting(null)} />}
+    <View style={styles.root}>
+      <Screen
+        scroll={false}
+        header={<Header title="Saved" subtitle={subtitle} />}
+        bottom={
+          anySaved ? (
+            <BottomBar
+              buttons={[{ label: 'Export…', icon: Share, onPress: openExport, ref: exportButton, testID: 'export-open' }]}
+            />
+          ) : undefined
+        }>
+        <SectionList
+          testID="saved-list"
+          sections={sections}
+          keyExtractor={(s) => s.id}
+          stickySectionHeadersEnabled={false} // as Android has it
+          ListHeaderComponent={
+            anySaved ? (
+              <View style={styles.filter}>
+                <ChoiceChips<Filter> label="Show" showLabel={false} options={options} value={filter} onChange={setFilter} />
+              </View>
+            ) : undefined
+          }
+          ListEmptyComponent={
+            !anySaved ? (
+              <EmptyState
+                title="Nothing saved yet"
+                body="Save a scan and it shows up here, ready to export."
+                actions={[{ label: 'Take photo', onPress: () => router.push('/camera') }]}
+              />
+            ) : filter === 'all' ? undefined : (
+              <EmptyState title={`No ${PLURALS[filter]} saved`} />
+            )
+          }
+          renderSectionHeader={({ section }) => <SectionHeader title={monthYear(section.month)} />}
+          renderItem={({ item }) => (
+            <ListRow
+              title={item.partyName || item.label}
+              sub={subOf(item)}
+              subMono
+              subCaps
+              amount={amount(item.kind === '2307' ? item.tax : item.gross)}
+              badge={waiting.has(item) ? TO_EXPORT : EXPORTED}
+              onPress={() => void open(item.id)}
+              onLongPress={() => confirmDeleteSaved(item.id)}
+              accessibilityHint="Long-press to delete"
+            />
+          )}
+          contentContainerStyle={{ paddingBottom: end }}
+        />
+      </Screen>
+      {exporting ? (
+        <ExportSheet
+          key={exporting.n}
+          visible={exportOpen !== null}
+          kind={exporting.kind}
+          onClose={() => setExportOpen(null)}
+          returnFocus={exportButton}
+        />
+      ) : null}
     </View>
   );
 }
 
-/** A saved one's line under its party: a sale's or a purchase's date and gross; a 2307's period and tax withheld. */
-function lineOf(s: SavedSummary): string {
-  if (s.kind === '2307') return `2307 · ${s.period} · Tax ${peso(s.tax)}`;
-  return `${s.kind === 'sale' ? 'Sale' : 'Purchase'} · ${prettyDate(s.date) ?? '—'} · ${peso(s.gross)}`;
+/**
+ * The saved scans by the month of their document's date, newest first; within a month by that date, then by the time
+ * each was saved, newest first.
+ */
+function byMonth(list: readonly SavedSummary[]): Month[] {
+  const newest = [...list].sort((a, b) => b.date.localeCompare(a.date) || b.savedAt.localeCompare(a.savedAt));
+  const months: Month[] = [];
+  for (const s of newest) {
+    const month = s.date.slice(0, 7);
+    const last = months.at(-1);
+    if (last?.month === month) last.data.push(s);
+    else months.push({ month, key: month, data: [s] });
+  }
+  return months;
+}
+
+/**
+ * A row's sub-line, in caps by its style: an invoice's kind, date and number ("Sale · Nov 22 · SI 5184138",
+ * "Purchase · Nov 18 · Inv 0007", or without the number when it has none); a 2307's quarter ("2307 · Q1 2026").
+ */
+function subOf(s: SavedSummary): string {
+  if (s.kind === '2307') return `2307 · ${s.period}`;
+  const sale = s.kind === 'sale';
+  const no = s.row[sale ? 'SI/OR No.' : 'Inv No.'];
+  return `${sale ? 'Sale' : 'Purchase'} · ${monthDay(s.date)}${no ? ` · ${sale ? 'SI' : 'Inv'} ${no}` : ''}`;
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.paper },
-  content: { padding: 16, paddingBottom: 24 },
-  empty: { fontSize: 15, color: colors.mute, lineHeight: 22 },
-  list: { backgroundColor: colors.panel, borderRadius: 18, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 16 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  pressed: { opacity: 0.6 },
-  words: { flex: 1 },
-  name: { ...bold, fontSize: 15, color: colors.ink },
-  line: { fontSize: 13, color: colors.mute, marginTop: 2 },
-  todo: { ...bold, fontSize: 13, color: colors.coralText },
-  done: { fontSize: 13, color: colors.mute },
-  bottom: {
-    gap: 12,
-    padding: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
-    backgroundColor: colors.panel,
-  },
-  // the invoices' two exports side by side, the 2307s' under them: three across don't fit a phone with one-line words
-  pair: { flexDirection: 'row', gap: 12 },
-  button: { flex: 1 },
-  parties: { alignItems: 'center', paddingVertical: 4, backgroundColor: colors.panel },
+  root: { flex: 1 },
+  // the chips on the gutter, over the first month's strip (ChoiceChips has no margin of its own)
+  filter: { paddingHorizontal: space.l, paddingVertical: space.m },
 });

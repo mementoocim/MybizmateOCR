@@ -9,6 +9,7 @@ import { localIsoDate } from '../lib/checks/dates';
 import { blockWords, saveBlock } from '../lib/exportRows';
 import { amount, formatClock, formatMs, monthDay, peso, qty } from '../lib/format';
 import { clearItems, lists } from '../lib/lists';
+import * as savedStore from '../lib/saved';
 import { markExported, savedSummary, saveScan } from '../lib/saved';
 import { addScan, confirmBox, getScan, loadRecent, setEdit, updateScan } from '../lib/scans';
 import type { ScanSource } from '../lib/scans';
@@ -784,6 +785,25 @@ test('deleting from ⋮ when the navigator lets go of the screen at once: still 
   expect(flashes).toBe(0);
   expect(savedSummary(id)).toBeUndefined();
   expect(getScan(id)).toBeUndefined();
+});
+
+test('deleting from ⋮: a delete that fails says so, once the screen has gone back', async () => {
+  // Saved's long press asks the same and says the same (ruling T19-2)
+  const remove = jest.spyOn(savedStore, 'deleteSaved').mockRejectedValueOnce(new Error('EACCES: permission denied'));
+  const id = await showSaved('inv_0007');
+  placeMenu();
+  await press(button('More options'));
+  await press(screen.getByRole('menuitem', { name: 'Delete saved scan' }));
+  await act(async () => alertButtons()[1].onPress!());
+  // Review Focus 4's order: back, then the delete, in the same press
+  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  expect(remove).toHaveBeenCalledTimes(1);
+  expect(remove).toHaveBeenCalledWith(id);
+  expect(mockRouter.back.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
+  expect(mockToast).toHaveBeenCalledTimes(1);
+  expect(mockToast).toHaveBeenCalledWith("Couldn't delete the scan.");
+  expect(savedSummary(id)).toBeDefined(); // still saved, so still in Saved
+  remove.mockRestore();
 });
 
 test('a scan that is gone says so', async () => {

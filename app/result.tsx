@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   AccessibilityInfo,
-  Alert,
   Image,
   type ScrollViewInstance,
   StyleSheet,
@@ -33,6 +32,7 @@ import { Tap } from '../components/Tap';
 import { TermsSheet } from '../components/TermsSheet';
 import { TEAM_BUILD } from '../lib/build';
 import { localIsoDate } from '../lib/checks/dates';
+import { confirmDeleteSaved } from '../lib/confirmDelete';
 import { blockWords, saveBlock } from '../lib/exportRows';
 import { flagTarget } from '../lib/flagTargets';
 import { formatClock, formatMs, monthDay } from '../lib/format';
@@ -40,7 +40,7 @@ import { FORMS } from '../lib/forms';
 import { addItem } from '../lib/lists';
 import { boxValue, type SaleView } from '../lib/sale';
 import { compareWithSample, sampleInfo } from '../lib/samples';
-import { deleteSaved, type SavedSummary } from '../lib/saved';
+import type { SavedSummary } from '../lib/saved';
 import { useScanFlow } from '../lib/scanFlow';
 import { shownLabel, useScanCheck } from '../lib/scanState';
 import { getScan, type InvoiceKind, type StoredScan, subscribeRecent, updateScan } from '../lib/scans';
@@ -197,22 +197,15 @@ export default function Result() {
   }
 
   /**
-   * ⋮ › Delete saved scan. The screen shows only its header from then on, so the scan's going never shows as "This scan
-   * is no longer here": React renders the scans' change, the navigator's and this state's together (one sync batch).
+   * ⋮ › Delete saved scan, asked as Saved's long press asks it (lib/confirmDelete). Delete first leaves, then deletes,
+   * in the one press: the screen shows only its header from then on, so the scan's going never shows as "This scan is
+   * no longer here": React renders the scans' change, the navigator's and this state's together (one sync batch).
    */
   function confirmDelete(scanId: string) {
-    Alert.alert('Delete this saved scan?', "It's removed from this phone. Files you already exported don't change.", [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          setLeaving({ title, subtitle });
-          router.back();
-          void deleteSaved(scanId);
-        },
-      },
-    ]);
+    confirmDeleteSaved(scanId, () => {
+      setLeaving({ title, subtitle });
+      router.back();
+    });
   }
 
   const retake = () => flow.retake(scan, back);
