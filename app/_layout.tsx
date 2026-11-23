@@ -29,7 +29,7 @@ export default function RootLayout() {
         <Stack.Screen name="result" options={{ headerShown: false }} />
         <Stack.Screen name="speed" options={{ title: 'Speed test' }} />
         <Stack.Screen name="training" options={{ title: 'Training data' }} />
-        <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="saved" options={{ headerShown: false }} />
         <Stack.Screen name="lists" options={{ headerShown: false }} />
         <Stack.Screen name="licenses" options={{ headerShown: false }} />

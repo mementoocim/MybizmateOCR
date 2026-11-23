@@ -399,6 +399,22 @@ test('LedgerRow forwards its ref to the row itself, pressable or not', async () 
   expect(propsOf(still)).toMatchObject({ testID: 'row-gross', accessibilityLabel: 'Gross, ₱5,810.50' });
 });
 
+test('ListRow gives its ref the row itself, pressable or not', async () => {
+  // A closing sheet gives TalkBack focus back to the row that opened it (§7): Settings' Privacy.
+  const pressable = createRef<ViewInstance>();
+  const still = createRef<ViewInstance>();
+  await render(
+    <>
+      <ListRow ref={pressable} title="Privacy" chevron onPress={noop} />
+      <ListRow ref={still} title="Version" amount="1.0.0 (12)" />
+    </>,
+  );
+  // (jest-expo renders host views as mocks; a ref holds the mock, whose props are the view's)
+  const propsOf = (ref: { current: ViewInstance | null }) => (ref.current as unknown as { props: object }).props;
+  expect(propsOf(pressable)).toMatchObject({ accessibilityRole: 'button', accessibilityLabel: 'Privacy' });
+  expect(propsOf(still)).toMatchObject({ accessible: true, accessibilityLabel: 'Version, 1.0.0 (12)' });
+});
+
 test('long values are never cut', async () => {
   // Review Focus 5: a 60-character name and ₱12,345,678.90 show in full, wrapping where they must.
   expect(LONG_NAME).toHaveLength(60);
