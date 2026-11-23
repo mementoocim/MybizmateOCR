@@ -18,6 +18,7 @@ import {
 import { colors, durations, elevation, radius, space, touch, type } from '../lib/theme';
 import { toast } from '../lib/toast';
 import { keyboard } from '../test-utils/keyboard';
+import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §5.5, §5.6 and §8, and the plan's call 4: the snackbar, in place of Android's toasts. Ink, with paper text
 // and an optional action in brand; a polite live region; up for the time the phone recommends for 4 s, or for 8 s with
@@ -149,6 +150,7 @@ test('its action runs once and dismisses it', async () => {
   await raise('Saved as a sale', { label: 'View', onPress });
   const view = screen.getByRole('button', { name: 'View' });
   expect(within(snackbar()).getByText('View')).toHaveStyle({ ...type.button, color: colors.brand });
+  expect(typeStylesOf(within(snackbar()).getByText('View'))).toEqual(['button']); // jest runs as iOS: value alike
   expect(view).toHaveStyle({ minHeight: touch.target });
   await fireEvent.press(view);
   expect(onPress).toHaveBeenCalledTimes(1);

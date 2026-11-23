@@ -179,7 +179,7 @@ test('the reading itself removes the edit', () => {
   expect(getScan(id).edits).toEqual({});
 });
 
-test('a saved scan opened from Saved invoices can be found and changed', () => {
+test('a saved scan opened from Saved can be found and changed', () => {
   const { cacheScan, getScan, updateScan } = require('../lib/scans');
   cacheScan({ id: 'saved-1', label: 'Camera photo', source: 'camera', at: new Date(), result: result('/s/d'), edits: {},
     terms: null, kind: 'sale', party: null, saved: null });

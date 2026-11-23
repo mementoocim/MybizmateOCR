@@ -12,6 +12,7 @@ import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 import { memoryFs } from '../test-utils/memoryFs';
 import { PACK_LISTS } from '../test-utils/packLists';
+import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Task 2's made-up 2307s (fixtures/core/expected2307) as scans: a text PDF, a picture PDF or a photo, each box read as
 // written. The customers, when there are any, are the Python's synthetic scan pack, whose names the made-up payors use.
@@ -129,6 +130,8 @@ test("a 2307's sections", async () => {
 
   expect(screen.getByText('Peñaflor, Ma. Teresa Lim')).toBeTruthy();
   expect(screen.getByText('TIN 746-851-963-00000 · ZIP 3306')).toHaveStyle(type.figureSmall);
+  // jest runs as iOS, where a label flattens as figureSmall does: the style itself tells them apart
+  expect(typeStylesOf(screen.getByText('TIN 746-851-963-00000 · ZIP 3306'))).toEqual(['figureSmall']);
 
   expect(screen.getByText('Castillo Eatery')).toBeTruthy();
   // RNTL's default matcher collapses the sub's line break into a space
@@ -154,6 +157,7 @@ test("a 2307's sections", async () => {
   for (const [title, total, tax] of payments) {
     expect(button(`${title}, ${total}, Tax ${tax}`)).toBeTruthy();
     expect(screen.getByText(total)).toHaveStyle(type.figureSmall);
+    expect(typeStylesOf(screen.getByText(total))).toEqual(['figureSmall']);
     expect(screen.getByText(tax)).toHaveStyle(type.figure);
   }
 
@@ -163,9 +167,11 @@ test("a 2307's sections", async () => {
   // each table's total row: its total, in mono as a payment's (ruling T12-2), and its tax, with the peso sign
   expect(button('Income payments, Total ₱1,375,018.56, Tax ₱47,937.78')).toBeTruthy();
   expect(screen.getByText('Total ₱1,375,018.56')).toHaveStyle(type.figureSmall);
+  expect(typeStylesOf(screen.getByText('Total ₱1,375,018.56'))).toEqual(['figureSmall']);
   expect(screen.getByText('₱47,937.78')).toHaveStyle(type.figureStrong);
   expect(button('Business tax, Total ₱189,255.11, Tax ₱9,462.76')).toBeTruthy();
   expect(screen.getByText('Total ₱189,255.11')).toHaveStyle(type.figureSmall);
+  expect(typeStylesOf(screen.getByText('Total ₱189,255.11'))).toEqual(['figureSmall']);
   expect(screen.getByText('₱9,462.76')).toHaveStyle(type.figureStrong);
 
   // none of an invoice's; saved as a 2307

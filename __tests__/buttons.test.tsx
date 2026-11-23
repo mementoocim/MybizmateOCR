@@ -6,6 +6,7 @@ import { IconButton } from '../components/IconButton';
 import { Flashlight, SettingsIcon } from '../components/icons';
 import { Tap } from '../components/Tap';
 import { colors, radius, ripple, type } from '../lib/theme';
+import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §5.5 and §5.6: one pressable (Tap) with the Android ripple and a keyboard focus ring; the Button's
 // variants, sizes and states; and the 48 dp IconButton. The ripple itself is native, so these tests read the styles,
@@ -123,6 +124,7 @@ test('large is at least 56 dp, default 48, and neither has a fixed height', asyn
   expect(button('Cancel')).toHaveStyle({ minHeight: 48, height: undefined }); // a text button is a 48 dp target too
   expect(screen.getByText('Take photo')).toHaveStyle(type.buttonLarge);
   expect(screen.getByText('Save')).toHaveStyle(type.button);
+  expect(typeStylesOf(screen.getByText('Save'))).toEqual(['button']); // jest runs as iOS: value flattens alike here
 });
 
 test('IconButton is a labelled 48 dp target, and a switch carries its state', async () => {
@@ -151,7 +153,7 @@ test('a switch IconButton given no checked state says it is off, never undefined
   expect(flashlight).not.toBeChecked();
 });
 
-test("a text button on the camera: a coral label and the camera's white ripple", async () => {
+test('a text button on the camera: a brand label and the dark ripple; the primary and a text button elsewhere keep theirs', async () => {
   // Android draws the ripple from the pressable's nativeBackgroundAndroid; jest runs as iOS, which has none.
   const os = jest.replaceProperty(Platform, 'OS', 'android');
   try {

@@ -1,5 +1,4 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
-import { TextInput } from 'react-native';
 
 import Result from '../app/result';
 import { Check, type IconComponent } from '../components/icons';
@@ -10,8 +9,10 @@ import { currentSnack, dismissSnack } from '../lib/snackbar';
 import { colors, touch, type } from '../lib/theme';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
+import { clearFieldsFocused, fieldsFocused } from '../test-utils/fieldFocus';
 import { memoryFs } from '../test-utils/memoryFs';
 import { pinToday } from '../test-utils/today';
+import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §9.5: the party sheet (what the camera saw in the customer's boxes, then "In your customers" with the match
 // and why, or "Not in your customers" with a New badge, since it goes out as written), its picker (a search, focused
@@ -92,10 +93,6 @@ const sheetButtons = () =>
     .filter((name) => name !== 'Close' && name !== 'Done');
 /** The picker's rows, as TalkBack says them. */
 const found = () => sheet().queryAllByTestId(/^party-/).map((row) => row.props.accessibilityLabel);
-/** jest's text inputs share their native methods' mocks: the fields focus() was called on, by their spoken names. */
-const fieldFocus = (TextInput as unknown as { prototype: { focus: jest.Mock } }).prototype.focus;
-const fieldsFocused = () =>
-  fieldFocus.mock.contexts.map((field: { props: { accessibilityLabel?: string } }) => field.props.accessibilityLabel);
 type Instance = ReturnType<typeof screen.getByText>;
 /** The icons under a node drawn in a color. */
 const iconsIn = (node: Instance, color: string) => node.queryAll((n) => n.props.stroke === color);
@@ -135,9 +132,13 @@ test('In your customers, with the match and its reason', async () => {
   const torres = sheet().getByLabelText('Torres Construction Supply, TIN 223-344-556-00000');
   expect(within(torres).getByText('Torres Construction Supply')).toHaveStyle({ ...type.value, color: colors.ink });
   expect(within(torres).getByText('TIN 223-344-556-00000')).toHaveStyle(type.figureSmall);
+  // jest runs as iOS, where value and button flatten alike, and so do figureSmall and label: the styles themselves
+  expect(typeStylesOf(within(torres).getByText('Torres Construction Supply'))).toEqual(['value']);
+  expect(typeStylesOf(within(torres).getByText('TIN 223-344-556-00000'))).toEqual(['figureSmall']);
   expect(sheet().getByText('Matched by its TIN and name.')).toHaveStyle({ ...type.body, color: colors.mute });
   expect(sheetButtons()).toEqual(['Choose another']);
   expect(sheet().getByText('Choose another')).toHaveStyle({ ...type.button, color: colors.brandText }); // a text button
+  expect(typeStylesOf(sheet().getByText('Choose another'))).toEqual(['button']);
   expect(sheet().queryByText('New', { includeHiddenElements: true })).toBeNull();
 
   // The closest match: That's the one, Choose another, or add the name as written
@@ -263,6 +264,7 @@ test("the picker's search is focused and finds Peña by pena", async () => {
   expect(found()).toHaveLength(everyone);
   expect(found()).toContain('Peña Hardware, TIN 900-000-004-00000 · C021');
   expect(sheet().getByText('TIN 900-000-004-00000 · C021')).toHaveStyle(type.figureSmall);
+  expect(typeStylesOf(sheet().getByText('TIN 900-000-004-00000 · C021'))).toEqual(['figureSmall']);
 
   // case and accents aside, either way round
   for (const query of ['pena', 'PEÑA HARD', ' peña ']) {
@@ -280,7 +282,7 @@ test("the picker's search is focused and finds Peña by pena", async () => {
 
   // Clear the search: every customer again, and typing goes on in the field (the clear button that had the focus is
   // gone with the text)
-  fieldFocus.mockClear();
+  clearFieldsFocused();
   await press(screen.getByRole('button', { name: 'Clear the search' }));
   expect(search().props.value).toBe('');
   expect(found()).toHaveLength(everyone);

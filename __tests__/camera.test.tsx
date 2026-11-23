@@ -9,6 +9,7 @@ import { getScan } from '../lib/scans';
 import { colors, radius, touch, type } from '../lib/theme';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
+import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §9.3: the camera. The preview, its outline, auto-capture and the checks are native. Over them: Close, with
 // no title, the Auto switch and the flashlight switch; the status pill; the gallery (an icon over its label) and the
@@ -313,6 +314,7 @@ test("a start failure: The camera couldn't start and Try again; the raw message 
   await send('cameraError', { code: 'start', message: 'boom' });
   expect(header(CAMERA_TEXT.startTitle)).toBeTruthy();
   expect(screen.getByText('boom')).toHaveStyle({ ...type.figureSmall, color: colors.cameraMute });
+  expect(typeStylesOf(screen.getByText('boom'))).toEqual(['figureSmall']); // jest runs as iOS: label flattens alike
 });
 
 test('permission: Allow the camera, then Camera access is off with Open settings', async () => {

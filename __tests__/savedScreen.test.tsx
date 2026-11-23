@@ -213,6 +213,22 @@ const addFromScan = (name: string) =>
     terms: '',
     fromScan: true,
   });
+/** A customer imported from MyBizMate: it has its code there, so it never goes out in the parties' file. */
+const IMPORTED_CUSTOMER = {
+  code: 'C001',
+  type: 'customer',
+  entity: 'company',
+  registeredName: 'Torres Construction Supply',
+  lastName: '',
+  firstName: '',
+  middleName: '',
+  tradeName: '',
+  tin: '',
+  address: '',
+  vatStatus: '',
+  terms: '',
+  fromScan: false,
+} as const;
 
 test('Saved: its title and how many wait to export', async () => {
   const sale = invoice('sale', '2026-11-20');
@@ -283,7 +299,8 @@ test("filters with counts; a kind with nothing is hidden; Home's kind comes pres
 
 test("grouped by the month of the document's date: a Q1 2307 sits under March 2026", async () => {
   await showSaved([
-    invoice('sale', '2026-11-05', { partyName: 'Store A', savedAt: '2026-11-06T09:00:00.000Z' }),
+    // dated before Store B and C, but saved after them both: a month lists by the date, newest first, not by the save
+    invoice('sale', '2026-11-05', { partyName: 'Store A', savedAt: '2026-11-21T10:00:00.000Z' }),
     invoice('sale', '2026-11-20', { partyName: 'Store B', savedAt: '2026-11-20T09:00:00.000Z' }),
     invoice('purchase', '2026-11-20', { partyName: 'Store C', savedAt: '2026-11-21T09:00:00.000Z' }),
     invoice('purchase', '2026-10-02', { partyName: 'Store D', savedAt: '2026-11-22T09:00:00.000Z' }),
@@ -371,6 +388,7 @@ test('a row: the party, kind · date · number, the amount and its badge', async
 
   const sale = button(/^Torres Construction Supply, /);
   expect(within(sale).getByText('Torres Construction Supply')).toHaveStyle({ ...type.value, color: colors.ink });
+  expect(typeStylesOf(within(sale).getByText('Torres Construction Supply'))).toEqual(['value']); // not button
   // the sub-line in mono, in caps by the style ("SALE · NOV 22 · SI 5184138"); TalkBack hears the words
   const sub = within(sale).getByText('Sale · Nov 22 · SI 5184138');
   expect(typeStylesOf(sub)).toEqual(['figureSmall']); // a label of the same size flattens alike here
@@ -542,6 +560,13 @@ test('Export… shows when anything is saved, or when parties added from scans c
   await render(<SavedScreen />, { wrapper: Insets });
   expect(screen.queryByTestId('bottom-bar')).toBeNull();
   expect(endPadding()).toMatchObject({ paddingBottom: BOTTOM + space.xl });
+
+  // a party imported from MyBizMate (its code, not from a scan) is in MyBizMate already: still nothing to export
+  await act(async () => {
+    await addParty(IMPORTED_CUSTOMER);
+  });
+  expect(screen.queryByTestId('bottom-bar')).toBeNull();
+  expect(screen.getByText('Nothing saved yet')).toBeOnTheScreen();
 
   // a party added from a scan, with nothing saved: its file needs no saved scan (ruling T19-7; Saved's parties button
   // had it so at 398a886). The empty state stays, and Export… opens the list of files, with the parties' file in it.

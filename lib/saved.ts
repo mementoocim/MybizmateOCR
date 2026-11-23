@@ -23,10 +23,10 @@ import {
 import { annotationOn, type Settings, settings, updateSettings } from './settings';
 import { cleanTag } from './training/codes';
 
-// Saved invoices: the scans the person saved as a sale, a purchase or a 2307, each as import rows (an invoice's one
-// row, a 2307's one per payment). A saved scan's folder moves from the scanner's scans/ (which keeps only its newest 6)
-// to saved/<id>/, with the whole scan in scan.json; saved.json holds one summary per saved scan, with its rows and when
-// it was exported: in an import file, and apart from that in the team's training export.
+// The saved scans, which Saved lists: the scans the person saved as a sale, a purchase or a 2307, each as import rows
+// (an invoice's one row, a 2307's one per payment). A saved scan's folder moves from the scanner's scans/ (which keeps
+// only its newest 20) to saved/<id>/, with the whole scan in scan.json; saved.json holds one summary per saved scan,
+// with its rows and when it was exported: in an import file, and apart from that in the team's training export.
 
 type SummaryBase = {
   id: string;

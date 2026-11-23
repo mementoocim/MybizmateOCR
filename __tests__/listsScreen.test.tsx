@@ -266,6 +266,7 @@ test("the rows: a party's name over its TIN and code in figures, an item's over 
   ]);
   const sample = row('Sample Company');
   expect(within(sample).getByText('Sample Company')).toHaveStyle({ ...type.value, color: colors.ink });
+  expect(typeStylesOf(within(sample).getByText('Sample Company'))).toEqual(['value']); // button flattens alike here
   // jest runs as iOS, where the figure and label styles of a size flatten alike: the token tells them apart
   const sub = within(sample).getByText('TIN 123-456-789-00000 · C001');
   expect(typeStylesOf(sub)).toEqual(['figureSmall']);

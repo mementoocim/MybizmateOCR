@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { type ReactNode, useState, useSyncExternalStore } from 'react';
-import { AccessibilityInfo, Alert, type AlertButton, Platform, StyleSheet, Text, TextInput } from 'react-native';
+import { AccessibilityInfo, Alert, type AlertButton, Platform, StyleSheet, Text } from 'react-native';
 
 import { BoxSheet, isHardToRead, readingLine } from '../components/BoxSheet';
 import { clearItems, lists, subscribeLists } from '../lib/lists';
@@ -10,6 +10,7 @@ import { colors, radius, space, touch, type } from '../lib/theme';
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
+import { fieldsFocused } from '../test-utils/fieldFocus';
 import { memoryFs } from '../test-utils/memoryFs';
 
 // Design B §9.5 ("Fix a box"), §12 A8 and the plan's calls 15 and 19. A row with one box opens straight at its
@@ -107,11 +108,6 @@ const sides = () =>
 const scrim = () => screen.getByTestId('sheet-scrim', { includeHiddenElements: true });
 /** Android's back: the Modal's onRequestClose. */
 const systemBack = () => act(async () => screen.getByTestId('sheet').props.onRequestClose());
-/** jest's text inputs (and views) share their native methods' mocks: the fields focus() was called on, by label. */
-const fieldsFocused = () =>
-  (TextInput as unknown as { prototype: { focus: jest.Mock } }).prototype.focus.mock.contexts.map(
-    (input) => (input as { props: { accessibilityLabel?: string } }).props.accessibilityLabel,
-  );
 const focus = jest.mocked(AccessibilityInfo.sendAccessibilityEvent);
 type Focused = { props: { testID?: string; accessibilityRole?: string; children?: unknown } };
 /** Where TalkBack focus was sent since the last clear, in order: a row by its testID, the sheet's title as its words. */

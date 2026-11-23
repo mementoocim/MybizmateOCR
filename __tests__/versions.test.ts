@@ -38,12 +38,13 @@ test('versionLine shows the build number only when there is one', () => {
     expect(V().BUILD_NUMBER).toBeNull();
     expect(V().versionLine()).toBe('1.0.0');
   }
-  // today's app.json sets no android.versionCode
+  // the app's own app.json, whatever it sets: its version, then its android.versionCode once a release sets one
   jest.resetModules();
   const { expo } = require('../app.json');
   mockConfig = expo;
-  expect(V().BUILD_NUMBER).toBeNull();
-  expect(V().versionLine()).toBe(expo.version);
+  const code: number | undefined = expo.android?.versionCode;
+  expect(V().BUILD_NUMBER).toBe(code === undefined ? null : String(code));
+  expect(V().versionLine()).toBe(code === undefined ? expo.version : `${expo.version} (${code})`);
   // no config at all: no build number either
   jest.resetModules();
   mockConfig = null;

@@ -226,9 +226,10 @@ test("the picker's lasting access to the file is given up once it has been read,
 test('two quick presses open one picker', async () => {
   let answer: (value: object) => void = () => {};
   mockPick.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+  // A fast double tap: inside one act() scope, React doesn't re-render the button as busy between the two presses.
   await act(async () => {
-    fireEvent.press(screen.getByText('Import PDF'));
-    fireEvent.press(screen.getByText('Import PDF'));
+    await fireEvent.press(screen.getByText('Import PDF'));
+    await fireEvent.press(screen.getByText('Import PDF'));
   });
   expect(mockPick).toHaveBeenCalledTimes(1);
   await act(async () => answer({ canceled: true, result: null }));

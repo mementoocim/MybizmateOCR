@@ -63,10 +63,17 @@ test.each(['/camera', '/speed', '/saved'])('a link opened cold, %s, has Home und
   expect(router.canGoBack()).toBe(false); // Home is the bottom of the Stack
 });
 
-test('the app opens at Home, with nothing under it', async () => {
+test('the app opens at Home, with nothing under it, and a push from Home adds no second Home', async () => {
   await renderRouter(ROUTES, { initialUrl: '/' });
   expect(screen).toHavePathname('/');
   expect(screen.getByText('Home')).toBeOnTheScreen();
+  expect(router.canGoBack()).toBe(false);
+
+  // the anchor puts Home under a cold link only: a screen pushed from Home goes back to that Home, the Stack's bottom
+  await act(() => router.push('/settings'));
+  expect(screen).toHavePathname('/settings');
+  await act(() => router.back());
+  expect(screen).toHavePathname('/');
   expect(router.canGoBack()).toBe(false);
 });
 

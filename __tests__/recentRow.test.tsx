@@ -121,6 +121,7 @@ test("title, time and form: a PDF by its file name, the form's name, a 12-hour c
   const onPress = jest.fn();
   await render(<RecentRow scan={scanOf('sales_text_0', { source: 'pdf', label: 'PDF: sales_text_0.pdf' })} onPress={onPress} />);
   expect(screen.getByText('sales_text_0.pdf')).toHaveStyle({ ...type.value, color: colors.ink });
+  expect(typeStylesOf(screen.getByText('sales_text_0.pdf'))).toEqual(['value']); // button flattens alike here
   expect(screen.queryByText(/^PDF: /)).toBeNull();
   // mono, in caps by the style; the words stay as the form's name for TalkBack
   const sub = screen.getByText('10:00 AM · MyBizMate Sales Invoice');

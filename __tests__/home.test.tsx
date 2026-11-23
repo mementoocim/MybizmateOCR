@@ -191,9 +191,10 @@ test('two quick presses scan once; while it reads, the card is up and capture wa
   let finish: (v: unknown) => void = () => {};
   mockScanPhoto.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
   await render(<Home />);
+  // A fast double tap: inside one act() scope, React doesn't re-render the button as busy between the two presses.
   await act(async () => {
-    fireEvent.press(button('From gallery'));
-    fireEvent.press(button('From gallery'));
+    await fireEvent.press(button('From gallery'));
+    await fireEvent.press(button('From gallery'));
   });
   expect(mockScanPhoto).toHaveBeenCalledTimes(1);
   expect(screen.getByText('Reading…')).toBeTruthy();

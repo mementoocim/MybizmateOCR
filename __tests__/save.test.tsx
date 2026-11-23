@@ -660,8 +660,11 @@ test("annotation mode: the codes with M4's notes; Save waits for valid codes", a
   }
   const notes = [CODES_ONLY, CODE_FORM].map((note) => screen.getByText(note));
   for (const note of notes) expect(note).toHaveStyle({ ...theme.type.label, color: theme.colors.mute });
-  const writer = screen.getByLabelText('Writer code').parent!.parent!; // the field: its label, then its box
-  expect(writer.parent!.children).toEqual([writer, ...notes]);
+  // the Writer code field, then the two notes last, in a group of their own
+  const writer = screen.getByTestId('writer-code');
+  expect(within(writer).getByLabelText('Writer code')).toBeOnTheScreen();
+  expect(within(writer).queryByLabelText('Client code')).toBeNull();
+  expect(writer.children.slice(-2)).toEqual(notes);
 
   expect(screen.getByTestId('save-confirm')).toBeDisabled();
   await type('Client code', 'Juan');
@@ -797,7 +800,7 @@ test('a scan saved before the save kept its marks says only what its import row 
   const id = await show('inv_0007');
   await checkEveryBox(id);
   await saveSale();
-  // its scan.json without the marks, as a save before this change wrote it, opened again from Saved invoices
+  // its scan.json without the marks, as a save before this change wrote it, opened again from Saved
   const kept = keptScan(id);
   delete kept.savedMarks;
   memoryFs.files.set(`file:///docs/saved/${id}/scan.json`, JSON.stringify(kept));

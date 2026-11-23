@@ -267,7 +267,7 @@ function CodeFields({ codes }: { codes: ReturnType<typeof useCodes> }) {
         mono
         autoCapitalize="characters"
       />
-      <View style={styles.group}>
+      <View testID="writer-code" style={styles.group}>
         <TextField
           label="Writer code"
           value={codes.writer}

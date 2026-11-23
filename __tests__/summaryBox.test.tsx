@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react-native';
+import { render, screen, within } from '@testing-library/react-native';
 
 import { SummaryBox } from '../components/SummaryBox';
 import { colors, radius, space, type } from '../lib/theme';
+import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §9.6 (and §9.8's export file): what a save or an export will hold, in a sand box. Each line is a key in caps
 // mono and its value, in figures for amounts and dates, with an optional badge beside it. A line is one stop for
@@ -27,12 +28,13 @@ test('keys in caps mono, values, and a badge', async () => {
   expect(screen.getByText('Oct 29, 2026')).toHaveStyle({ ...type.figure, color: colors.ink });
   expect(screen.getByText('₱5,810.50')).toHaveStyle({ ...type.figure, color: colors.ink });
   expect(screen.getByText('Fernandez Electrical')).toHaveStyle({ ...type.value, color: colors.ink });
+  expect(typeStylesOf(screen.getByText('Fernandez Electrical'))).toEqual(['value']); // jest runs as iOS: button alike
 
   // the badge beside its value, in a row that wraps, so it keeps its own width (Badge has no alignSelf)
   const badge = screen.getByText('New');
   expect(badge).toHaveStyle({ ...type.badge, color: colors.brandText });
   const valueLine = screen.getByText('Fernandez Electrical').parent!;
-  expect(badge.parent!.parent).toBe(valueLine);
+  expect(within(valueLine).getByText('New')).toBe(badge);
   expect(valueLine).toHaveStyle({ flexDirection: 'row', flexWrap: 'wrap' });
 
   // each line is one stop for TalkBack: its key, its value and its badge

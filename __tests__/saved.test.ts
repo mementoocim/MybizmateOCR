@@ -249,8 +249,8 @@ test("a 2307's summary: checked as a 2307, one import row per payment", async ()
   ]);
   // the offset account becomes the next 2307's; an invoice's accounts and ATC stay as they were
   expect(m.settings.settings()).toMatchObject({ offsetAccount: '1205', revenueAccount: '', expenseAccount: '', atc: '' });
-  // an unsure match is only the closest customer: no list party, and the name as written goes out; Saved invoices
-  // shows that name, and the export's sheet asks to check it in MyBizMate first
+  // an unsure match is only the closest customer: no list party, and the name as written goes out; Saved shows that
+  // name, and the export's sheet asks to check it in MyBizMate first
   const unsure = m.scans.addScan({ label: 'PDF: 2307.pdf', source: 'pdf', result: parseScanResult(coreJson('bir2307_text_0')) });
   m.scans.setEdit(unsure, 'payor_name', 'Santos Merchandising');
   m.scans.setEdit(unsure, 'payor_tin', '99988877700000');

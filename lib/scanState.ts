@@ -74,7 +74,7 @@ export function homeBadge(scan: StoredScan, state: ScanState, saved: SavedState)
 
 /**
  * A scan's checks and state, kept up to date with the lists, the settings and its saved summary. The checks run once
- * per scan as it stands (saleOf, certOf): the Scan screen, Home's rows and Saved invoices share each run. No scan
+ * per scan as it stands (saleOf, certOf): the Scan screen, Home's rows and Saved share each run. No scan
  * (one that's gone): no state.
  */
 export function useScanCheck(scan: StoredScan | undefined): {

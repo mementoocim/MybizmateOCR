@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import { createRef } from 'react';
 import { View, type ViewInstance } from 'react-native';
 
@@ -11,6 +11,7 @@ import { ListRow } from '../components/ListRow';
 import { SectionHeader } from '../components/SectionHeader';
 import { amount } from '../lib/format';
 import { colors, radius, space, touch, type } from '../lib/theme';
+import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §5.6 and §7: the display pieces the screens build from. A badge is caps mono text on its tone. A section
 // strip is a header, with a column name, a count or a text action on its right. A list row and a ledger row are each
@@ -151,6 +152,10 @@ test('ListRow: the title, then the sub-line in label type, or in caps mono for t
     ...type.figureSmall,
     textTransform: undefined,
   });
+  // jest runs as iOS, where value and button flatten alike, and so do figureSmall and label: the styles themselves
+  expect(typeStylesOf(screen.getByText('Privacy'))).toEqual(['value']);
+  expect(typeStylesOf(screen.getByText('Sale · Nov 22 · SI 5184138'))).toEqual(['figureSmall']);
+  expect(typeStylesOf(screen.getByText('TIN 789-012-345-00000 · C008'))).toEqual(['figureSmall']);
 });
 
 test('ListRow: what leads, the amount with its badge under it, then a chevron, or a check when done', async () => {
@@ -315,12 +320,14 @@ test('LedgerRow: the value in its style with its badge, the sub-line, and the am
   );
   expect(screen.getByText('Oct 1 – Dec 31, 2026')).toHaveStyle({ ...type.figure, color: colors.ink });
   expect(screen.getByText('Q4')).toHaveStyle({ ...type.badge, color: colors.mute }); // beside the value
-  expect(screen.getByText('Q4').parent!.parent).toBe(screen.getByText('Oct 1 – Dec 31, 2026').parent);
+  expect(within(screen.getByText('Oct 1 – Dec 31, 2026').parent!).getByText('Q4')).toBeOnTheScreen(); // in its line
   // Ruling T4-4: the badge is part of the row's label (§5.6, §7), right after the value.
   expect(screen.getByRole('button', { name: 'Period, Oct 1 – Dec 31, 2026, Q4' })).toBeOnTheScreen();
 
   expect(screen.getByText('Detergent')).toHaveStyle({ ...type.value, color: colors.ink });
   expect(screen.getByText('2 × 110.00')).toHaveStyle({ ...type.figureSmall, color: colors.mute });
+  expect(typeStylesOf(screen.getByText('Detergent'))).toEqual(['value']); // not button, which flattens alike here
+  expect(typeStylesOf(screen.getByText('2 × 110.00'))).toEqual(['figureSmall']); // not label, which flattens alike
   expect(screen.getByText('220.00')).toHaveStyle({ ...type.figure, color: colors.ink, textAlign: 'right' });
   const item = screen.getByRole('button', { name: 'Detergent, 2 × 110.00, 220.00' });
   expect(iconsIn(item, colors.chevron)).toHaveLength(1); // under the amount, so amounts line up

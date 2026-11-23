@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import { createRef } from 'react';
-import { type ScrollViewInstance, StyleSheet, TextInput, type TextInputInstance } from 'react-native';
+import { type ScrollViewInstance, StyleSheet, type TextInputInstance } from 'react-native';
 
 import { ChoiceChips } from '../components/ChoiceChips';
 import { Search } from '../components/icons';
@@ -8,8 +8,10 @@ import { Screen } from '../components/Screen';
 import { Segmented } from '../components/Segmented';
 import { TextField } from '../components/TextField';
 import { colors, radius, space, touch, type } from '../lib/theme';
+import { clearFieldsFocused, fieldsFocused } from '../test-utils/fieldFocus';
 import { keyboard } from '../test-utils/keyboard';
 import { standIn } from '../test-utils/scrollStandIn';
+import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §5.6 and §7: the inputs. Segmented and ChoiceChips are radio groups that TalkBack names, with the chosen
 // option in ink with a paper label (§5.1: selection is ink). A TextField has its label above, an outline border that
@@ -82,6 +84,8 @@ test('Segmented is a labelled radio group with an ink selection', async () => {
   const other = screen.getByRole('radio', { name: 'Customers 21', checked: false });
   expect(other).toHaveStyle({ backgroundColor: undefined });
   expect(screen.getByText('Customers 21')).toHaveStyle({ ...type.button, color: colors.ink });
+  // jest runs as iOS, where value flattens as button does: the style itself tells them apart
+  for (const label of ['Suppliers 2', 'Customers 21']) expect(typeStylesOf(screen.getByText(label))).toEqual(['button']);
   expect(screen.getByText('Customers 21').props.numberOfLines).toBeUndefined(); // labels wrap at large text
 
   await fireEvent.press(other);
@@ -252,16 +256,12 @@ test('TextField: a search field with a clear button', async () => {
   expect(screen.queryByRole('button', { name: 'Clear the search' })).toBeNull();
 
   await screen.rerender(search('Santos'));
-  // jest's inputs share their native methods' mocks: the fields focus() was called on, by their spoken names
-  const focus = (TextInput as unknown as { prototype: { focus: jest.Mock } }).prototype.focus;
-  const focused = () =>
-    focus.mock.contexts.map((field: { props: { accessibilityLabel?: string } }) => field.props.accessibilityLabel);
-  focus.mockClear();
+  clearFieldsFocused();
   await fireEvent.press(screen.getByRole('button', { name: 'Clear the search' }));
   expect(onChangeText).toHaveBeenCalledWith('');
   // The button goes with the text, and it may have had the focus (a keyboard's, say): the field takes it, so typing
   // goes on there.
-  expect(focused()).toEqual(['Search your customers']);
+  expect(fieldsFocused()).toEqual(['Search your customers']);
 
   await screen.rerender(search(''));
   expect(screen.queryByRole('button', { name: 'Clear the search' })).toBeNull();

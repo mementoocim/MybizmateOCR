@@ -30,7 +30,7 @@ test('the retired colors are gone', () => {
   for (const key of RETIRED) expect(colors).not.toHaveProperty(key);
 });
 
-test('the retired text styles are gone: the type scale has every style', () => {
+test('the retired text styles are gone: bold and sectionLabel', () => {
   const theme: Record<string, unknown> = require('../lib/theme');
   expect(theme).not.toHaveProperty('bold');
   expect(theme).not.toHaveProperty('sectionLabel');

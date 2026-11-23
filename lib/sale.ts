@@ -128,7 +128,7 @@ export function isInvoice(scan: StoredScan): boolean {
   return aligned && (form === 'sales_invoice' || form === 'service_invoice');
 }
 
-// One run of the checks per scan as it stands: Home's row, the scan's screen and Saved invoices share it. The
+// One run of the checks per scan as it stands: Home's row, the scan's screen and Saved share it. The
 // stores replace a scan, the lists or the settings when they change, so the same objects give the same answer.
 const views = new WeakMap<StoredScan, { lists: Lists; settings: Settings; view: SaleView }>();
 
