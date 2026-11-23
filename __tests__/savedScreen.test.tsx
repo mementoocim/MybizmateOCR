@@ -38,6 +38,7 @@ const mockToast = jest.fn();
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
+  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
   useIsFocused: () => true,
 }));
@@ -261,14 +262,17 @@ test("filters with counts; a kind with nothing is hidden; Home's kind comes pres
   expect(screen.getByRole('radio', { name: 'All 3', checked: true })).toBeOnTheScreen();
   expect(rows()).toEqual([
     'Castillo Eatery, 2307 · Q4 2026, 1,000.00, To export',
-    'Store A, Sale · Nov 20, 100.00, To export',
-    'Store B, Sale · Nov 5, 100.00, To export',
+    'Store A, Sale · Nov\u00A020, 100.00, To export',
+    'Store B, Sale · Nov\u00A05, 100.00, To export',
   ]);
 
   // a chip shows its kind alone
   await press(radio('Sales 2'));
   expect(screen.getByRole('radio', { name: 'Sales 2', checked: true })).toBeOnTheScreen();
-  expect(rows()).toEqual(['Store A, Sale · Nov 20, 100.00, To export', 'Store B, Sale · Nov 5, 100.00, To export']);
+  expect(rows()).toEqual([
+    'Store A, Sale · Nov\u00A020, 100.00, To export',
+    'Store B, Sale · Nov\u00A05, 100.00, To export',
+  ]);
   await press(radio('2307s 1'));
   expect(rows()).toEqual(['Castillo Eatery, 2307 · Q4 2026, 1,000.00, To export']);
   await press(radio('All 3'));
@@ -309,11 +313,11 @@ test("grouped by the month of the document's date: a Q1 2307 sits under March 20
   ]);
   expect(listed()).toEqual([
     'November 2026',
-    'Store C, Purchase · Nov 20, 100.00, To export', // the same date: the one saved later comes first
-    'Store B, Sale · Nov 20, 100.00, To export',
-    'Store A, Sale · Nov 5, 100.00, To export',
+    'Store C, Purchase · Nov\u00A020, 100.00, To export', // the same date: the one saved later comes first
+    'Store B, Sale · Nov\u00A020, 100.00, To export',
+    'Store A, Sale · Nov\u00A05, 100.00, To export',
     'October 2026',
-    'Store D, Purchase · Oct 2, 100.00, To export',
+    'Store D, Purchase · Oct\u00A02, 100.00, To export',
     'March 2026',
     'Castillo Eatery, 2307 · Q1 2026, 1,000.00, To export',
   ]);
@@ -325,9 +329,9 @@ test("grouped by the month of the document's date: a Q1 2307 sits under March 20
   await press(radio('Purchases 2'));
   expect(listed()).toEqual([
     'November 2026',
-    'Store C, Purchase · Nov 20, 100.00, To export',
+    'Store C, Purchase · Nov\u00A020, 100.00, To export',
     'October 2026',
-    'Store D, Purchase · Oct 2, 100.00, To export',
+    'Store D, Purchase · Oct\u00A02, 100.00, To export',
   ]);
 });
 
@@ -343,7 +347,7 @@ test("a date that can't be read is a dash, in its month's strip and in the row",
     '—',
     'Store C, Purchase · —, 100.00, To export',
     'November 2026',
-    'Store A, Sale · Nov 20, 100.00, To export',
+    'Store A, Sale · Nov\u00A020, 100.00, To export',
     '—',
     'Store B, Sale · —, 100.00, To export',
   ]);
@@ -358,7 +362,10 @@ test("a row is To export by its scan's id, whatever object the export's rule han
     invoice('sale', '2026-11-18', { partyName: 'Store B', exportedAt: EXPORTED }),
   ]);
   expect(headerTexts()).toEqual(['Saved', '1 to export']);
-  expect(rows()).toEqual(['Store A, Sale · Nov 20, 100.00, To export', 'Store B, Sale · Nov 18, 100.00, Exported']);
+  expect(rows()).toEqual([
+    'Store A, Sale · Nov\u00A020, 100.00, To export',
+    'Store B, Sale · Nov\u00A018, 100.00, Exported',
+  ]);
 });
 
 test('a row: the party, kind · date · number, the amount and its badge', async () => {
@@ -380,17 +387,17 @@ test('a row: the party, kind · date · number, the amount and its badge', async
   // one stop for TalkBack: the party, the sub-line, the amount and the badge (ruling T4-4)
   expect(rows()).toEqual([
     'Castillo Eatery, 2307 · Q4 2026, 57,400.54, To export', // a 2307: its quarter, and the tax withheld
-    'Torres Construction Supply, Sale · Nov 22 · SI 5184138, 24,377.00, To export',
-    'Juan Hardware, Purchase · Nov 18 · Inv 0007, 1,500.50, Exported',
-    'Camera photo, Sale · Nov 10, 7.50, To export',
-    `${LONG_NAME}, Sale · Nov 8, 12,345,678.90, To export`,
+    'Torres Construction Supply, Sale · Nov\u00A022 · SI 5184138, 24,377.00, To export',
+    'Juan Hardware, Purchase · Nov\u00A018 · Inv 0007, 1,500.50, Exported',
+    'Camera photo, Sale · Nov\u00A010, 7.50, To export',
+    `${LONG_NAME}, Sale · Nov\u00A08, 12,345,678.90, To export`,
   ]);
 
   const sale = button(/^Torres Construction Supply, /);
   expect(within(sale).getByText('Torres Construction Supply')).toHaveStyle({ ...type.value, color: colors.ink });
   expect(typeStylesOf(within(sale).getByText('Torres Construction Supply'))).toEqual(['value']); // not button
   // the sub-line in mono, in caps by the style ("SALE · NOV 22 · SI 5184138"); TalkBack hears the words
-  const sub = within(sale).getByText('Sale · Nov 22 · SI 5184138');
+  const sub = within(sale).getByText('Sale · Nov\u00A022 · SI 5184138');
   expect(typeStylesOf(sub)).toEqual(['figureSmall']); // a label of the same size flattens alike here
   expect(sub).toHaveStyle({ ...type.figureSmall, color: colors.mute, textTransform: 'uppercase' });
   // the amount in figures, without the peso sign
@@ -425,7 +432,7 @@ test('as the app saves them: a sale with its SI number, and a 2307 with its payo
     'December 2026',
     'Castillo Eatery, 2307 · Q4 2026, 57,400.54, To export',
     'September 2026',
-    'TorresConstruction Supply, Sale · Sep 20 · SI 0007655, 24,377.00, To export',
+    'TorresConstruction Supply, Sale · Sep\u00A020 · SI 0007655, 24,377.00, To export',
   ]);
 });
 
@@ -703,5 +710,5 @@ test('a filter with nothing: No purchases saved', async () => {
   ]);
   await press(radio('Sales 1'));
   expect(chips()).toEqual(['All 1', 'Sales 1']);
-  expect(rows()).toEqual(['Store A, Sale · Nov 20, 100.00, To export']);
+  expect(rows()).toEqual(['Store A, Sale · Nov\u00A020, 100.00, To export']);
 });

@@ -65,11 +65,14 @@ export function prettyDate(iso: string | null): string | null {
   return `${MONTHS[m - 1]} ${d}, ${y}`;
 }
 
-/** An ISO date as a short date: "Nov 22"; "—" for an empty or malformed one. */
+/**
+ * An ISO date as a short date: "Nov 22"; "—" for an empty or malformed one. A no-break space joins the month and the
+ * day, so a line never breaks between them ("SAVED AS A 2307 · NOV" / "23").
+ */
 export function monthDay(isoDate: string): string {
   const [, m, d] = isoDate.split('-').map(Number);
   const month = MONTHS[m - 1];
-  return month && d ? `${month} ${d}` : '—';
+  return month && d ? `${month}\u00A0${d}` : '—';
 }
 
 /**

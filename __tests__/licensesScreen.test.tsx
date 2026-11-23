@@ -15,6 +15,7 @@ let mockParams: { i?: string } = {};
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
+  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ push: mockPush, back: jest.fn() }),
 }));
 /** expo-asset's downloadAsync, for the module it was given: the asset, with the file it's put in. */

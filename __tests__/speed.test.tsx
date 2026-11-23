@@ -12,6 +12,11 @@ const mockRun = jest.fn();
 jest.mock('../lib/speedTest', () => ({
   runSpeedTest: (onProgress: (done: number, total: number) => void) => mockRun(onProgress),
 }));
+// the header's Back (lib/navigation): the screen's own navigation, and the way Home
+jest.mock('expo-router', () => ({
+  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }),
+  useRouter: () => ({ replace: jest.fn() }),
+}));
 
 const RESULT: SpeedResult = {
   medianMs: 1412,

@@ -2,7 +2,7 @@ import { type ReactNode, useRef } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { goBackOrHome } from '../lib/navigation';
+import { useGoBackOrHome } from '../lib/navigation';
 import { colors, space, touch, type } from '../lib/theme';
 import { IconButton } from './IconButton';
 import { ArrowLeft, Close } from './icons';
@@ -28,12 +28,13 @@ export function Header({
   title?: string;
   subtitle?: string | null;
   brand?: boolean; // Home: the logo and "mybizmate.io" in place of a title
-  onBack?: (() => void) | null; // default goBackOrHome(), once; null: no back button
+  onBack?: (() => void) | null; // default: back, or Home (useGoBackOrHome), once; null: no back button
   backIcon?: 'back' | 'close'; // spoken "Back" or "Close"
   right?: ReactNode; // up to two IconButtons, or the photo thumbnail
   tone?: 'light' | 'dark'; // dark: the photo viewer (viewer fill, cameraText)
 }) {
   const insets = useSafeAreaInsets();
+  const goBackOrHome = useGoBackOrHome();
   const leaving = useRef(false); // set at once, so a second tap is refused before the screen has gone
   const dark = tone === 'dark';
   const close = backIcon === 'close';
@@ -41,8 +42,8 @@ export function Header({
   const hasRight = Boolean(right);
 
   /**
-   * The default Back, once, as the camera's Close: router.back() queues a GO_BACK per call, so a fast double tap
-   * would leave the screen under this one too. With nothing to go back to, Home (lib/navigation).
+   * The default Back, once, as the camera's Close: going back queues a GO_BACK per call, so a fast double tap would
+   * leave the screen under this one too. With nothing to go back to, Home (lib/navigation).
    */
   function goBack() {
     if (leaving.current) return;

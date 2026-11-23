@@ -8,8 +8,9 @@ import { Tap } from './Tap';
 // outline border holds the options, and the chosen one is filled ink with a paper label (§5.1: selection is ink).
 // Options are at least 48 dp tall, and their labels wrap. Side by side each has an equal share of the row, which is too
 // narrow for a word at a large font size, or at a smaller one on a narrow phone ("Custo / mers"): then the options
-// stack, one full-width option per row, in the same outline and with the same selection (ruling T26-3). Dark, on the
-// photo viewer: the chosen one is a cameraText fill with an ink label, and the others are cameraText on the viewer.
+// stack, one full-width option per row, in the same outline and with the same selection. The more options, the smaller
+// each share, so the sooner they stack (ruling T26-5). Dark, on the photo viewer: the chosen one is a cameraText fill
+// with an ink label, and the others are cameraText on the viewer.
 
 const BORDER = 1;
 /** How far inside the outline the selection sits. */
@@ -17,11 +18,15 @@ const INSET = 2; // optical: a hair between the outline and the chosen fill, fin
 /** The selection's corner, concentric with the group's inside its border and inset. */
 const OPTION_RADIUS = radius.field - BORDER - INSET;
 /**
- * Under this many dp of window width per unit of font scale, the options stack (ruling T26-3). "Customers" is about
- * 75 dp at 100%, and outgrows its third of the row from about 283 to 300 dp per unit (a 411 dp phone at 145%, a 360 dp
- * one at 122%, a 320 dp one at 107%): 310 leaves a margin.
+ * Under this many dp of window width per unit of font scale, for each option, the options stack (ruling T26-5): under
+ * 312 for three, under 208 for two. In a W dp window, with the 16 dp page padding of Lists, the Scan screen and the
+ * photo viewer, the 1 dp border, the 2 dp inset and 8 dp of padding a side, each of n options has (W − 38 − 16n) / n dp
+ * for its label: (W − 86) / 3 for three.
+ * "Customers", about 75 dp at 100%, outgrows that third from about 285 dp per unit on a 411 dp phone (at 144%), 296 on
+ * a 360 dp one (at 122%) and 308 on a 320 dp one (at 104%): 312 leaves a margin. Two options have (W − 70) / 2 each, so
+ * Sale | Purchase keeps one row at 130% on a 360 dp phone, where three options stack.
  */
-const STACK_UNDER = 310;
+const STACK_UNDER_PER_OPTION = 104;
 
 export function Segmented<T extends string>({
   options,
@@ -38,7 +43,7 @@ export function Segmented<T extends string>({
 }) {
   const dark = tone === 'dark';
   const { width, fontScale } = useWindowDimensions();
-  const stacked = width / fontScale < STACK_UNDER;
+  const stacked = width / fontScale < STACK_UNDER_PER_OPTION * options.length;
   return (
     <View
       accessible

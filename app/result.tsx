@@ -38,7 +38,7 @@ import { flagTarget, PAYOR_ROW } from '../lib/flagTargets';
 import { formatClock, formatMs, formatSeconds, monthDay } from '../lib/format';
 import { FORMS } from '../lib/forms';
 import { addItem } from '../lib/lists';
-import { goBackOrHome } from '../lib/navigation';
+import { useGoBackOrHome } from '../lib/navigation';
 import { boxValue, type SaleView } from '../lib/sale';
 import { compareWithSample, sampleInfo } from '../lib/samples';
 import type { SavedSummary } from '../lib/saved';
@@ -89,6 +89,7 @@ export default function Result() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const router = useRouter();
   const flow = useScanFlow();
+  const goBackOrHome = useGoBackOrHome();
   const scan = useSyncExternalStore(subscribeRecent, () => (id ? getScan(id) : undefined));
   const { sale, cert, state, saved, summary, annotation } = useScanCheck(scan);
   // Deleted from ⋮: the header's words as they were, while the screen goes back.

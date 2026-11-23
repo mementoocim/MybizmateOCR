@@ -33,6 +33,7 @@ const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
+  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: mockPush }),
   useIsFocused: () => true,
 }));
@@ -96,7 +97,7 @@ const keptScan = (id: string) => JSON.parse(memoryFs.files.get(`file:///docs/sav
 const keptRecent = (id: string) =>
   JSON.parse(memoryFs.files.get('file:///docs/recent.json') as string).find((s: { id: string }) => s.id === id);
 const CHANGED = 'Changed since it was saved. The export still has the saved version. Save changes to update it.';
-const SAVED = 'Saved as a sale · Nov 18 · Not exported yet';
+const SAVED = 'Saved as a sale · Nov\u00A018 · Not exported yet';
 const SUGGESTED = "Suggested from the invoice's VAT boxes";
 const ACCOUNT_HELPER = 'Code or name, as in MyBizMate';
 const CODES_ONLY = 'Codes only, like C014 and W03. Never a name.';
@@ -555,7 +556,7 @@ test('saving a 2307: the first save asks for the offset account', async () => {
   expect(screen.getByTestId('save-confirm')).toBeEnabled();
   await press(screen.getByTestId('save-confirm'));
   expect(mockToast).toHaveBeenCalledWith('Saved as a 2307', VIEW);
-  expect(screen.getByText('Saved as a 2307 · Nov 18 · Not exported yet')).toBeTruthy();
+  expect(screen.getByText('Saved as a 2307 · Nov\u00A018 · Not exported yet')).toBeTruthy();
   expect(screen.getByTestId('save-open')).toHaveTextContent('Save changes');
   expect(settings().offsetAccount).toBe('1205 CWT Receivable');
 
@@ -566,7 +567,7 @@ test('saving a 2307: the first save asks for the offset account', async () => {
   expect(screen.getByLabelText('Offset account').props.value).toBe('1205 CWT Receivable'); // as it was saved
   expect(screen.getByText('₱57,400.06')).toBeTruthy(); // the rows' tax, not the total rows'
   await press(screen.getByTestId('save-confirm'));
-  expect(screen.getByText('Saved as a 2307 · Nov 18 · Not exported yet')).toBeTruthy();
+  expect(screen.getByText('Saved as a 2307 · Nov\u00A018 · Not exported yet')).toBeTruthy();
 
   // the next 2307 has the account already
   await show('bir2307_text_0', { source: 'pdf' });

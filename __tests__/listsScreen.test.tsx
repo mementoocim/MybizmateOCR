@@ -29,7 +29,11 @@ jest.mock('expo-file-system', () => {
   const memory = require('../test-utils/memoryFs').memoryFs.module;
   return { ...memory, File: Object.assign(memory.File, { pickFileAsync: (options: object) => mockPick(options) }) };
 });
-jest.mock('expo-router', () => ({ router: { back: jest.fn() } })); // the header's Back
+// the header's Back (lib/navigation): the screen's own navigation, and the way Home
+jest.mock('expo-router', () => ({
+  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }),
+  useRouter: () => ({ replace: jest.fn() }),
+}));
 
 /** Today's words for each tab, now in How to import. */
 const INTRO = {

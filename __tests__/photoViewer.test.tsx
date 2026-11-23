@@ -23,6 +23,11 @@ jest.mock('../modules/scanner', () => ({
   enhance: (uri: string, mode: string) => mockEnhance(uri, mode),
   saveToPictures: (uri: string) => mockSave(uri),
 }));
+// The viewer's header Closes with its own onClose, but a Header asks for the way back all the same (lib/navigation).
+jest.mock('expo-router', () => ({
+  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }),
+  useRouter: () => ({ replace: jest.fn() }),
+}));
 // expo-status-bar's StatusBar stands in as a plain view carrying its props.
 jest.mock('expo-status-bar', () => {
   const React = require('react');

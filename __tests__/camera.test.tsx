@@ -19,7 +19,9 @@ import { typeStylesOf } from '../test-utils/typeStyles';
 let mockFocused = true;
 let mockParams: Record<string, string> = {};
 let mockTeam = false;
-const mockRouter = { push: jest.fn(), replace: jest.fn(), back: jest.fn(), canGoBack: jest.fn(() => true) };
+const mockRouter = { push: jest.fn(), replace: jest.fn() };
+/** The screen's own navigation: Close goes back with it (lib/navigation's useGoBackOrHome). */
+const mockNavigation = { canGoBack: jest.fn(() => true), goBack: jest.fn() };
 const mockScanPhoto = jest.fn();
 const mockTakePhoto = jest.fn(async () => {});
 const mockGetPermission = jest.fn();
@@ -28,9 +30,7 @@ const mockLibrary = jest.fn();
 const mockDeleted: string[] = [];
 
 jest.mock('expo-router', () => ({
-  get router() {
-    return mockRouter; // Close goes back with it (lib/navigation's goBackOrHome)
-  },
+  useNavigation: () => mockNavigation,
   useRouter: () => mockRouter,
   useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, []),
   useIsFocused: () => mockFocused,
@@ -108,7 +108,7 @@ beforeEach(() => {
   mockFocused = true;
   mockParams = {};
   mockTeam = false;
-  mockRouter.canGoBack.mockReturnValue(true); // a screen under this one, as when Home opened it
+  mockNavigation.canGoBack.mockReturnValue(true); // a screen under this one, as when Home opened it
   mockDeleted.length = 0;
   mockGetPermission.mockResolvedValue(granted);
   mockRequestPermission.mockResolvedValue(granted);
@@ -220,7 +220,7 @@ test('no title; Close, the Auto switch and the flashlight switch', async () => {
   expect(close).toHaveStyle({ width: touch.target, height: touch.target });
   expect(kids(close)[0].props).toMatchObject({ width: touch.icon, stroke: colors.cameraText });
   await press(close);
-  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
 
   // Auto: a switch, on at first, a pill holding AUTO and a dot (brand when on, a hollow ring when off)
   expect(autoSwitch()).toBeChecked();
@@ -252,25 +252,25 @@ test('no title; Close, the Auto switch and the flashlight switch', async () => {
 });
 
 test('Close goes back once, however fast it is tapped twice', async () => {
-  // router.back() queues one GO_BACK per call: a second would leave the screen under this one too
+  // Going back queues one GO_BACK per call: a second would leave the screen under this one too
   await open();
   await act(async () => {
     await fireEvent.press(button('Close'));
     await fireEvent.press(button('Close'));
   });
-  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
 });
 
 test('with nothing under it, Close goes Home, once (ruling T24-1)', async () => {
   // Opened first, with nothing under it: the Stack is anchored on Home (app/_layout), so this is the fallback.
-  mockRouter.canGoBack.mockReturnValue(false);
+  mockNavigation.canGoBack.mockReturnValue(false);
   await open();
   await act(async () => {
     await fireEvent.press(button('Close'));
     await fireEvent.press(button('Close'));
   });
   expect(mockRouter.replace.mock.calls).toEqual([['/']]);
-  expect(mockRouter.back).not.toHaveBeenCalled();
+  expect(mockNavigation.goBack).not.toHaveBeenCalled();
 });
 
 test('the shutter is disabled while the camera starts', async () => {

@@ -23,6 +23,7 @@ const mockToast = jest.fn();
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
+  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: jest.fn() }),
   useIsFocused: () => true,
 }));

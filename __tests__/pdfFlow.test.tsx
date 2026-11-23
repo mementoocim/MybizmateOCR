@@ -21,6 +21,7 @@ const mockPick = jest.fn();
 const mockRelease = jest.fn(async (_uri: string) => undefined);
 
 jest.mock('expo-router', () => ({
+  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
   useIsFocused: () => true,
 }));

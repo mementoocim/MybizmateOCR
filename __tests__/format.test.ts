@@ -19,12 +19,18 @@ test('amount: rows without the peso sign', () => {
 });
 
 test('monthDay', () => {
-  expect(monthDay('2026-11-22')).toBe('Nov 22');
-  expect(monthDay('2026-01-05')).toBe('Jan 5');
+  expect(monthDay('2026-11-22')).toBe('Nov\u00A022');
+  expect(monthDay('2026-01-05')).toBe('Jan\u00A05');
   // an empty or malformed date: a dash, as Saved's prettyDate(…) ?? '—' had it
   for (const date of ['', '2026-11', '2026-13-01', '2026-00-05', '2026-11-xx', '2026-11-00', 'Nov 22, 2026']) {
     expect([date, monthDay(date)]).toEqual([date, '—']);
   }
+});
+
+test('a short date keeps its day on its line: a no-break space, never a plain one', () => {
+  // QA pass 4, at 360 dp: a saved scan's subtitle wrapped as "SAVED AS A 2307 · NOV" / "23"
+  expect(monthDay('2026-11-23')).toBe('Nov\u00A023');
+  expect(monthDay('2026-11-23')).not.toContain(' ');
 });
 
 test('monthYear', () => {

@@ -27,14 +27,21 @@ import { standIn } from '../test-utils/scrollStandIn';
 // the window for the keyboard, so the end of the scroll clears it too. Bottom bars stack their buttons when a label
 // wraps. This file's insets: 24 dp at the top, 34 at the bottom.
 
-let mockRouter: { back: jest.Mock; canGoBack: jest.Mock; replace: jest.Mock } | undefined;
-const freshRouter = () => ({ back: jest.fn(), canGoBack: jest.fn(() => true), replace: jest.fn() });
-jest.mock('expo-router', () => ({
-  get router() {
-    return mockRouter; // read when Back is pressed, never at render
-  },
-  useIsFocused: () => true, // a bottom bar's screen is the one on top
-}));
+/** The screen's own navigation (expo-router's useNavigation), with a screen under this one unless a test says not. */
+const mockNavigation = { canGoBack: jest.fn(() => true), goBack: jest.fn() };
+const mockReplace = jest.fn(); // useRouter()'s: the way Home
+jest.mock('expo-router', () => {
+  // The global router as Android's restart of the screen leaves it (ruling T26-4): every method throws.
+  const unbound = () => {
+    throw new Error('The imperative router is unavailable before the first render has finished.');
+  };
+  return {
+    router: { back: unbound, canGoBack: unbound, replace: unbound, push: unbound, navigate: unbound },
+    useNavigation: () => mockNavigation,
+    useRouter: () => ({ replace: mockReplace }),
+    useIsFocused: () => true, // a bottom bar's screen is the one on top
+  };
+});
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 0 }),
   SafeAreaProvider: ({ children }: { children?: unknown }) => children,
@@ -77,7 +84,9 @@ function fieldAt(y: number) {
 }
 
 beforeEach(() => {
-  mockRouter = freshRouter();
+  mockNavigation.canGoBack.mockReset().mockReturnValue(true);
+  mockNavigation.goBack.mockReset();
+  mockReplace.mockReset();
 });
 
 test('Header: the title is a header, the subtitle an overline, back goes back', async () => {
@@ -87,7 +96,7 @@ test('Header: the title is a header, the subtitle an overline, back goes back', 
   expect(screen.getByText('5 to export')).toHaveStyle({ ...type.overline, color: colors.mute });
   await fireEvent.press(button('Back'));
   expect(onBack).toHaveBeenCalledTimes(1);
-  expect(mockRouter?.back).not.toHaveBeenCalled();
+  expect(mockNavigation.goBack).not.toHaveBeenCalled();
   // Edge to edge: the header's panel reaches under the status bar and pads by its inset.
   expect(screen.getByTestId('header')).toHaveStyle({ paddingTop: TOP, backgroundColor: colors.panel });
   expect(button('Back').parent).toHaveStyle({ borderBottomWidth: 1, borderBottomColor: colors.hairline });
@@ -103,47 +112,42 @@ test('Header: the title is a header, the subtitle an overline, back goes back', 
   expect(screen.getByRole('header', { name: 'Saved' })).toBeOnTheScreen();
 });
 
-test("Header: Back defaults to expo-router's back, which it reads only when pressed", async () => {
-  mockRouter = undefined; // as in the screen tests whose expo-router mock has no router
+test("Header: Back goes back by the screen's own navigation, never the global router (ruling T26-4)", async () => {
+  // This file's global router throws, as Android's restart of the screen leaves it: Back never reads it.
   await render(<Header title="Settings" />);
-  expect(button('Back')).toBeOnTheScreen();
-
-  mockRouter = freshRouter();
   await fireEvent.press(button('Back'));
-  expect(mockRouter.back).toHaveBeenCalledTimes(1);
-  expect(mockRouter.replace).not.toHaveBeenCalled();
+  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+  expect(mockReplace).not.toHaveBeenCalled();
 });
 
 test('Header: with nothing to go back to, Back goes Home (ruling T24-1)', async () => {
   // A screen with nothing under it: the Stack is anchored on Home (app/_layout), so this is the fallback.
-  mockRouter = freshRouter();
-  mockRouter.canGoBack.mockReturnValue(false);
+  mockNavigation.canGoBack.mockReturnValue(false);
   await render(<Header title="Speed test" />);
   await fireEvent.press(button('Back'));
-  expect(mockRouter.replace).toHaveBeenCalledWith('/');
-  expect(mockRouter.replace).toHaveBeenCalledTimes(1);
-  expect(mockRouter.back).not.toHaveBeenCalled();
+  expect(mockReplace.mock.calls).toEqual([['/']]);
+  expect(mockNavigation.goBack).not.toHaveBeenCalled();
 });
 
 test('Header: Back goes back once, however fast it is tapped twice', async () => {
-  // router.back() queues one GO_BACK per call: a second would leave the screen under this one too (as Close's guard)
+  // Going back queues one GO_BACK per call: a second would leave the screen under this one too (as Close's guard)
   await render(<Header title="Saved" />);
   await act(async () => {
     await fireEvent.press(button('Back'));
     await fireEvent.press(button('Back'));
   });
-  expect(mockRouter?.back).toHaveBeenCalledTimes(1);
+  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
 
   // with nothing under it: Home, once
-  mockRouter = freshRouter();
-  mockRouter.canGoBack.mockReturnValue(false);
+  mockNavigation.goBack.mockReset();
+  mockNavigation.canGoBack.mockReturnValue(false);
   await render(<Header title="Speed test" />);
   await act(async () => {
     await fireEvent.press(button('Back'));
     await fireEvent.press(button('Back'));
   });
-  expect(mockRouter.replace.mock.calls).toEqual([['/']]);
-  expect(mockRouter.back).not.toHaveBeenCalled();
+  expect(mockReplace.mock.calls).toEqual([['/']]);
+  expect(mockNavigation.goBack).not.toHaveBeenCalled();
 });
 
 test('Header: at least 56 dp tall, it grows and wraps with the text, with icon buttons on the right', async () => {

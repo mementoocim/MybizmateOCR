@@ -29,7 +29,9 @@ import { pinToday } from '../test-utils/today';
 
 let mockParams: { id?: string; from?: string } = {};
 let mockTeam = false;
-const mockRouter = { back: jest.fn(), replace: jest.fn(), push: jest.fn(), canGoBack: jest.fn(() => true) };
+const mockRouter = { replace: jest.fn(), push: jest.fn() };
+/** The screen's own navigation: going back (lib/navigation's useGoBackOrHome) is its. */
+const mockNavigation = { canGoBack: jest.fn(() => true), goBack: jest.fn() };
 const mockEnhance = jest.fn(async (_uri: string, mode: string) => `file:///x/${mode}.img`);
 const mockSave = jest.fn();
 const mockToast = jest.fn();
@@ -41,10 +43,8 @@ const mockDisplayName = jest.fn();
 const mockRelease = jest.fn(async (_uri: string) => undefined);
 
 jest.mock('expo-router', () => ({
-  get router() {
-    return mockRouter; // going back (lib/navigation's goBackOrHome), read when it's called
-  },
   useLocalSearchParams: () => mockParams,
+  useNavigation: () => mockNavigation,
   useRouter: () => mockRouter,
   useIsFocused: () => true,
 }));
@@ -132,7 +132,7 @@ afterAll(() => jest.useRealTimers());
 
 beforeEach(async () => {
   jest.clearAllMocks();
-  mockRouter.canGoBack.mockReturnValue(true); // a screen under this one, as when Home or Saved opened it
+  mockNavigation.canGoBack.mockReturnValue(true); // a screen under this one, as when Home or Saved opened it
   memoryFs.reset();
   mockTeam = false;
   await updateSettings({ annotation: false });
@@ -701,20 +701,25 @@ test('not found: a PDF chooses a PDF; Retake opens the camera, the camera app ag
   expect(mockCameraApp).toHaveBeenCalledTimes(1);
   await show('blank_page', { source: 'gallery', from: 'recent' });
   await press(button('Retake'));
-  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
 
   // with nothing under it, Home (ruling T24-1: the Stack's anchor, so a fallback)
-  mockRouter.canGoBack.mockReturnValue(false);
+  mockNavigation.canGoBack.mockReturnValue(false);
   await show('blank_page', { source: 'gallery', from: 'recent' });
   await press(button('Retake'));
   expect(mockRouter.replace).toHaveBeenLastCalledWith('/');
-  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
 });
 
 test('a saved scan: its subtitle, the saved line, Save changes, and ⋮ More options', async () => {
   const id = await showSaved('inv_0007');
   const day = savedDay(id);
   expect(screen.getByText(`Saved as a sale · ${day}`)).toHaveStyle(type.overline); // the header's subtitle
+  // The date keeps its day on its line (QA pass 4, at 360 dp: "SAVED AS A 2307 · NOV" / "23"). RNTL's text match
+  // counts a no-break space as a space, so the subtitle's own text pins it.
+  expect(within(screen.getByTestId('header')).getByText(/^Saved as a sale · /).props.children).toBe(
+    'Saved as a sale · Nov\u00A018',
+  );
   const line = screen.getByText(`Saved as a sale · ${day} · Not exported yet`);
   expect(line).toHaveStyle({ ...type.label, color: colors.ink });
   expect(screen.getByTestId('saved-line')).toHaveStyle({ backgroundColor: colors.sand });
@@ -725,7 +730,7 @@ test('a saved scan: its subtitle, the saved line, Save changes, and ⋮ More opt
 
   // exported since: the line says when
   await act(async () => markExported([id], new Date(2026, 10, 20, 9, 0)));
-  expect(screen.getByText(`Saved as a sale · ${day} · Exported Nov 20`)).toBeOnTheScreen();
+  expect(screen.getByText(`Saved as a sale · ${day} · Exported Nov\u00A020`)).toBeOnTheScreen();
 });
 
 test('a saved scan that changed says so and how to update the export', async () => {
@@ -773,7 +778,7 @@ test('deleting from ⋮ goes back without flashing that the scan is gone', async
   expect(savedSummary(id)).toBeDefined(); // nothing yet: Cancel keeps it
 
   await act(async () => alertButtons()[1].onPress!());
-  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
   expect(screen.queryByText(/no longer here/)).toBeNull();
   expect(flashes).toBe(0);
   // It's gone from the phone, and the screen shows only its header, as it was, while it goes.
@@ -798,7 +803,7 @@ test('deleting from ⋮ when the navigator lets go of the screen at once: still 
     }, []);
     return shown ? <Result /> : null;
   }
-  mockRouter.back.mockImplementationOnce(() => navigator.letGo());
+  mockNavigation.goBack.mockImplementationOnce(() => navigator.letGo());
   let watching = false;
   let flashes = 0;
   await render(
@@ -826,10 +831,10 @@ test('deleting from ⋮: a delete that fails says so, once the screen has gone b
   await press(screen.getByRole('menuitem', { name: 'Delete saved scan' }));
   await act(async () => alertButtons()[1].onPress!());
   // Review Focus 4's order: back, then the delete, in the same press
-  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
   expect(remove).toHaveBeenCalledTimes(1);
   expect(remove).toHaveBeenCalledWith(id);
-  expect(mockRouter.back.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
+  expect(mockNavigation.goBack.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
   expect(mockToast).toHaveBeenCalledTimes(1);
   expect(mockToast).toHaveBeenCalledWith("Couldn't delete the scan.");
   expect(savedSummary(id)).toBeDefined(); // still saved, so still in Saved
@@ -838,7 +843,7 @@ test('deleting from ⋮: a delete that fails says so, once the screen has gone b
 
 test('deleting from ⋮ with nothing under the screen goes Home, in the same order (ruling T24-1)', async () => {
   // The Stack is anchored on Home (app/_layout), so this is the fallback, as for the header's Back
-  mockRouter.canGoBack.mockReturnValue(false);
+  mockNavigation.canGoBack.mockReturnValue(false);
   const remove = jest.spyOn(savedStore, 'deleteSaved');
   const id = await showSaved('inv_0007');
   placeMenu();
@@ -846,7 +851,7 @@ test('deleting from ⋮ with nothing under the screen goes Home, in the same ord
   await press(screen.getByRole('menuitem', { name: 'Delete saved scan' }));
   await act(async () => alertButtons()[1].onPress!());
   expect(mockRouter.replace.mock.calls).toEqual([['/']]);
-  expect(mockRouter.back).not.toHaveBeenCalled();
+  expect(mockNavigation.goBack).not.toHaveBeenCalled();
   // Review Focus 4's order: it leaves, then deletes, in the same press
   expect(mockRouter.replace.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
   expect(savedSummary(id)).toBeUndefined();
@@ -1165,7 +1170,7 @@ test('full screen', async () => {
 test('retake', async () => {
   await show('inv_0007', { source: 'sample', sampleId: 'inv_0007' });
   await press(screen.getByText('Retake'));
-  expect(mockRouter.back).toHaveBeenCalled();
+  expect(mockNavigation.goBack).toHaveBeenCalled();
 
   await show('inv_0007', { source: 'gallery' });
   await press(screen.getByText('Retake'));
@@ -1190,7 +1195,7 @@ test('retake', async () => {
 });
 
 test('Retake runs once, however fast it is tapped twice (ruling T25b-2)', async () => {
-  // router.back() queues a GO_BACK per call: a second would leave the screen under this one too, as the header's Back
+  // Going back queues a GO_BACK per call: a second would leave the screen under this one too, as the header's Back
   // and the camera's Close would without their guard. A fast double tap: inside one act() scope, nothing re-renders
   // between the two taps.
   const doubleTap = () =>
@@ -1200,13 +1205,13 @@ test('Retake runs once, however fast it is tapped twice (ruling T25b-2)', async 
     });
   await show('inv_0007', { source: 'camera', from: 'recent' }); // opened from Recent scans: back
   await doubleTap();
-  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
 
   await show('inv_0007', { source: 'sample', sampleId: 'inv_0007' }); // a sample: back too
   await doubleTap();
-  expect(mockRouter.back).toHaveBeenCalledTimes(2);
+  expect(mockNavigation.goBack).toHaveBeenCalledTimes(2);
 
-  mockRouter.canGoBack.mockReturnValue(false); // with nothing under it: Home, once
+  mockNavigation.canGoBack.mockReturnValue(false); // with nothing under it: Home, once
   await show('inv_0007', { source: 'gallery', from: 'recent' });
   await doubleTap();
   expect(mockRouter.replace.mock.calls).toEqual([['/']]);
@@ -1216,7 +1221,7 @@ test('Retake runs once, however fast it is tapped twice (ruling T25b-2)', async 
   await show('inv_0007', { source: 'camera' });
   await doubleTap();
   expect(mockRouter.replace.mock.calls).toEqual([['/camera']]);
-  expect(mockRouter.back).toHaveBeenCalledTimes(2);
+  expect(mockNavigation.goBack).toHaveBeenCalledTimes(2);
 });
 
 test('a retake shows the reading card for what it reads, and a read that fails says why in a dialog', async () => {

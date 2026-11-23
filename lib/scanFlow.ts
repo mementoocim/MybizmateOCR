@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { displayName, readPdf, releaseAccess, scanPhoto, type ScanResult } from '../modules/scanner';
-import { goBackOrHome } from './navigation';
+import { useGoBackOrHome } from './navigation';
 import { SAMPLES, sampleUri } from './samples';
 import { addScan, type ScanSource, type StoredScan } from './scans';
 
@@ -85,6 +85,7 @@ function deleteCopy(file: File): void {
  */
 export function useScanFlow() {
   const router = useRouter();
+  const goBackOrHome = useGoBackOrHome();
   const busyRef = useRef(false);
   const leaving = useRef(false); // set at once, so a second Retake is refused before the screen has gone
   const [busy, setBusy] = useState(false);
@@ -232,10 +233,10 @@ export function useScanFlow() {
 
   /**
    * Retake: the same source again (for a PDF, the picker again); back after a sample or a scan opened from Home's
-   * Recent scans or Saved (Home when there's nothing to go back to: goBackOrHome). Going back, or to the camera, leaves
-   * the screen at once, and runs once (ruling T25b-2), as the header's Back and the camera's Close do: router.back()
-   * queues a GO_BACK per call, so a fast double tap would leave the screen under this one too. A picker can run again
-   * once it's done (oneAtATime).
+   * Recent scans or Saved (Home when there's nothing to go back to: useGoBackOrHome). Going back, or to the camera,
+   * leaves the screen at once, and runs once (ruling T25b-2), as the header's Back and the camera's Close do: going
+   * back queues a GO_BACK per call, so a fast double tap would leave the screen under this one too. A picker can run
+   * again once it's done (oneAtATime).
    */
   async function retake(scan: StoredScan, openedFromRecent: boolean): Promise<void> {
     const back = openedFromRecent || scan.source === 'sample';

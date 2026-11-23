@@ -38,6 +38,11 @@ jest.mock('expo-sharing', () => ({
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 jest.mock('expo-crypto', () => require('../test-utils/fixedCrypto').fixedCrypto.module);
 jest.mock('../lib/build', () => ({ TEAM_BUILD: true }));
+// the header's Back (lib/navigation): the screen's own navigation, and the way Home
+jest.mock('expo-router', () => ({
+  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }),
+  useRouter: () => ({ replace: jest.fn() }),
+}));
 
 // Training data, in a team build: the count of annotated scans not sent yet, the zip shared, and the scans marked once
 // the person says it went where they wanted. In the design's tokens and components, with milestone 4's behaviour

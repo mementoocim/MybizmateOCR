@@ -15,7 +15,7 @@ import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §5.6 and §7: the inputs. Segmented and ChoiceChips are radio groups that TalkBack names, with the chosen
 // option in ink with a paper label (§5.1: selection is ink); Segmented stacks its options when the window is narrow for
-// their words at its font size (ruling T26-3). A TextField has its label above, an outline border that becomes a 2 dp
+// their words at its font size (ruling T26-5). A TextField has its label above, an outline border that becomes a 2 dp
 // focus border, and one note under it, which is also the field's hint. Taking focus, it scrolls its whole field
 // (label, box and note) into view in the Screen, and again when the keyboard opens or grows (ruling T5-2).
 
@@ -32,6 +32,10 @@ const VIEWS = [
   { value: 'enhanced', label: 'Enhanced' },
   { value: 'bw', label: 'B&W' },
   { value: 'original', label: 'Original' },
+] as const;
+const KINDS = [
+  { value: 'sale', label: 'Sale' },
+  { value: 'purchase', label: 'Purchase' },
 ] as const;
 const TAX_TYPES = [
   { value: 'VAT', label: 'VAT' },
@@ -50,6 +54,22 @@ const atWindow = (width: number, fontScale: number) =>
   act(() => {
     Dimensions.set({ window: { ...WINDOW, width, fontScale }, screen: Dimensions.get('screen') });
   });
+
+/** For each window (its width in dp and its font scale), how a Segmented lays out its options: one row, or stacked. */
+async function expectLayouts(
+  group: () => Instance,
+  layouts: readonly [width: number, fontScale: number, direction: 'column' | 'row'][],
+) {
+  for (const [width, fontScale, direction] of layouts) {
+    await atWindow(width, fontScale); // it follows the window as it changes
+    const shown = [width, fontScale, StyleSheet.flatten(group().props.style).flexDirection];
+    expect(shown).toEqual([width, fontScale, direction]);
+    // side by side each takes an equal share of the row; stacked each takes its own row, full width
+    for (const option of within(group()).getAllByRole('radio')) {
+      expect(option).toHaveStyle({ flex: direction === 'row' ? 1 : undefined });
+    }
+  }
+}
 
 /**
  * jest's views have no layout, and share their native methods: measureLayout is one jest.fn on View's and TextInput's
@@ -122,10 +142,11 @@ test('Segmented is a labelled radio group with an ink selection', async () => {
   expect(screen.getByTestId('focus-ring')).toHaveStyle({ top: 0, left: 0, right: 0, bottom: 0 });
 });
 
-test('Segmented stacks its options when a third of the row is too narrow for a word (ruling T26-3)', async () => {
-  // Side by side, each option has a third of the row: at 200% Android broke the words inside it ("Custo / mers / 21"),
-  // and on a 360 dp phone at 130% "Customers" (about 75 dp at 100%) outgrows its third too. So the options stack, one
-  // full-width option per row, while the window has under 310 dp per unit of font scale.
+test('Segmented stacks its options when its share of the row is too narrow for a word (ruling T26-5)', async () => {
+  // Side by side, each option has an equal share of the row: at 200% Android broke the words in a third of it ("Custo
+  // / mers / 21"), and on a 360 dp phone at 130% "Customers" (about 75 dp at 100%) outgrows its third too. So the
+  // options stack, one full-width option per row, while the window has under 104 dp per unit of font scale for each
+  // option: under 312 for three, under 208 for two.
   const onChange = jest.fn();
   await atWindow(411, 2);
   await render(<Segmented label="List" options={LISTS} value="suppliers" onChange={onChange} />);
@@ -154,26 +175,34 @@ test('Segmented stacks its options when a third of the row is too narrow for a w
   await fireEvent.press(other);
   expect(onChange).toHaveBeenCalledWith('customers');
 
-  // Window width in dp, font scale, and the layout. Stacked at 200% on any phone, and at 130% on a 360 dp one; one row
-  // at 100% on any phone, and at 130% on a 411 dp one (316 dp per unit). Around 310 dp per unit: 309.5 stacks; 310 and
-  // 310.5 are one row. It follows the window as it changes.
-  const layouts: [width: number, fontScale: number, direction: 'column' | 'row'][] = [
+  // Three options. Stacked at 200% on any phone, and at 130% on a 360 dp one; one row at 100% on any phone, and at 130%
+  // on a 411 dp one (316 dp per unit). At the edge: 623 dp at 200% (311.5 per unit) stacks; 624 (312) is one row.
+  await expectLayouts(group, [
     [411, 2, 'column'],
     [360, 1.3, 'column'],
     [411, 1, 'row'],
     [360, 1, 'row'],
     [411, 1.3, 'row'],
-    [619, 2, 'column'],
-    [620, 2, 'row'],
-    [621, 2, 'row'],
-  ];
-  for (const [width, fontScale, direction] of layouts) {
-    await atWindow(width, fontScale);
-    const shown = [width, fontScale, StyleSheet.flatten(group().props.style).flexDirection];
-    expect(shown).toEqual([width, fontScale, direction]);
-    // side by side each takes an equal share of the row; stacked each takes its own row, full width
-    for (const option of options()) expect(option).toHaveStyle({ flex: direction === 'row' ? 1 : undefined });
-  }
+    [623, 2, 'column'],
+    [624, 2, 'row'],
+  ]);
+
+  // Two options, the Scan screen's Sale | Purchase: half the row easily holds "Purchase" at 130% on a 360 dp phone
+  // (277 dp per unit), so they keep one row there, and they stack at 200% on a 360 or a 411 dp one. At the edge: 415 dp
+  // at 200% (207.5 per unit) stacks; 416 (208) is one row. The same roles, states and ink selection.
+  await screen.rerender(<Segmented label="Kind" options={KINDS} value="purchase" onChange={onChange} />);
+  const kinds = () => screen.getByRole('radiogroup', { name: 'Kind' });
+  await expectLayouts(kinds, [
+    [360, 1.3, 'row'],
+    [360, 2, 'column'],
+    [411, 2, 'column'],
+    [415, 2, 'column'],
+    [416, 2, 'row'],
+  ]);
+  expect(screen.getByRole('radio', { name: 'Purchase', checked: true })).toHaveStyle({ backgroundColor: colors.ink });
+  expect(screen.getByRole('radio', { name: 'Sale', checked: false })).toHaveStyle({ backgroundColor: undefined });
+  await fireEvent.press(screen.getByRole('radio', { name: 'Sale' }));
+  expect(onChange).toHaveBeenLastCalledWith('sale');
 
   // The photo viewer's views stack the same way, in their dark tone.
   await atWindow(411, 2);

@@ -26,6 +26,7 @@ const mockPick = jest.fn();
 const mockReadPdf = jest.fn();
 
 jest.mock('expo-router', () => ({
+  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
   useFocusEffect: (effect: () => void) => require('react').useEffect(effect, []),
   useIsFocused: () => true,

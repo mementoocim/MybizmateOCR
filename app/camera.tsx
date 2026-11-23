@@ -14,7 +14,7 @@ import { Tap } from '../components/Tap';
 import { TEAM_BUILD } from '../lib/build';
 import { CAMERA_ERRORS, CAMERA_TEXT, PERMISSION_TEXT, statusText } from '../lib/cameraCopy';
 import { confirmHaptic } from '../lib/haptics';
-import { goBackOrHome } from '../lib/navigation';
+import { useGoBackOrHome } from '../lib/navigation';
 import { sampleUri } from '../lib/samples';
 import { useScanFlow } from '../lib/scanFlow';
 import { colors, radius, space, touch, type } from '../lib/theme';
@@ -60,6 +60,7 @@ function toPermission(p: ImagePicker.CameraPermissionResponse): Permission {
 
 export default function CameraScreen() {
   const flow = useScanFlow();
+  const goBackOrHome = useGoBackOrHome();
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
   const focusedRef = useRef(focused);
@@ -134,7 +135,7 @@ export default function CameraScreen() {
   useEffect(() => () => clearTimeout(errorTimer.current), []);
 
   /**
-   * Back, once: router.back() queues a GO_BACK per call, so a fast double tap would leave the next screen too. With
+   * Back, once: going back queues a GO_BACK per call, so a fast double tap would leave the next screen too. With
    * nothing to go back to, Home (ruling T24-1: lib/navigation).
    */
   function close() {
