@@ -258,6 +258,35 @@ test('a bar counts only while its screen is the one on top (ruling T19-5)', asyn
   expect(snackbar()).toHaveStyle({ bottom: BOTTOM + space.s });
 });
 
+test('a bar that lays out again keeps its place in the order (ruling T25b-1)', async () => {
+  // Two bars report at once (each screen focused here): the one that first reported later counts. A new height from
+  // the other, as its line wraps, say, changes its height, not its place; it gives that up only when it goes.
+  const ui = (scanBar: boolean) => (
+    <>
+      <BottomBar buttons={[{ label: 'Export…', onPress: noop }]} />
+      {scanBar && <BottomBar buttons={[{ label: 'Save sale', onPress: noop }]} />}
+      <SnackbarHost />
+    </>
+  );
+  const relayout = (index: number, height: number) =>
+    fireEvent(screen.getAllByTestId('bottom-bar')[index], 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 360, height } },
+    });
+  await withInsets(ui(true));
+  await relayout(0, 120); // Saved's
+  await relayout(1, 80); // then the Scan screen's
+  await raise('Saved as a sale');
+  expect(snackbar()).toHaveStyle({ bottom: 80 + space.s });
+
+  await relayout(0, 136); // Saved's lays out again: the Scan screen's bar still counts
+  expect(snackbar()).toHaveStyle({ bottom: 80 + space.s });
+  await relayout(1, 96); // and the Scan screen's own new height does
+  expect(snackbar()).toHaveStyle({ bottom: 96 + space.s });
+
+  await screen.rerender(ui(false)); // the Scan screen's bar goes: Saved's, as last laid out
+  expect(snackbar()).toHaveStyle({ bottom: 136 + space.s });
+});
+
 test('in a sheet, it sits above the action row, or above the inset and the keyboard', async () => {
   await withInsets(<Sheet visible title="Date" onClose={noop} actions={[{ label: 'Save', onPress: noop }]} />);
   await raise('Added to your items.');

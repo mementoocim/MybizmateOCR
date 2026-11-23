@@ -86,6 +86,7 @@ function deleteCopy(file: File): void {
 export function useScanFlow() {
   const router = useRouter();
   const busyRef = useRef(false);
+  const leaving = useRef(false); // set at once, so a second Retake is refused before the screen has gone
   const [busy, setBusy] = useState(false);
   const [readingWhat, setReading] = useState<'photo' | 'pdf' | null>(null);
   // false once the screen is left: a read that ends after that is kept in Recent scans, and nothing opens.
@@ -231,15 +232,18 @@ export function useScanFlow() {
 
   /**
    * Retake: the same source again (for a PDF, the picker again); back after a sample or a scan opened from Home's
-   * Recent scans or Saved (Home when there's nothing to go back to: goBackOrHome).
+   * Recent scans or Saved (Home when there's nothing to go back to: goBackOrHome). Going back, or to the camera, leaves
+   * the screen at once, and runs once (ruling T25b-2), as the header's Back and the camera's Close do: router.back()
+   * queues a GO_BACK per call, so a fast double tap would leave the screen under this one too. A picker can run again
+   * once it's done (oneAtATime).
    */
   async function retake(scan: StoredScan, openedFromRecent: boolean): Promise<void> {
-    if (openedFromRecent || scan.source === 'sample') {
-      goBackOrHome();
-      return;
-    }
-    if (scan.source === 'camera') {
-      router.replace('/camera');
+    const back = openedFromRecent || scan.source === 'sample';
+    if (back || scan.source === 'camera') {
+      if (leaving.current) return;
+      leaving.current = true;
+      if (back) goBackOrHome();
+      else router.replace('/camera');
       return;
     }
     if (scan.source === 'camera_app') return fromCameraApp({ replace: true });

@@ -1174,6 +1174,36 @@ test('retake', async () => {
   expect(mockRelease).toHaveBeenCalledWith(uri); // the picker's lasting access to it, given up once read
 });
 
+test('Retake runs once, however fast it is tapped twice (ruling T25b-2)', async () => {
+  // router.back() queues a GO_BACK per call: a second would leave the screen under this one too, as the header's Back
+  // and the camera's Close would without their guard. A fast double tap: inside one act() scope, nothing re-renders
+  // between the two taps.
+  const doubleTap = () =>
+    act(async () => {
+      await fireEvent.press(button('Retake'));
+      await fireEvent.press(button('Retake'));
+    });
+  await show('inv_0007', { source: 'camera', from: 'recent' }); // opened from Recent scans: back
+  await doubleTap();
+  expect(mockRouter.back).toHaveBeenCalledTimes(1);
+
+  await show('inv_0007', { source: 'sample', sampleId: 'inv_0007' }); // a sample: back too
+  await doubleTap();
+  expect(mockRouter.back).toHaveBeenCalledTimes(2);
+
+  mockRouter.canGoBack.mockReturnValue(false); // with nothing under it: Home, once
+  await show('inv_0007', { source: 'gallery', from: 'recent' });
+  await doubleTap();
+  expect(mockRouter.replace.mock.calls).toEqual([['/']]);
+
+  // straight from the camera: the camera again, once
+  mockRouter.replace.mockClear();
+  await show('inv_0007', { source: 'camera' });
+  await doubleTap();
+  expect(mockRouter.replace.mock.calls).toEqual([['/camera']]);
+  expect(mockRouter.back).toHaveBeenCalledTimes(2);
+});
+
 test('a retake shows the reading card for what it reads, and a read that fails says why in a dialog', async () => {
   // a PDF: the card says Reading the PDF while it reads; a refusal leaves this scan where it is
   await show('sales_text_0', { source: 'pdf' });

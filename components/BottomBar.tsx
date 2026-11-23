@@ -17,7 +17,8 @@ import { Button, type ButtonProps, type ButtonVariant } from './Buttons';
 // width the labels fit on one line, and flipping back would loop. While its screen is the one on top (focused), the
 // bar reports its height, so the snackbar sits above it (lib/snackbar). It withdraws it when another screen goes over
 // it, and reports again when its screen is back on top. So a bar that mounts on a covered screen (Saved's, when a save
-// on the Scan screen over it gives it something to export) never moves the message on the screen on top (T19-5).
+// on the Scan screen over it gives it something to export) never moves the message on the screen on top (T19-5). A
+// new height, as it lays out again, keeps its place in the order.
 
 export function ButtonRow({ buttons }: { buttons: readonly ButtonProps[] }) {
   const { width, fontScale } = useWindowDimensions();
@@ -52,10 +53,13 @@ export function BottomBar({ buttons, children }: { buttons: readonly ButtonProps
   const focused = useIsFocused();
   const ownerRef = useRef(null); // this bar, as the clearance knows it
   const [height, setHeight] = useState<number | null>(null); // as last laid out
+  // Withdrawn only when covered or gone, so a new height keeps the bar's place in the order (ruling T25b-1).
   useEffect(() => {
-    if (!focused || height === null) return;
-    setBottomClearance(ownerRef, height);
-    return () => setBottomClearance(ownerRef, null); // covered, or gone
+    if (!focused) return;
+    return () => setBottomClearance(ownerRef, null);
+  }, [focused]);
+  useEffect(() => {
+    if (focused && height !== null) setBottomClearance(ownerRef, height);
   }, [focused, height]);
   return (
     <View
