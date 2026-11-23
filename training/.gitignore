@@ -1,0 +1,16 @@
+# Keep heavy local training artifacts, datasets, venv, and 125MB checkpoints out of Git
+.venv/
+PaddleOCR/
+pretrain/
+fonts/
+benchmarks/
+rec_dataset/
+rec_dataset_*/
+output_ft/
+__pycache__/
+*.pyc
+models/_*/
+models/v*/
+models/*/*.pdparams
+models/*/*.onnx
+models/*/_*/

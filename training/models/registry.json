@@ -1,0 +1,1745 @@
+{
+  "active_version": "v1.3.0-wise-ft",
+  "versions": {
+    "v1.0.0-pretrained": {
+      "version": "v1.0.0-pretrained",
+      "registered_at_utc": "2026-11-23T14:58:35.412268+00:00",
+      "sha256": "9731cc1254760c2672e7edd8b96311e392b8eba4f01a030c0d468fd127474da7",
+      "bytes": 12152128,
+      "notes": "Original pretrained PP-OCRv6 small Latin-cut model",
+      "metrics": {
+        "onnx_path": "training\\models\\v1.0.0-pretrained\\inference_latin.onnx",
+        "composite_exact_acc": 0.68187,
+        "composite_char_acc": 0.96167,
+        "ms_per_crop": 33.52,
+        "top_confusions": [
+          [
+            "<space>-><dropped>",
+            103
+          ],
+          [
+            "r->s",
+            34
+          ],
+          [
+            "n->u",
+            21
+          ],
+          [
+            "e->i",
+            14
+          ],
+          [
+            "m->w",
+            13
+          ],
+          [
+            "k->h",
+            11
+          ],
+          [
+            "a->o",
+            11
+          ],
+          [
+            "h->l",
+            10
+          ],
+          [
+            "1->I",
+            10
+          ],
+          [
+            "o->a",
+            9
+          ],
+          [
+            "u->n",
+            9
+          ],
+          [
+            "u->v",
+            8
+          ]
+        ],
+        "benchmarks": {
+          "bench_a_real_human_cursive": {
+            "label": "Real Human Cursive (IAM)",
+            "exact_acc": 0.23333,
+            "char_acc": 0.92122,
+            "exact_count": 70,
+            "total": 300,
+            "sample_mistakes": [
+              {
+                "file": "0001_iam_val.png",
+                "gt": "That blonde was something. \" \" Anybody",
+                "pred": "That blonde was something.\" \"Anybody",
+                "conf": 0.991
+              },
+              {
+                "file": "0002_iam_val.png",
+                "gt": "far exceeded the number of fruits.",
+                "pred": "fas exceeded Ahe mumbes of fruits",
+                "conf": 0.9534
+              },
+              {
+                "file": "0003_iam_val.png",
+                "gt": "attack of enteric fever.",
+                "pred": "attack of enteric ferer.",
+                "conf": 0.9636
+              },
+              {
+                "file": "0005_iam_val.png",
+                "gt": "right 2hyar, Nick, \" said the Sodbuster.",
+                "pred": "right Zhyar, Nick, \" said the Sodbuster.",
+                "conf": 0.9758
+              },
+              {
+                "file": "0006_iam_val.png",
+                "gt": "Yes, the bus set out from Dinas. So much",
+                "pred": "Tes, ths bus set out from Divas. So wuch",
+                "conf": 0.945
+              },
+              {
+                "file": "0007_iam_val.png",
+                "gt": "hut had recently been cleaned and",
+                "pred": "mut hact recently been cleaned cind",
+                "conf": 0.8829
+              },
+              {
+                "file": "0008_iam_val.png",
+                "gt": "(Berochoth.) And the Rabbis thought",
+                "pred": "(Berochath) And the Rabluis thought",
+                "conf": 0.9398
+              },
+              {
+                "file": "0010_iam_val.png",
+                "gt": "to put St. John's Casualty Department",
+                "pred": "to rnt St. John's Casnalty Depatrant",
+                "conf": 0.9111
+              },
+              {
+                "file": "0011_iam_val.png",
+                "gt": "the Egyptians, their cookery made rapid",
+                "pred": "the Egyptians, their coohesy made tapid",
+                "conf": 0.9666
+              },
+              {
+                "file": "0012_iam_val.png",
+                "gt": "the moment, thank God! \" Problem...?",
+                "pred": "the wowent, thanh God!\" Problen...?",
+                "conf": 0.96
+              },
+              {
+                "file": "0013_iam_val.png",
+                "gt": "for Mr. Pell and his bunch, \" observed",
+                "pred": "for Mr. Pell and his bunch,\" observed",
+                "conf": 0.9705
+              },
+              {
+                "file": "0014_iam_val.png",
+                "gt": "off a fever. A number of newly-born",
+                "pred": "off a feves. A mumbes of mewly- born",
+                "conf": 0.9475
+              }
+            ]
+          },
+          "bench_b_unseen_cursive_fonts": {
+            "label": "Unseen Cursive Fonts",
+            "exact_acc": 0.8775,
+            "char_acc": 0.97665,
+            "exact_count": 351,
+            "total": 400,
+            "sample_mistakes": [
+              {
+                "file": "0018_number.png",
+                "gt": "4 1/8",
+                "pred": "41/8",
+                "conf": 0.9986
+              },
+              {
+                "file": "0019_code.png",
+                "gt": "WI071",
+                "pred": "W1071",
+                "conf": 0.9035
+              },
+              {
+                "file": "0024_number.png",
+                "gt": "9 1/4",
+                "pred": "9 14",
+                "conf": 0.6797
+              },
+              {
+                "file": "0034_text.png",
+                "gt": "Marine Plywood 1/2",
+                "pred": "Marine Plywood /2",
+                "conf": 0.9342
+              },
+              {
+                "file": "0035_code.png",
+                "gt": "WI061",
+                "pred": "WEI061",
+                "conf": 0.71
+              },
+              {
+                "file": "0037_number.png",
+                "gt": "3 1/8",
+                "pred": "31/8",
+                "conf": 0.9943
+              },
+              {
+                "file": "0045_text.png",
+                "gt": "Ibañez Auto Supply",
+                "pred": "Ilbañez Auto Supply",
+                "conf": 0.9597
+              },
+              {
+                "file": "0061_text.png",
+                "gt": "Dasmariñas Cavite",
+                "pred": "Dasmarinas Lavite",
+                "conf": 0.9627
+              },
+              {
+                "file": "0069_text.png",
+                "gt": "Cooking Oil 1L",
+                "pred": "Cooking 0il IL",
+                "conf": 0.959
+              },
+              {
+                "file": "0079_number.png",
+                "gt": "1 1/2",
+                "pred": "11/2",
+                "conf": 0.9049
+              },
+              {
+                "file": "0080_text.png",
+                "gt": "pcs",
+                "pred": "pce",
+                "conf": 0.8177
+              },
+              {
+                "file": "0094_text.png",
+                "gt": "Utility bill",
+                "pred": "Uutilityy bill",
+                "conf": 0.831
+              }
+            ]
+          },
+          "bench_c_hard_confusables": {
+            "label": "Hard Confusables (a/g/u/v/0/1/Ñ)",
+            "exact_acc": 0.77917,
+            "char_acc": 0.96287,
+            "exact_count": 187,
+            "total": 240,
+            "sample_mistakes": [
+              {
+                "file": "0001_text.png",
+                "gt": "Alaska Evap 370ml",
+                "pred": "Alaska Evap s7oml",
+                "conf": 0.9509
+              },
+              {
+                "file": "0005_text.png",
+                "gt": "Baguio Oil 1L",
+                "pred": "Baguio Oil IL",
+                "conf": 0.968
+              },
+              {
+                "file": "0007_text.png",
+                "gt": "Gas Tank 11kg",
+                "pred": "Gas Tank 71kg",
+                "conf": 0.9371
+              },
+              {
+                "file": "0011_text.png",
+                "gt": "Vinegar 500ml",
+                "pred": "Vinegar sooml",
+                "conf": 0.9202
+              },
+              {
+                "file": "0013_date.png",
+                "gt": "23 Aug 2025",
+                "pred": "23 Avg 2025",
+                "conf": 0.9738
+              },
+              {
+                "file": "0024_text.png",
+                "gt": "Portland Cement 40kg",
+                "pred": "Portland Cement 4okg",
+                "conf": 0.9721
+              },
+              {
+                "file": "0025_text.png",
+                "gt": "Cooking Oil 1L",
+                "pred": "Cooking Oil IL",
+                "conf": 0.9788
+              },
+              {
+                "file": "0026_text.png",
+                "gt": "Oil 1L",
+                "pred": "0il 1L",
+                "conf": 0.8613
+              },
+              {
+                "file": "0027_text.png",
+                "gt": "mL",
+                "pred": "ml",
+                "conf": 0.9759
+              },
+              {
+                "file": "0038_number.png",
+                "gt": "1 1/2",
+                "pred": "11/2",
+                "conf": 1.0
+              },
+              {
+                "file": "0052_text.png",
+                "gt": "Las Piñas Supply",
+                "pred": "Las Pinas Supply",
+                "conf": 0.955
+              },
+              {
+                "file": "0055_text.png",
+                "gt": "Eggs",
+                "pred": "Egga",
+                "conf": 0.9566
+              }
+            ]
+          },
+          "bench_d_inv0007": {
+            "label": "Repo Fixture inv_0007",
+            "exact_acc": 0.91111,
+            "char_acc": 0.99043,
+            "exact_count": 41,
+            "total": 45,
+            "sample_mistakes": [
+              {
+                "file": "date.png",
+                "gt": "Sep 20, 2026",
+                "pred": "Sep 20,2026",
+                "conf": 0.9962
+              },
+              {
+                "file": "customer_name.png",
+                "gt": "Torres Construction Supply",
+                "pred": "TorresConstruction Supply",
+                "conf": 0.9902
+              },
+              {
+                "file": "item2_description.png",
+                "gt": "Alaska Evap 370ml",
+                "pred": "Alaskg Evap 370ml",
+                "conf": 0.9931
+              },
+              {
+                "file": "item4_description.png",
+                "gt": "Eggs",
+                "pred": "Egqs",
+                "conf": 0.995
+              }
+            ]
+          },
+          "bench_e_printed_retention": {
+            "label": "Clean Printed Retention",
+            "exact_acc": 1.0,
+            "char_acc": 1.0,
+            "exact_count": 150,
+            "total": 150,
+            "sample_mistakes": []
+          }
+        }
+      }
+    },
+    "v1.1.0-ft-r1": {
+      "version": "v1.1.0-ft-r1",
+      "registered_at_utc": "2026-11-23T14:59:17.694105+00:00",
+      "sha256": "324602961a4bc92433be149ab6909381d20863cb9635583716e0286f6d7daa96",
+      "bytes": 12152120,
+      "notes": "Round 1 synthetic-only fine-tune (overfit neat fonts, weak on IAM cursive)",
+      "metrics": {
+        "onnx_path": "training\\models\\v1.1.0-ft-r1\\inference_latin.onnx",
+        "composite_exact_acc": 0.62721,
+        "composite_char_acc": 0.94639,
+        "ms_per_crop": 33.12,
+        "top_confusions": [
+          [
+            "n->u",
+            51
+          ],
+          [
+            "<space>-><dropped>",
+            47
+          ],
+          [
+            "r->s",
+            35
+          ],
+          [
+            "d->l",
+            29
+          ],
+          [
+            "u->v",
+            27
+          ],
+          [
+            "n->m",
+            18
+          ],
+          [
+            "s->S",
+            18
+          ],
+          [
+            "n->r",
+            17
+          ],
+          [
+            "c->C",
+            14
+          ],
+          [
+            "t->A",
+            13
+          ],
+          [
+            "n->v",
+            13
+          ],
+          [
+            "h->l",
+            13
+          ]
+        ],
+        "benchmarks": {
+          "bench_a_real_human_cursive": {
+            "label": "Real Human Cursive (IAM)",
+            "exact_acc": 0.05333,
+            "char_acc": 0.86136,
+            "exact_count": 16,
+            "total": 300,
+            "sample_mistakes": [
+              {
+                "file": "0000_iam_val.png",
+                "gt": "Shorty.",
+                "pred": "Shotty.",
+                "conf": 0.8789
+              },
+              {
+                "file": "0001_iam_val.png",
+                "gt": "That blonde was something. \" \" Anybody",
+                "pred": "That blonde was something.\" \"Anybody",
+                "conf": 0.9572
+              },
+              {
+                "file": "0002_iam_val.png",
+                "gt": "far exceeded the number of fruits.",
+                "pred": "fas ex ceeded Ahe mumbes of fruits.",
+                "conf": 0.9779
+              },
+              {
+                "file": "0003_iam_val.png",
+                "gt": "attack of enteric fever.",
+                "pred": "attack of emteric ferer.",
+                "conf": 0.9638
+              },
+              {
+                "file": "0004_iam_val.png",
+                "gt": "for spawning. Both result in crowding,",
+                "pred": "for Spawring. Both result in crowding,",
+                "conf": 0.965
+              },
+              {
+                "file": "0005_iam_val.png",
+                "gt": "right 2hyar, Nick, \" said the Sodbuster.",
+                "pred": "right 2hyar , Nick, \" saidl the Sodbuster.",
+                "conf": 0.962
+              },
+              {
+                "file": "0006_iam_val.png",
+                "gt": "Yes, the bus set out from Dinas. So much",
+                "pred": "Yes, ths bvs 5et ovt from Divcis. So mvch",
+                "conf": 0.9329
+              },
+              {
+                "file": "0007_iam_val.png",
+                "gt": "hut had recently been cleaned and",
+                "pred": "Mt hacl recertly beer cleanecl cvrd",
+                "conf": 0.9302
+              },
+              {
+                "file": "0008_iam_val.png",
+                "gt": "(Berochoth.) And the Rabbis thought",
+                "pred": "(Berochath) And the Ralbluis thcught",
+                "conf": 0.9487
+              },
+              {
+                "file": "0009_iam_val.png",
+                "gt": "what does such a person do? He signals",
+                "pred": "Nhat does such a person dlo?. He 5ignals",
+                "conf": 0.9755
+              },
+              {
+                "file": "0010_iam_val.png",
+                "gt": "to put St. John's Casualty Department",
+                "pred": "to rnt St. John 's Casvalty Departmamt",
+                "conf": 0.9398
+              },
+              {
+                "file": "0011_iam_val.png",
+                "gt": "the Egyptians, their cookery made rapid",
+                "pred": "Ahe Egyptians, Aheir Coohesy made Tapid",
+                "conf": 0.9663
+              }
+            ]
+          },
+          "bench_b_unseen_cursive_fonts": {
+            "label": "Unseen Cursive Fonts",
+            "exact_acc": 0.8875,
+            "char_acc": 0.98371,
+            "exact_count": 355,
+            "total": 400,
+            "sample_mistakes": [
+              {
+                "file": "0001_number.png",
+                "gt": "1 3/4",
+                "pred": "1 5/4",
+                "conf": 0.945
+              },
+              {
+                "file": "0008_text.png",
+                "gt": "unit",
+                "pred": "vnit",
+                "conf": 0.9007
+              },
+              {
+                "file": "0010_text.png",
+                "gt": "Survey fee",
+                "pred": "Durvey fee",
+                "conf": 0.9866
+              },
+              {
+                "file": "0018_number.png",
+                "gt": "4 1/8",
+                "pred": "41/8",
+                "conf": 1.0
+              },
+              {
+                "file": "0024_number.png",
+                "gt": "9 1/4",
+                "pred": "9 /4",
+                "conf": 0.7487
+              },
+              {
+                "file": "0034_text.png",
+                "gt": "Marine Plywood 1/2",
+                "pred": "Marine Plywood /2",
+                "conf": 0.9625
+              },
+              {
+                "file": "0035_code.png",
+                "gt": "WI061",
+                "pred": "WEI061",
+                "conf": 0.9301
+              },
+              {
+                "file": "0045_text.png",
+                "gt": "Ibañez Auto Supply",
+                "pred": "rIbañez Auto Supply",
+                "conf": 0.9588
+              },
+              {
+                "file": "0061_text.png",
+                "gt": "Dasmariñas Cavite",
+                "pred": "Dasmariñas Lavite",
+                "conf": 0.958
+              },
+              {
+                "file": "0069_text.png",
+                "gt": "Cooking Oil 1L",
+                "pred": "Cooking Oil IL",
+                "conf": 0.8919
+              },
+              {
+                "file": "0080_text.png",
+                "gt": "pcs",
+                "pred": "pce",
+                "conf": 0.9735
+              },
+              {
+                "file": "0094_text.png",
+                "gt": "Utility bill",
+                "pred": "Uutility l",
+                "conf": 0.8327
+              }
+            ]
+          },
+          "bench_c_hard_confusables": {
+            "label": "Hard Confusables (a/g/u/v/0/1/Ñ)",
+            "exact_acc": 0.75,
+            "char_acc": 0.96588,
+            "exact_count": 180,
+            "total": 240,
+            "sample_mistakes": [
+              {
+                "file": "0005_text.png",
+                "gt": "Baguio Oil 1L",
+                "pred": "Baguio Oil lL",
+                "conf": 0.9529
+              },
+              {
+                "file": "0007_text.png",
+                "gt": "Gas Tank 11kg",
+                "pred": "Gas Tank 71kg",
+                "conf": 0.9689
+              },
+              {
+                "file": "0008_text.png",
+                "gt": "Tagalog Guide",
+                "pred": "Tagalog Gvide",
+                "conf": 0.9823
+              },
+              {
+                "file": "0011_text.png",
+                "gt": "Vinegar 500ml",
+                "pred": "Jinegar 500oml",
+                "conf": 0.9485
+              },
+              {
+                "file": "0013_date.png",
+                "gt": "23 Aug 2025",
+                "pred": "23 Avg 2025",
+                "conf": 0.9888
+              },
+              {
+                "file": "0018_text.png",
+                "gt": "Twenty-four pesos",
+                "pred": "Twenty-fovr pesos",
+                "conf": 0.9538
+              },
+              {
+                "file": "0021_text.png",
+                "gt": "Laundry soap",
+                "pred": "Lauudry soap",
+                "conf": 0.9602
+              },
+              {
+                "file": "0024_text.png",
+                "gt": "Portland Cement 40kg",
+                "pred": "Portand Cement 4okg",
+                "conf": 0.9564
+              },
+              {
+                "file": "0027_text.png",
+                "gt": "mL",
+                "pred": "ml",
+                "conf": 0.9381
+              },
+              {
+                "file": "0038_number.png",
+                "gt": "1 1/2",
+                "pred": "11/2",
+                "conf": 1.0
+              },
+              {
+                "file": "0051_text.png",
+                "gt": "San José Café",
+                "pred": "San José Cafe",
+                "conf": 0.9603
+              },
+              {
+                "file": "0055_text.png",
+                "gt": "Eggs",
+                "pred": "Egge",
+                "conf": 0.9553
+              }
+            ]
+          },
+          "bench_d_inv0007": {
+            "label": "Repo Fixture inv_0007",
+            "exact_acc": 0.93333,
+            "char_acc": 0.99276,
+            "exact_count": 42,
+            "total": 45,
+            "sample_mistakes": [
+              {
+                "file": "amount_words.png",
+                "gt": "Twenty-four thousand three hundred seventy-seven pesos only",
+                "pred": "Twentv-four thousand three hundred seventy-seven pesos only",
+                "conf": 0.9922
+              },
+              {
+                "file": "item2_description.png",
+                "gt": "Alaska Evap 370ml",
+                "pred": "Alaskg Evap 370ml",
+                "conf": 0.9965
+              },
+              {
+                "file": "item4_description.png",
+                "gt": "Eggs",
+                "pred": "Egqs",
+                "conf": 0.9713
+              }
+            ]
+          },
+          "bench_e_printed_retention": {
+            "label": "Clean Printed Retention",
+            "exact_acc": 0.99333,
+            "char_acc": 0.99968,
+            "exact_count": 149,
+            "total": 150,
+            "sample_mistakes": [
+              {
+                "file": "0108_text.png",
+                "gt": "Santiago City Isabela",
+                "pred": "Santiago City lsabela",
+                "conf": 0.9802
+              }
+            ]
+          }
+        }
+      }
+    },
+    "v1.2.0-cursive-r2": {
+      "version": "v1.2.0-cursive-r2",
+      "registered_at_utc": "2026-11-23T16:34:06.716747+00:00",
+      "sha256": "f19beb68f0a57f6af3b1ac77c43dc06c7b9c77a92ade24c75852a7f1a5d92a2e",
+      "bytes": 12152120,
+      "notes": "Round 2 3-pillar cursive fine-tune (IAM human cursive + 22 connected cursive/hand fonts + printed replay, blocks4.4-5 + neck + head)",
+      "metrics": {
+        "onnx_path": "training\\models\\v1.2.0-cursive-r2\\inference_latin.onnx",
+        "composite_exact_acc": 0.71625,
+        "composite_char_acc": 0.97006,
+        "ms_per_crop": 32.82,
+        "top_confusions": [
+          [
+            "<space>-><dropped>",
+            35
+          ],
+          [
+            "r->s",
+            24
+          ],
+          [
+            "n->u",
+            21
+          ],
+          [
+            "n->m",
+            16
+          ],
+          [
+            "o->a",
+            14
+          ],
+          [
+            "u->n",
+            14
+          ],
+          [
+            "k->h",
+            11
+          ],
+          [
+            "t->A",
+            10
+          ],
+          [
+            "I->J",
+            10
+          ],
+          [
+            "a->o",
+            9
+          ],
+          [
+            "e->i",
+            9
+          ],
+          [
+            "v->r",
+            8
+          ]
+        ],
+        "benchmarks": {
+          "bench_a_real_human_cursive": {
+            "label": "Real Human Cursive (IAM)",
+            "exact_acc": 0.2,
+            "char_acc": 0.92225,
+            "exact_count": 60,
+            "total": 300,
+            "sample_mistakes": [
+              {
+                "file": "0001_iam_val.png",
+                "gt": "That blonde was something. \" \" Anybody",
+                "pred": "That blonde was something. \" \"Anybody",
+                "conf": 0.9626
+              },
+              {
+                "file": "0002_iam_val.png",
+                "gt": "far exceeded the number of fruits.",
+                "pred": "fas ex ceeded Ahe mumbes of fruits.",
+                "conf": 0.9426
+              },
+              {
+                "file": "0003_iam_val.png",
+                "gt": "attack of enteric fever.",
+                "pred": "attack of enteric ferer.",
+                "conf": 0.9676
+              },
+              {
+                "file": "0005_iam_val.png",
+                "gt": "right 2hyar, Nick, \" said the Sodbuster.",
+                "pred": "right 2hyar , Nick, \" said the Sodbuster.",
+                "conf": 0.9529
+              },
+              {
+                "file": "0006_iam_val.png",
+                "gt": "Yes, the bus set out from Dinas. So much",
+                "pred": "Yes, ths bus set out from Divas. So much",
+                "conf": 0.9366
+              },
+              {
+                "file": "0007_iam_val.png",
+                "gt": "hut had recently been cleaned and",
+                "pred": "tut hack recently been deaned camd",
+                "conf": 0.8682
+              },
+              {
+                "file": "0008_iam_val.png",
+                "gt": "(Berochoth.) And the Rabbis thought",
+                "pred": "(Berochath) And the Rabhis thaught",
+                "conf": 0.9544
+              },
+              {
+                "file": "0010_iam_val.png",
+                "gt": "to put St. John's Casualty Department",
+                "pred": "to rnt St. John's Casnalty Depatmant",
+                "conf": 0.949
+              },
+              {
+                "file": "0011_iam_val.png",
+                "gt": "the Egyptians, their cookery made rapid",
+                "pred": "the Egyptians, their coohesy made rapid",
+                "conf": 0.969
+              },
+              {
+                "file": "0012_iam_val.png",
+                "gt": "the moment, thank God! \" Problem...?",
+                "pred": "the moment, thanh God! \" Problen...?",
+                "conf": 0.9004
+              },
+              {
+                "file": "0013_iam_val.png",
+                "gt": "for Mr. Pell and his bunch, \" observed",
+                "pred": "for Mr. Pell and his bunch,  observed",
+                "conf": 0.9558
+              },
+              {
+                "file": "0014_iam_val.png",
+                "gt": "off a fever. A number of newly-born",
+                "pred": "off a feves. 1A mumbes of mewly - born",
+                "conf": 0.9456
+              }
+            ]
+          },
+          "bench_b_unseen_cursive_fonts": {
+            "label": "Unseen Cursive Fonts",
+            "exact_acc": 0.945,
+            "char_acc": 0.99381,
+            "exact_count": 378,
+            "total": 400,
+            "sample_mistakes": [
+              {
+                "file": "0034_text.png",
+                "gt": "Marine Plywood 1/2",
+                "pred": "Marine Plywood /",
+                "conf": 0.9538
+              },
+              {
+                "file": "0045_text.png",
+                "gt": "Ibañez Auto Supply",
+                "pred": "eIbañez Auto Supply",
+                "conf": 0.9632
+              },
+              {
+                "file": "0069_text.png",
+                "gt": "Cooking Oil 1L",
+                "pred": "Cooking 0il 1L",
+                "conf": 0.9532
+              },
+              {
+                "file": "0094_text.png",
+                "gt": "Utility bill",
+                "pred": "Utility bl",
+                "conf": 0.8066
+              },
+              {
+                "file": "0098_text.png",
+                "gt": "Villanueva Trading",
+                "pred": "Villanveva Trading",
+                "conf": 0.9719
+              },
+              {
+                "file": "0110_date.png",
+                "gt": "21 Jul 2025",
+                "pred": "21 gue 2025",
+                "conf": 0.9916
+              },
+              {
+                "file": "0119_amount.png",
+                "gt": "171,111",
+                "pred": "17,11",
+                "conf": 0.9268
+              },
+              {
+                "file": "0185_date.png",
+                "gt": "Aug 28, 2025",
+                "pred": "aug 28, 2025",
+                "conf": 0.9519
+              },
+              {
+                "file": "0186_text.png",
+                "gt": "Common Nails 4in",
+                "pred": "Commor Nails tin",
+                "conf": 0.8972
+              },
+              {
+                "file": "0190_text.png",
+                "gt": "Cooking Oil 1L",
+                "pred": "Cooking Oil l10",
+                "conf": 0.8722
+              },
+              {
+                "file": "0198_date.png",
+                "gt": "1 Jun 2024",
+                "pred": "1Jun 2024",
+                "conf": 0.9979
+              },
+              {
+                "file": "0200_text.png",
+                "gt": "units",
+                "pred": "unite",
+                "conf": 0.9214
+              }
+            ]
+          },
+          "bench_c_hard_confusables": {
+            "label": "Hard Confusables (a/g/u/v/0/1/Ñ)",
+            "exact_acc": 0.91667,
+            "char_acc": 0.98331,
+            "exact_count": 220,
+            "total": 240,
+            "sample_mistakes": [
+              {
+                "file": "0005_text.png",
+                "gt": "Baguio Oil 1L",
+                "pred": "Baguio Oil l1L",
+                "conf": 0.9162
+              },
+              {
+                "file": "0027_text.png",
+                "gt": "mL",
+                "pred": "ml",
+                "conf": 0.8701
+              },
+              {
+                "file": "0038_number.png",
+                "gt": "1 1/2",
+                "pred": "11/2",
+                "conf": 0.996
+              },
+              {
+                "file": "0068_date.png",
+                "gt": "23 Aug 2025",
+                "pred": "23 Avg 2025",
+                "conf": 0.9834
+              },
+              {
+                "file": "0076_text.png",
+                "gt": "Laundry soap",
+                "pred": "Laundry sap",
+                "conf": 0.9499
+              },
+              {
+                "file": "0080_text.png",
+                "gt": "Cooking Oil 1L",
+                "pred": "Cooking Oile 1IL",
+                "conf": 0.8766
+              },
+              {
+                "file": "0082_text.png",
+                "gt": "mL",
+                "pred": "ml",
+                "conf": 0.8511
+              },
+              {
+                "file": "0085_text.png",
+                "gt": "370ml",
+                "pred": "370me",
+                "conf": 0.9283
+              },
+              {
+                "file": "0093_number.png",
+                "gt": "1 1/2",
+                "pred": "11/2",
+                "conf": 0.9955
+              },
+              {
+                "file": "0106_text.png",
+                "gt": "San José Café",
+                "pred": "San José café",
+                "conf": 0.9708
+              },
+              {
+                "file": "0115_text.png",
+                "gt": "Baguio Oil 1L",
+                "pred": "Baguio Oil l1L",
+                "conf": 0.8677
+              },
+              {
+                "file": "0119_text.png",
+                "gt": "Garlic 1kg",
+                "pred": "Garlic kg",
+                "conf": 0.9514
+              }
+            ]
+          },
+          "bench_d_inv0007": {
+            "label": "Repo Fixture inv_0007",
+            "exact_acc": 0.91111,
+            "char_acc": 0.98845,
+            "exact_count": 41,
+            "total": 45,
+            "sample_mistakes": [
+              {
+                "file": "item2_description.png",
+                "gt": "Alaska Evap 370ml",
+                "pred": "Alaskg Evap 370ml",
+                "conf": 0.9973
+              },
+              {
+                "file": "item4_description.png",
+                "gt": "Eggs",
+                "pred": "Egqs",
+                "conf": 0.8779
+              },
+              {
+                "file": "item5_description.png",
+                "gt": "Bread Loaf",
+                "pred": "Bregd Loaf",
+                "conf": 0.9245
+              },
+              {
+                "file": "item6_description.png",
+                "gt": "Nails 2in",
+                "pred": "Ngils 2in",
+                "conf": 0.9725
+              }
+            ]
+          },
+          "bench_e_printed_retention": {
+            "label": "Clean Printed Retention",
+            "exact_acc": 1.0,
+            "char_acc": 1.0,
+            "exact_count": 150,
+            "total": 150,
+            "sample_mistakes": []
+          }
+        }
+      }
+    },
+    "v1.3.0-polish-r3": {
+      "version": "v1.3.0-polish-r3",
+      "registered_at_utc": "2026-11-23T17:09:19.350592+00:00",
+      "sha256": "f19beb68f0a57f6af3b1ac77c43dc06c7b9c77a92ade24c75852a7f1a5d92a2e",
+      "bytes": 12152120,
+      "notes": "Round 3 hard-negative + real human cursive polish from v1.2.0 (1500 IAM human + 1100 rounded/cursive hard pairs + 400 printed replay, 2 epochs LR 4.5e-5)",
+      "metrics": {
+        "onnx_path": "training\\models\\v1.3.0-polish-r3\\inference_latin.onnx",
+        "composite_exact_acc": 0.71625,
+        "composite_char_acc": 0.97006,
+        "ms_per_crop": 32.16,
+        "top_confusions": [
+          [
+            "<space>-><dropped>",
+            35
+          ],
+          [
+            "r->s",
+            24
+          ],
+          [
+            "n->u",
+            21
+          ],
+          [
+            "n->m",
+            16
+          ],
+          [
+            "o->a",
+            14
+          ],
+          [
+            "u->n",
+            14
+          ],
+          [
+            "k->h",
+            11
+          ],
+          [
+            "t->A",
+            10
+          ],
+          [
+            "I->J",
+            10
+          ],
+          [
+            "a->o",
+            9
+          ],
+          [
+            "e->i",
+            9
+          ],
+          [
+            "v->r",
+            8
+          ]
+        ],
+        "benchmarks": {
+          "bench_a_real_human_cursive": {
+            "label": "Real Human Cursive (IAM)",
+            "exact_acc": 0.2,
+            "char_acc": 0.92225,
+            "exact_count": 60,
+            "total": 300,
+            "sample_mistakes": [
+              {
+                "file": "0001_iam_val.png",
+                "gt": "That blonde was something. \" \" Anybody",
+                "pred": "That blonde was something. \" \"Anybody",
+                "conf": 0.9626
+              },
+              {
+                "file": "0002_iam_val.png",
+                "gt": "far exceeded the number of fruits.",
+                "pred": "fas ex ceeded Ahe mumbes of fruits.",
+                "conf": 0.9426
+              },
+              {
+                "file": "0003_iam_val.png",
+                "gt": "attack of enteric fever.",
+                "pred": "attack of enteric ferer.",
+                "conf": 0.9676
+              },
+              {
+                "file": "0005_iam_val.png",
+                "gt": "right 2hyar, Nick, \" said the Sodbuster.",
+                "pred": "right 2hyar , Nick, \" said the Sodbuster.",
+                "conf": 0.9529
+              },
+              {
+                "file": "0006_iam_val.png",
+                "gt": "Yes, the bus set out from Dinas. So much",
+                "pred": "Yes, ths bus set out from Divas. So much",
+                "conf": 0.9366
+              },
+              {
+                "file": "0007_iam_val.png",
+                "gt": "hut had recently been cleaned and",
+                "pred": "tut hack recently been deaned camd",
+                "conf": 0.8682
+              },
+              {
+                "file": "0008_iam_val.png",
+                "gt": "(Berochoth.) And the Rabbis thought",
+                "pred": "(Berochath) And the Rabhis thaught",
+                "conf": 0.9544
+              },
+              {
+                "file": "0010_iam_val.png",
+                "gt": "to put St. John's Casualty Department",
+                "pred": "to rnt St. John's Casnalty Depatmant",
+                "conf": 0.949
+              },
+              {
+                "file": "0011_iam_val.png",
+                "gt": "the Egyptians, their cookery made rapid",
+                "pred": "the Egyptians, their coohesy made rapid",
+                "conf": 0.969
+              },
+              {
+                "file": "0012_iam_val.png",
+                "gt": "the moment, thank God! \" Problem...?",
+                "pred": "the moment, thanh God! \" Problen...?",
+                "conf": 0.9004
+              },
+              {
+                "file": "0013_iam_val.png",
+                "gt": "for Mr. Pell and his bunch, \" observed",
+                "pred": "for Mr. Pell and his bunch,  observed",
+                "conf": 0.9558
+              },
+              {
+                "file": "0014_iam_val.png",
+                "gt": "off a fever. A number of newly-born",
+                "pred": "off a feves. 1A mumbes of mewly - born",
+                "conf": 0.9456
+              }
+            ]
+          },
+          "bench_b_unseen_cursive_fonts": {
+            "label": "Unseen Cursive Fonts",
+            "exact_acc": 0.945,
+            "char_acc": 0.99381,
+            "exact_count": 378,
+            "total": 400,
+            "sample_mistakes": [
+              {
+                "file": "0034_text.png",
+                "gt": "Marine Plywood 1/2",
+                "pred": "Marine Plywood /",
+                "conf": 0.9538
+              },
+              {
+                "file": "0045_text.png",
+                "gt": "Ibañez Auto Supply",
+                "pred": "eIbañez Auto Supply",
+                "conf": 0.9632
+              },
+              {
+                "file": "0069_text.png",
+                "gt": "Cooking Oil 1L",
+                "pred": "Cooking 0il 1L",
+                "conf": 0.9532
+              },
+              {
+                "file": "0094_text.png",
+                "gt": "Utility bill",
+                "pred": "Utility bl",
+                "conf": 0.8066
+              },
+              {
+                "file": "0098_text.png",
+                "gt": "Villanueva Trading",
+                "pred": "Villanveva Trading",
+                "conf": 0.9719
+              },
+              {
+                "file": "0110_date.png",
+                "gt": "21 Jul 2025",
+                "pred": "21 gue 2025",
+                "conf": 0.9916
+              },
+              {
+                "file": "0119_amount.png",
+                "gt": "171,111",
+                "pred": "17,11",
+                "conf": 0.9268
+              },
+              {
+                "file": "0185_date.png",
+                "gt": "Aug 28, 2025",
+                "pred": "aug 28, 2025",
+                "conf": 0.9519
+              },
+              {
+                "file": "0186_text.png",
+                "gt": "Common Nails 4in",
+                "pred": "Commor Nails tin",
+                "conf": 0.8972
+              },
+              {
+                "file": "0190_text.png",
+                "gt": "Cooking Oil 1L",
+                "pred": "Cooking Oil l10",
+                "conf": 0.8722
+              },
+              {
+                "file": "0198_date.png",
+                "gt": "1 Jun 2024",
+                "pred": "1Jun 2024",
+                "conf": 0.9979
+              },
+              {
+                "file": "0200_text.png",
+                "gt": "units",
+                "pred": "unite",
+                "conf": 0.9214
+              }
+            ]
+          },
+          "bench_c_hard_confusables": {
+            "label": "Hard Confusables (a/g/u/v/0/1/Ñ)",
+            "exact_acc": 0.91667,
+            "char_acc": 0.98331,
+            "exact_count": 220,
+            "total": 240,
+            "sample_mistakes": [
+              {
+                "file": "0005_text.png",
+                "gt": "Baguio Oil 1L",
+                "pred": "Baguio Oil l1L",
+                "conf": 0.9162
+              },
+              {
+                "file": "0027_text.png",
+                "gt": "mL",
+                "pred": "ml",
+                "conf": 0.8701
+              },
+              {
+                "file": "0038_number.png",
+                "gt": "1 1/2",
+                "pred": "11/2",
+                "conf": 0.996
+              },
+              {
+                "file": "0068_date.png",
+                "gt": "23 Aug 2025",
+                "pred": "23 Avg 2025",
+                "conf": 0.9834
+              },
+              {
+                "file": "0076_text.png",
+                "gt": "Laundry soap",
+                "pred": "Laundry sap",
+                "conf": 0.9499
+              },
+              {
+                "file": "0080_text.png",
+                "gt": "Cooking Oil 1L",
+                "pred": "Cooking Oile 1IL",
+                "conf": 0.8766
+              },
+              {
+                "file": "0082_text.png",
+                "gt": "mL",
+                "pred": "ml",
+                "conf": 0.8511
+              },
+              {
+                "file": "0085_text.png",
+                "gt": "370ml",
+                "pred": "370me",
+                "conf": 0.9283
+              },
+              {
+                "file": "0093_number.png",
+                "gt": "1 1/2",
+                "pred": "11/2",
+                "conf": 0.9955
+              },
+              {
+                "file": "0106_text.png",
+                "gt": "San José Café",
+                "pred": "San José café",
+                "conf": 0.9708
+              },
+              {
+                "file": "0115_text.png",
+                "gt": "Baguio Oil 1L",
+                "pred": "Baguio Oil l1L",
+                "conf": 0.8677
+              },
+              {
+                "file": "0119_text.png",
+                "gt": "Garlic 1kg",
+                "pred": "Garlic kg",
+                "conf": 0.9514
+              }
+            ]
+          },
+          "bench_d_inv0007": {
+            "label": "Repo Fixture inv_0007",
+            "exact_acc": 0.91111,
+            "char_acc": 0.98845,
+            "exact_count": 41,
+            "total": 45,
+            "sample_mistakes": [
+              {
+                "file": "item2_description.png",
+                "gt": "Alaska Evap 370ml",
+                "pred": "Alaskg Evap 370ml",
+                "conf": 0.9973
+              },
+              {
+                "file": "item4_description.png",
+                "gt": "Eggs",
+                "pred": "Egqs",
+                "conf": 0.8779
+              },
+              {
+                "file": "item5_description.png",
+                "gt": "Bread Loaf",
+                "pred": "Bregd Loaf",
+                "conf": 0.9245
+              },
+              {
+                "file": "item6_description.png",
+                "gt": "Nails 2in",
+                "pred": "Ngils 2in",
+                "conf": 0.9725
+              }
+            ]
+          },
+          "bench_e_printed_retention": {
+            "label": "Clean Printed Retention",
+            "exact_acc": 1.0,
+            "char_acc": 1.0,
+            "exact_count": 150,
+            "total": 150,
+            "sample_mistakes": []
+          }
+        }
+      }
+    },
+    "v1.3.0-wise-ft": {
+      "version": "v1.3.0-wise-ft",
+      "registered_at_utc": "2026-11-23T17:14:19.287334+00:00",
+      "sha256": "7bcf78f95fb9169d4ef79257b4319bc49186b5af383a42d692c7faacb9dfb83b",
+      "bytes": 12152120,
+      "notes": "WiSE-FT weight-space ensemble (alpha=0.65 * v1.2.0-cursive-r2 + 0.35 * v1.0.0-pretrained)",
+      "metrics": {
+        "onnx_path": "C:\\Users\\Keith\\Desktop\\OCR BIZMATE\\training\\models\\_wise_sweep\\wise_65.onnx",
+        "composite_exact_acc": 0.73121,
+        "composite_char_acc": 0.97173,
+        "ms_per_crop": 32.02,
+        "top_confusions": [
+          [
+            "<space>-><dropped>",
+            52
+          ],
+          [
+            "r->s",
+            30
+          ],
+          [
+            "n->u",
+            18
+          ],
+          [
+            "o->a",
+            14
+          ],
+          [
+            "u->n",
+            13
+          ],
+          [
+            "n->m",
+            11
+          ],
+          [
+            "k->h",
+            11
+          ],
+          [
+            "t->A",
+            10
+          ],
+          [
+            "I->J",
+            9
+          ],
+          [
+            "a->o",
+            9
+          ],
+          [
+            "e->i",
+            9
+          ],
+          [
+            "v->r",
+            7
+          ]
+        ],
+        "benchmarks": {
+          "bench_a_real_human_cursive": {
+            "label": "Real Human Cursive (IAM)",
+            "exact_acc": 0.25333,
+            "char_acc": 0.92841,
+            "exact_count": 76,
+            "total": 300,
+            "sample_mistakes": [
+              {
+                "file": "0001_iam_val.png",
+                "gt": "That blonde was something. \" \" Anybody",
+                "pred": "That blonde was something. \" \"Anybody",
+                "conf": 0.9764
+              },
+              {
+                "file": "0002_iam_val.png",
+                "gt": "far exceeded the number of fruits.",
+                "pred": "fas ex ceeded Ahe mumbes of fruits.",
+                "conf": 0.9479
+              },
+              {
+                "file": "0003_iam_val.png",
+                "gt": "attack of enteric fever.",
+                "pred": "attack of enteric ferer.",
+                "conf": 0.9629
+              },
+              {
+                "file": "0005_iam_val.png",
+                "gt": "right 2hyar, Nick, \" said the Sodbuster.",
+                "pred": "right 2hyar , Nick, \" said the Sodbuster.",
+                "conf": 0.9504
+              },
+              {
+                "file": "0006_iam_val.png",
+                "gt": "Yes, the bus set out from Dinas. So much",
+                "pred": "Yes, ths bus set out from Divas. So much",
+                "conf": 0.9515
+              },
+              {
+                "file": "0007_iam_val.png",
+                "gt": "hut had recently been cleaned and",
+                "pred": "tut hack recently been cleaned cand",
+                "conf": 0.884
+              },
+              {
+                "file": "0008_iam_val.png",
+                "gt": "(Berochoth.) And the Rabbis thought",
+                "pred": "(Berochath) And the Rabhis thaught",
+                "conf": 0.9771
+              },
+              {
+                "file": "0010_iam_val.png",
+                "gt": "to put St. John's Casualty Department",
+                "pred": "to rnt St. John's Casnalty Depatmant",
+                "conf": 0.9668
+              },
+              {
+                "file": "0011_iam_val.png",
+                "gt": "the Egyptians, their cookery made rapid",
+                "pred": "the Egyptians, their coohesy made rapid",
+                "conf": 0.9602
+              },
+              {
+                "file": "0012_iam_val.png",
+                "gt": "the moment, thank God! \" Problem...?",
+                "pred": "the moment, thanh God! \" Problen...?",
+                "conf": 0.9351
+              },
+              {
+                "file": "0014_iam_val.png",
+                "gt": "off a fever. A number of newly-born",
+                "pred": "off a feves. A mumbes of mewly - born",
+                "conf": 0.9825
+              },
+              {
+                "file": "0017_iam_val.png",
+                "gt": "I suppose? \" she enquired archly.",
+                "pred": "J suppose ?.\" she enquired archly.",
+                "conf": 0.9348
+              }
+            ]
+          },
+          "bench_b_unseen_cursive_fonts": {
+            "label": "Unseen Cursive Fonts",
+            "exact_acc": 0.9375,
+            "char_acc": 0.9929,
+            "exact_count": 375,
+            "total": 400,
+            "sample_mistakes": [
+              {
+                "file": "0034_text.png",
+                "gt": "Marine Plywood 1/2",
+                "pred": "Marine Plywood /2",
+                "conf": 0.9898
+              },
+              {
+                "file": "0045_text.png",
+                "gt": "Ibañez Auto Supply",
+                "pred": "eIbañez Auto Supply",
+                "conf": 0.9623
+              },
+              {
+                "file": "0069_text.png",
+                "gt": "Cooking Oil 1L",
+                "pred": "Cooking 0il 1L",
+                "conf": 0.9607
+              },
+              {
+                "file": "0080_text.png",
+                "gt": "pcs",
+                "pred": "pce",
+                "conf": 0.8237
+              },
+              {
+                "file": "0094_text.png",
+                "gt": "Utility bill",
+                "pred": "Utilit  bil",
+                "conf": 0.7919
+              },
+              {
+                "file": "0098_text.png",
+                "gt": "Villanueva Trading",
+                "pred": "Villanveva Trading",
+                "conf": 0.9993
+              },
+              {
+                "file": "0110_date.png",
+                "gt": "21 Jul 2025",
+                "pred": "21 gue 2025",
+                "conf": 0.9904
+              },
+              {
+                "file": "0119_amount.png",
+                "gt": "171,111",
+                "pred": "17,111",
+                "conf": 0.8425
+              },
+              {
+                "file": "0135_code.png",
+                "gt": "WC690",
+                "pred": "WE690",
+                "conf": 0.9267
+              },
+              {
+                "file": "0185_date.png",
+                "gt": "Aug 28, 2025",
+                "pred": "aug 28, 2025",
+                "conf": 0.9565
+              },
+              {
+                "file": "0186_text.png",
+                "gt": "Common Nails 4in",
+                "pred": "Common Nails tin",
+                "conf": 0.9345
+              },
+              {
+                "file": "0190_text.png",
+                "gt": "Cooking Oil 1L",
+                "pred": "Cooking Oil l1o",
+                "conf": 0.8308
+              }
+            ]
+          },
+          "bench_c_hard_confusables": {
+            "label": "Hard Confusables (a/g/u/v/0/1/Ñ)",
+            "exact_acc": 0.90417,
+            "char_acc": 0.98193,
+            "exact_count": 217,
+            "total": 240,
+            "sample_mistakes": [
+              {
+                "file": "0005_text.png",
+                "gt": "Baguio Oil 1L",
+                "pred": "Baguio Oil I1L",
+                "conf": 0.9064
+              },
+              {
+                "file": "0007_text.png",
+                "gt": "Gas Tank 11kg",
+                "pred": "Gas Tank 71kg",
+                "conf": 0.9452
+              },
+              {
+                "file": "0027_text.png",
+                "gt": "mL",
+                "pred": "ml",
+                "conf": 0.9156
+              },
+              {
+                "file": "0038_number.png",
+                "gt": "1 1/2",
+                "pred": "11/2",
+                "conf": 0.9243
+              },
+              {
+                "file": "0060_text.png",
+                "gt": "Baguio Oil 1L",
+                "pred": "Baguio Oil IL",
+                "conf": 0.9633
+              },
+              {
+                "file": "0068_date.png",
+                "gt": "23 Aug 2025",
+                "pred": "23 Avg 2025",
+                "conf": 0.9864
+              },
+              {
+                "file": "0080_text.png",
+                "gt": "Cooking Oil 1L",
+                "pred": "Cooking Oile IL",
+                "conf": 0.89
+              },
+              {
+                "file": "0082_text.png",
+                "gt": "mL",
+                "pred": "ml",
+                "conf": 0.9103
+              },
+              {
+                "file": "0085_text.png",
+                "gt": "370ml",
+                "pred": "370me",
+                "conf": 0.9703
+              },
+              {
+                "file": "0093_number.png",
+                "gt": "1 1/2",
+                "pred": "11/2",
+                "conf": 0.9123
+              },
+              {
+                "file": "0119_text.png",
+                "gt": "Garlic 1kg",
+                "pred": "Garlic kg",
+                "conf": 0.961
+              },
+              {
+                "file": "0121_text.png",
+                "gt": "Vinegar 500ml",
+                "pred": "Vinegar 50oml",
+                "conf": 0.9483
+              }
+            ]
+          },
+          "bench_d_inv0007": {
+            "label": "Repo Fixture inv_0007",
+            "exact_acc": 0.93333,
+            "char_acc": 0.99067,
+            "exact_count": 42,
+            "total": 45,
+            "sample_mistakes": [
+              {
+                "file": "item2_description.png",
+                "gt": "Alaska Evap 370ml",
+                "pred": "Alaskg Evap 370ml",
+                "conf": 0.9962
+              },
+              {
+                "file": "item4_description.png",
+                "gt": "Eggs",
+                "pred": "Egqs",
+                "conf": 0.9654
+              },
+              {
+                "file": "item6_description.png",
+                "gt": "Nails 2in",
+                "pred": "Ngils 2in",
+                "conf": 0.9469
+              }
+            ]
+          },
+          "bench_e_printed_retention": {
+            "label": "Clean Printed Retention",
+            "exact_acc": 1.0,
+            "char_acc": 1.0,
+            "exact_count": 150,
+            "total": 150,
+            "sample_mistakes": []
+          }
+        }
+      }
+    }
+  }
+}
