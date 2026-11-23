@@ -1,12 +1,12 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
-import { AccessibilityInfo, Alert, type AlertButton } from 'react-native';
+import { AccessibilityInfo, Alert, type AlertButton, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import SavedScreen from '../app/saved';
 import { type IconComponent, Share } from '../components/icons';
 import { SnackbarHost } from '../components/Snackbar';
-import { addParty, clearParties } from '../lib/lists';
+import { addParty, clearParties, markPartiesExported, type Party } from '../lib/lists';
 import * as savedStore from '../lib/saved';
 import {
   type CertSummary,
@@ -106,10 +106,12 @@ async function showSaved(list: readonly SavedSummary[], kind?: string, ui: React
   await render(ui);
 }
 
+/** The navigation bar's inset, in dp, where a test gives one (Insets). */
+const BOTTOM = 34;
 function Insets({ children }: { children?: ReactNode }) {
   return (
     <SafeAreaProvider
-      initialMetrics={{ frame: { x: 0, y: 0, width: 360, height: 800 }, insets: { top: 24, bottom: 34, left: 0, right: 0 } }}>
+      initialMetrics={{ frame: { x: 0, y: 0, width: 360, height: 800 }, insets: { top: 24, bottom: BOTTOM, left: 0, right: 0 } }}>
       {children}
     </SafeAreaProvider>
   );
@@ -157,6 +159,8 @@ async function drawingOf(Icon: IconComponent, color: string) {
   await render(<Icon size={touch.iconSmall} color={color} />);
   return screen.root!.toJSON();
 }
+/** The space under the list's last row. */
+const endPadding = () => StyleSheet.flatten(screen.getByTestId('saved-list').props.contentContainerStyle);
 /** Android reports a view's layout: its height, in dp. */
 const layout = (testID: string, height: number) =>
   fireEvent(screen.getByTestId(testID), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 360, height } } });
@@ -475,6 +479,76 @@ test('Export… opens the export at the filtered kind, or at the list of files',
   await press(radio('All 2'));
   await press(button('Export…'));
   expect(header('Export')).toBeOnTheScreen();
+});
+
+test('Export… for a kind with nothing saved opens the list of files, not its empty file', async () => {
+  // ruling T19-6: the chosen kind's chip stays at 0 (T19-4), but its file would hold nothing, a dead end
+  await showSaved([invoice('sale', '2026-11-20', { partyName: 'Store A' }), cert('Q4 2026', '2026-12-31')], 'purchase');
+  expect(screen.getByRole('radio', { name: 'Purchases 0', checked: true })).toBeOnTheScreen();
+  await press(button('Export…'));
+  expect(header('Export')).toBeOnTheScreen();
+  expect(sheet().queryByRole('button', { name: 'Back' })).toBeNull();
+  expect(files()).toEqual(['Sales, 1 to export', '2307s, 1 to export']);
+  await press(sheet().getByRole('button', { name: 'Close' }));
+
+  // a kind with one opens at its file; once its last is deleted while it's chosen, at the list of files
+  await press(radio('2307s 1'));
+  await press(button('Export…'));
+  expect(header('Export 2307s')).toBeOnTheScreen();
+  await press(within(screen.getByTestId('sheet-actions')).getByRole('button', { name: 'Close' }));
+  await longPress(button(/^Castillo Eatery, /));
+  await answer('Delete');
+  expect(screen.getByRole('radio', { name: '2307s 0', checked: true })).toBeOnTheScreen();
+  await press(button('Export…'));
+  expect(header('Export')).toBeOnTheScreen();
+  expect(files()).toEqual(['Sales, 1 to export']);
+});
+
+test('Export… shows when anything is saved, or when parties added from scans can go out', async () => {
+  // nothing saved, and no party from a scan: nothing to export, so no bar, and the list's end clears the inset itself
+  await savedAre([]);
+  await render(<SavedScreen />, { wrapper: Insets });
+  expect(screen.queryByTestId('bottom-bar')).toBeNull();
+  expect(endPadding()).toMatchObject({ paddingBottom: BOTTOM + space.xl });
+
+  // a party added from a scan, with nothing saved: its file needs no saved scan (ruling T19-7; Saved's parties button
+  // had it so at 398a886). The empty state stays, and Export… opens the list of files, with the parties' file in it.
+  let party!: Party;
+  await act(async () => {
+    party = await addFromScan('Bagong Tindahan');
+  });
+  expect(screen.getByText('Nothing saved yet')).toBeOnTheScreen();
+  expect(headerTexts()).toEqual(['Saved']); // no scan waits
+  expect(barButtons()).toEqual(['Export…']);
+  expect(endPadding()).toMatchObject({ paddingBottom: space.xl }); // the bar takes the inset now
+  await press(button('Export…'));
+  expect(header('Export')).toBeOnTheScreen();
+  expect(files()).toEqual(['New customers and suppliers, 1 to export']);
+  await press(button(/^New customers and suppliers, /));
+  expect(header('Export new customers and suppliers')).toBeOnTheScreen();
+  await press(within(screen.getByTestId('sheet-actions')).getByRole('button', { name: 'Close' }));
+
+  // gone out, it can still go again, as the list of files keeps it (the parties row's own condition): the bar stays
+  await act(async () => markPartiesExported([party.id], new Date(EXPORTED)));
+  expect(barButtons()).toEqual(['Export…']);
+  await press(button('Export…'));
+  expect(files()).toEqual(['New customers and suppliers, All exported']);
+  await press(sheet().getByRole('button', { name: 'Close' }));
+
+  // opened for a kind with nothing saved at all: the list of files too (ruling T19-6)
+  await screen.unmount();
+  mockParams = { kind: 'sale' };
+  await render(<SavedScreen />);
+  await press(button('Export…'));
+  expect(header('Export')).toBeOnTheScreen();
+  expect(files()).toEqual(['New customers and suppliers, All exported']);
+  await press(sheet().getByRole('button', { name: 'Close' }));
+
+  // no party from a scan left: no bar again, until a scan is saved
+  await act(async () => clearParties('customer'));
+  expect(screen.queryByTestId('bottom-bar')).toBeNull();
+  await savedAre([invoice('sale', '2026-11-20')]);
+  expect(barButtons()).toEqual(['Export…']);
 });
 
 test('a message on Saved sits above its bottom bar', async () => {
