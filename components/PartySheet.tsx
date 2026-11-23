@@ -14,12 +14,13 @@ import { ListRow } from './ListRow';
 import { PartyPicker } from './PartyPicker';
 import { SectionHeader } from './SectionHeader';
 
-// Design B §9.5: the Customer row's sheet. What the camera saw in the customer's boxes, listed and fixable as in any
-// row's sheet (BoxSheet), then who the customer is. "In your customers": the match, the person's pick, the closest
-// match or the walk-in customer, as a row with its TIN, then today's reason and buttons. Or "Not in your customers":
-// the name as written with a New badge, since it goes out as written, then today's buttons and notes. Choose another
-// searches the customers in the same sheet (PartyPicker). The box list is full-bleed, and so is this: the strips and
-// rows pad themselves, and the notes and buttons sit on the gutter.
+// Design B §9.5: the Customer row's sheet. What the camera saw in the customer's boxes, under that heading ("WHAT THE
+// CAMERA SAW"; a text PDF's says FROM THE PDF'S TEXT), listed and fixable as in any row's sheet (BoxSheet), then who
+// the customer is. "In your customers": the match, the person's pick, the closest match or the walk-in customer, as a
+// row with its TIN, then today's reason and buttons. Or "Not in your customers": the name as written with a New badge,
+// since it goes out as written, then today's buttons and notes. Choose another searches the customers in the same
+// sheet (PartyPicker). The box list is full-bleed, and so is this: the strips and rows pad themselves, and the notes
+// and buttons sit on the gutter.
 
 const CUSTOMER_BOXES = ['customer_name', 'customer_tin', 'customer_address'];
 const NEW: BadgeSpec = { label: 'New', tone: 'brand' };
@@ -125,7 +126,8 @@ export function PartySheet({
       scan={scan}
       boxes={fields.filter((f) => CUSTOMER_BOXES.includes(f))}
       onClose={onClose}
-      returnFocus={returnFocus}>
+      returnFocus={returnFocus}
+      heading>
       {picking ? (
         <>
           <SectionHeader title="In your customers" />

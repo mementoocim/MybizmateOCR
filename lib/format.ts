@@ -1,6 +1,11 @@
-/** A time the way the test app shows it: "57 ms" under a second, else "1.4 s". */
+/** A time the way the test app shows it: "57 ms" under a second, else "1.4 s": the team's speed test and stages. */
 export function formatMs(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
+
+/** How long a read took, as the Scan screen says it (design §9.5): seconds with one decimal, under a second too. */
+export function formatSeconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)} s`;
 }
 
 /** A clock time: "2:41 PM". */

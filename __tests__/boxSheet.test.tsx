@@ -40,6 +40,11 @@ function addPhoto(edit?: (r: ScanResult) => void, stem = 'inv_0051'): string {
   return addScan({ label: 'Camera photo', source: 'camera', result });
 }
 
+/** A text PDF's scan: its 8 written boxes read from its own text (Cruz Trading's), the others empty. */
+function addTextPdf(): string {
+  return addScan({ label: 'PDF: sales_text_0.pdf', source: 'pdf', result: parseScanResult(coreJson('sales_text_0')) });
+}
+
 const onClose = jest.fn();
 const onSaved = jest.fn();
 
@@ -177,13 +182,15 @@ test('the reading has no percentage; Hard to read below 0.90 only', async () => 
   expect(screen.queryByText('Hard to read')).toBeNull();
   expect(screen.queryByText(/^Read as/)).toBeNull();
   await showSheet(fromText, 'Invoice', ['date', 'invoice_no']);
-  expect(listed()[0]).toBe("Date, From the PDF's text");
+  expect(listed()[0]).toBe("Date, From the PDF's text: “21 0ct 2026”");
 
-  // The words, as readingLine and isHardToRead give them.
+  // The words, as readingLine and isHardToRead give them. A box from the PDF's text names its value, so a list of them
+  // doesn't read the same on every line (ruling T26-1), or it's empty.
   const read = getScan(dateAt(0.85))!.result.reads.find((b) => b.name === 'date')!;
   expect(readingLine(read)).toBe('Read as “21 0ct 2026”');
   expect(readingLine({ ...read, text: '' })).toBe("Couldn't make out any writing");
-  expect(readingLine({ ...read, fromText: true })).toBe("From the PDF's text");
+  expect(readingLine({ ...read, fromText: true })).toBe("From the PDF's text: “21 0ct 2026”");
+  expect(readingLine({ ...read, fromText: true, text: '' })).toBe('Empty box');
   expect(readingLine(null)).toBe('Empty box');
   expect(isHardToRead(read)).toBe(true);
   expect(isHardToRead({ ...read, conf: 0.9 })).toBe(false);
@@ -206,9 +213,14 @@ test("the crop: what the camera saw, or the PDF's own text, or no picture", asyn
   expect(screen.queryByTestId('editor-crop')).toBeNull();
   expect(screen.queryByText(/^Read as/)).toBeNull();
   expect(field().props.value).toBe('21 0ct 2026');
-  // listed, its reading line still says where it came from, and it has no crop there either (ruling T13-6)
+  // listed, its reading line still says where it came from, with its value, and it has no crop there either (ruling
+  // T13-6)
   await showSheet(pdf, 'Invoice', ['invoice_no', 'date']);
-  expect(listed()).toEqual(['SI no., Read as “0008869”', "Date, From the PDF's text"]);
+  expect(listed()).toEqual(['SI no., Read as “0008869”', "Date, From the PDF's text: “21 0ct 2026”"]);
+  expect(within(screen.getByTestId('box-date')).getByText("From the PDF's text: “21 0ct 2026”")).toHaveStyle({
+    ...type.body,
+    color: colors.ink,
+  });
   expect(screen.getByTestId('crop-invoice_no')).toBeOnTheScreen();
   expect(screen.queryByTestId('crop-date')).toBeNull();
 
@@ -231,6 +243,64 @@ test("the crop: what the camera saw, or the PDF's own text, or no picture", asyn
   expect(listed()).toEqual(['Total due, Read as “2,251”', 'Zero-rated sales, Empty box']);
   expect(screen.getByTestId('crop-total_due')).toBeOnTheScreen();
   expect(screen.queryByTestId('crop-zero_rated')).toBeNull();
+});
+
+test("a text PDF's empty box is the PDF's text too: no camera, no picture, and Empty box", async () => {
+  // An empty box has no read to say where it came from, so its overline follows the scan (ruling T26-1): a text
+  // PDF's says FROM THE PDF'S TEXT, with no crop, where a photo's says what the camera saw (the test above).
+  const id = addTextPdf();
+  await showSheet(id, 'Total due', ['total_due']);
+  const said = screen.getAllByText("From the PDF's text");
+  expect(said).toHaveLength(1);
+  expect(said[0]).toHaveStyle({ ...type.overline, color: colors.mute });
+  expect(screen.queryByText('What the camera saw')).toBeNull();
+  expect(screen.queryByText('No picture of this box')).toBeNull();
+  expect(screen.queryByTestId('editor-crop')).toBeNull();
+  expect(screen.getByText('Empty box')).toHaveStyle({ ...type.body, color: colors.ink });
+  expect(field().props.value).toBe('');
+
+  // listed with a box from its text: each line says what it holds
+  await showSheet(id, 'Customer', CUSTOMER);
+  expect(listed()).toEqual([
+    "Customer, From the PDF's text: “Cruz Trading”",
+    'TIN, Empty box',
+    'Address, Empty box',
+  ]);
+  await press(screen.getByTestId('box-customer_tin'));
+  expect(screen.getByText("From the PDF's text")).toBeOnTheScreen();
+  expect(screen.queryByText('No picture of this box')).toBeNull();
+  expect(screen.getByText('Empty box')).toBeOnTheScreen();
+});
+
+test("a heading over the listed boxes says where they were read: the camera, or the PDF's text", async () => {
+  // The party sheet's (design §9.5: "WHAT THE CAMERA SAW" with the name, TIN and address boxes), in the overline
+  // style, on the gutter above the full-bleed rows. It follows the scan, as an empty box's overline does (ruling T26-1).
+  /** The sheet body's words, in order. */
+  const words = () =>
+    within(screen.getByTestId('sheet-scroll'))
+      .getAllByText(/./)
+      .map((t) => [t.props.children].flat().join(''));
+  const sheetOf = (id: string, heading?: boolean) =>
+    render(
+      <BoxSheet visible title="Customer" scan={getScan(id)!} boxes={CUSTOMER} onClose={onClose} heading={heading} />,
+    );
+
+  await sheetOf(addPhoto(), true);
+  const heading = screen.getByText('What the camera saw');
+  expect(heading).toHaveStyle({ ...type.overline, color: colors.mute, paddingHorizontal: space.l });
+  expect(heading.props.accessibilityRole).toBe('header'); // TalkBack can move from it to the next section's strip
+  expect(words().slice(0, 2)).toEqual(['What the camera saw', 'Customer']); // over the first box
+  expect(listed()).toHaveLength(3);
+
+  await sheetOf(addTextPdf(), true);
+  expect(words().slice(0, 2)).toEqual(["From the PDF's text", 'Customer']);
+  expect(screen.getByText("From the PDF's text")).toHaveStyle({ ...type.overline, color: colors.mute });
+  expect(screen.queryByText('What the camera saw')).toBeNull();
+
+  // a row's own list has none: its boxes say where each came from
+  await sheetOf(addPhoto());
+  expect(words()[0]).toBe('Customer');
+  expect(screen.queryByText('What the camera saw')).toBeNull();
 });
 
 test('Could also be: a chip fills the field', async () => {

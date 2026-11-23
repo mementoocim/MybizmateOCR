@@ -7,7 +7,7 @@ import { RecentRow } from '../components/RecentRow';
 import { certOf } from '../lib/cert';
 import { localIsoDate } from '../lib/checks/dates';
 import { blockWords, saveBlock } from '../lib/exportRows';
-import { amount, formatClock, formatMs, monthDay, peso, qty } from '../lib/format';
+import { amount, formatClock, monthDay, peso, qty } from '../lib/format';
 import { clearItems, lists } from '../lib/lists';
 import * as savedStore from '../lib/saved';
 import { markExported, savedSummary, saveScan } from '../lib/saved';
@@ -150,7 +150,7 @@ test('the header names the form; its subtitle has the number and the read time',
   });
   expect(header('MyBizMate Sales Invoice')).toBeOnTheScreen();
   const no = getScan(id)!.result.reads.find((b) => b.name === 'invoice_no')!.text;
-  expect(screen.getByText(`SI no. ${no} · Read in ${formatMs(3200)}`)).toHaveStyle({ ...type.overline, color: colors.mute });
+  expect(screen.getByText(`SI no. ${no} · Read in 3.2 s`)).toHaveStyle({ ...type.overline, color: colors.mute });
   // On its right, the photo's thumbnail; ⋮ only once it's saved.
   expect(within(screen.getByTestId('header')).getByRole('button', { name: 'Photo of the form' })).toBeOnTheScreen();
   expect(screen.queryByRole('button', { name: 'More options' })).toBeNull();
@@ -158,17 +158,25 @@ test('the header names the form; its subtitle has the number and the read time',
   // A Service Invoice names its own number; a 2307 has none; a text PDF says where its boxes came from.
   await show('svc_0000', { source: 'gallery' });
   expect(header('Service Invoice')).toBeOnTheScreen();
-  expect(screen.getByText(`Invoice no. ${expectedOf('svc_0000').invoice_no} · Read in 0 ms`)).toBeOnTheScreen();
+  expect(screen.getByText(`Invoice no. ${expectedOf('svc_0000').invoice_no} · Read in 0.0 s`)).toBeOnTheScreen();
   await show('bir2307_photo_0', { source: 'camera' });
   expect(header('BIR Form 2307')).toBeOnTheScreen();
-  expect(screen.getByText('Read in 0 ms')).toBeOnTheScreen();
-  await show('sales_text_0', { source: 'pdf', label: 'PDF: sales_text_0.pdf' });
-  expect(screen.getByText("From the PDF's text · 0 ms")).toBeOnTheScreen();
+  expect(screen.getByText('Read in 0.0 s')).toBeOnTheScreen();
+  // a read under a second is in seconds too, as the design's "· 0.7 S" (§9.5), and so is the footnote's time
+  await show('sales_text_0', {
+    source: 'pdf',
+    label: 'PDF: sales_text_0.pdf',
+    edit: (r) => {
+      r.timing = { ...r.timing, totalMs: 214 };
+    },
+  });
+  expect(screen.getByText("From the PDF's text · 0.2 s")).toBeOnTheScreen();
+  expect(screen.getByText('Read on this phone in 0.2 s. Nothing left the phone.')).toBeOnTheScreen();
 });
 
 test('a sample says so in its subtitle and has Retake only', async () => {
   await show('inv_0007', { source: 'sample', sampleId: 'inv_0007', label: 'Sample 0007' });
-  expect(screen.getByText('Sample 0007 · Read in 0 ms')).toBeOnTheScreen();
+  expect(screen.getByText('Sample 0007 · Read in 0.0 s')).toBeOnTheScreen();
   expect(barButtons()).toEqual(['Retake']);
   expect(screen.queryByTestId('save-open')).toBeNull();
   expect(header('Checks passed')).toBeOnTheScreen();
@@ -644,7 +652,7 @@ test('not found: the photo, the reason, three numbered lines, Choose a photo and
     expect(screen.getByText(line)).toBeOnTheScreen();
     expect(screen.getByText(String(i + 1))).toHaveStyle({ ...type.figure, color: colors.brandText });
   });
-  expect(screen.getByText('Checked on this phone in 0 ms. Nothing left the phone.')).toBeOnTheScreen();
+  expect(screen.getByText('Checked on this phone in 0.0 s. Nothing left the phone.')).toBeOnTheScreen();
   await openPhoto();
   expect(header('Photo')).toBeOnTheScreen();
   expect(screen.queryByText('Enhanced')).toBeNull(); // no page was found: only the photo
@@ -999,7 +1007,7 @@ test('the footnote: the time, the box count, and the sample line', async () => {
   const written = Object.values(truth).filter((t) => t !== '').length;
   const exact = reads.filter((r) => truth[r.name] !== undefined && truth[r.name] !== '' && truth[r.name] === r.text).length;
   expect(footnote()).toEqual([
-    'Read on this phone in 0 ms. Nothing left the phone.',
+    'Read on this phone in 0.0 s. Nothing left the phone.',
     '45 boxes read.',
     `Sample invoice: ${exact} of ${written} boxes read exactly as written. Samples are made up, so they can't be saved.`,
   ]);
@@ -1008,7 +1016,7 @@ test('the footnote: the time, the box count, and the sample line', async () => {
 test("a PDF's footnote and its page count", async () => {
   // a text PDF: every box from its own text
   await show('sales_text_0', { source: 'pdf' });
-  expect(screen.getByText('Read on this phone in 0 ms. Nothing left the phone.')).toBeTruthy();
+  expect(screen.getByText('Read on this phone in 0.0 s. Nothing left the phone.')).toBeTruthy();
   expect(screen.getByText('8 boxes read.')).toBeTruthy();
   expect(screen.getByText('Read from the PDF: 8 boxes from its text, 0 read from the page.')).toBeTruthy();
 
@@ -1092,7 +1100,7 @@ test('a scan kept before PDFs shows as a photo', async () => {
   await act(async () => loadRecent());
   mockParams = { id: 'old-1' };
   await render(<Result />);
-  expect(screen.getByText('Read on this phone in 0 ms. Nothing left the phone.')).toBeTruthy();
+  expect(screen.getByText('Read on this phone in 0.0 s. Nothing left the phone.')).toBeTruthy();
   expect(screen.getByText('45 boxes read.')).toBeTruthy();
   expect(screen.queryByText(/PDF/)).toBeNull();
   await press(screen.getByText('SI no.'));

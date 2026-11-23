@@ -123,6 +123,24 @@ test('a matched customer', async () => {
   expect(screen.getByText('Matched by its TIN and name.')).toBeTruthy();
 });
 
+test("the customer's boxes come under what the camera saw, or a text PDF's text", async () => {
+  // design §9.5: "WHAT THE CAMERA SAW" with the name, TIN and address boxes (caps by the overline style); a text PDF
+  // has no camera, so its heading says where its boxes came from (ruling T26-1)
+  await showScan();
+  await press(screen.getByText('Customer'));
+  expect(sheet().getByText('What the camera saw')).toHaveStyle({ ...type.overline, color: colors.mute });
+  expect(sheet().getByRole('header', { name: 'What the camera saw' })).toBeTruthy();
+
+  const result = parseScanResult(coreJson('sales_text_0'));
+  const id = addScan({ label: 'PDF: sales_text_0.pdf', source: 'pdf', result });
+  mockParams = { id };
+  await render(<Result />);
+  await press(screen.getByText('Customer'));
+  expect(sheet().getByText("From the PDF's text")).toHaveStyle({ ...type.overline, color: colors.mute });
+  expect(sheet().queryByText('What the camera saw')).toBeNull();
+  expect(sheet().getByLabelText("Customer, From the PDF's text: “Cruz Trading”")).toBeTruthy();
+});
+
 test('In your customers, with the match and its reason', async () => {
   await importPartiesCsv(PARTIES, 'customer');
   const id = await showScan();

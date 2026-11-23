@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import { createRef } from 'react';
-import { View, type ViewInstance } from 'react-native';
+import { StyleSheet, View, type ViewInstance } from 'react-native';
 
 import { Badge, type BadgeTone } from '../components/Badge';
 import { Banner } from '../components/Banner';
@@ -407,6 +407,26 @@ test('LedgerRow: the key keeps its width; the value takes the rest, or goes unde
   const keyAndValue = key.parent!;
   expect(keyAndValue).toHaveStyle({ flexDirection: 'row', flexWrap: 'wrap' });
   expect(keyAndValue.children[1]).toHaveStyle({ flexGrow: 1, flexBasis: '50%' });
+});
+
+test('LedgerRow: a key is never cut short: its words end in a hanging space, and nothing fixes its height', async () => {
+  // QA pass 1 drew "VAT 12%" as "VAT". The key's box is exactly the width its words measured, with nothing to spare,
+  // and Android lays the words out again inside it: when that needs a hair more, "12%" breaks to a second line that
+  // the one-line box cuts off. A space after the words is measured with them, but hangs past the line's end when
+  // Android breaks the line, so the box has a space's width to spare, at any font size. That the words then stay on
+  // one line, and a long key at 200% wraps with its row growing, only the device can show (QA pass 2).
+  await render(<LedgerRow label="VAT 12%" value="59.84" valueStyle="figure" onPress={noop} />);
+  const key = screen.getByText('VAT 12%');
+  expect([key.props.children].flat().join('')).toBe('VAT 12% ');
+  // never narrower than its words, and no height, width or line count of its own: a long key wraps, and the row grows
+  const style = StyleSheet.flatten(key.props.style);
+  expect(style).toMatchObject({ ...type.label, color: colors.mute, flexShrink: 0 });
+  for (const fixed of ['height', 'maxHeight', 'width', 'maxWidth'] as const) expect(style[fixed]).toBeUndefined();
+  expect(key.props.numberOfLines).toBeUndefined();
+  const keyAndValue = StyleSheet.flatten(key.parent!.props.style);
+  expect([keyAndValue.height, keyAndValue.maxHeight]).toEqual([undefined, undefined]);
+  // TalkBack says the key's words, not the space
+  expect(screen.getByRole('button', { name: 'VAT 12%, 59.84' })).toBeOnTheScreen();
 });
 
 test('LedgerRow: a panel row at least 48 dp tall, a hairline under it, and its focus ring inside', async () => {

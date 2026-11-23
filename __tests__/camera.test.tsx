@@ -55,6 +55,12 @@ jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: () => mockLibrary(),
 }));
 jest.mock('expo-haptics');
+// expo-status-bar's StatusBar stands in as a plain view carrying its props, as in the photo viewer's suite.
+jest.mock('expo-status-bar', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return { StatusBar: (props: object) => React.createElement(View, { testID: 'status-bar', statusBar: props }) };
+});
 jest.mock('../lib/build', () => ({
   get TEAM_BUILD() {
     return mockTeam;
@@ -432,6 +438,22 @@ test('a photo is read', async () => {
   expect(screen.getByText('Straightening the photo and reading every box')).toBeTruthy();
   await act(async () => finish(parseScanResult(coreJson('inv_0007'))));
   expect(mockRouter.replace).toHaveBeenCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
+});
+
+test("light status icons on the camera, dark over the reading card's light wash, then light again", async () => {
+  // design §8: dark icons on light screens. The camera's are light, but the reading card's wash is paper at 86%, where
+  // white icons measured 1.44:1 (QA pass 1); once the card goes, the camera's light icons come back.
+  let finish: (v: unknown) => void = () => {};
+  mockScanPhoto.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+  const statusBar = () => screen.getByTestId('status-bar').props.statusBar;
+  await open();
+  expect(statusBar()).toEqual({ style: 'light' });
+  await send('photo', { uri: 'file:///cache/camera/capture_3.jpg' });
+  expect(screen.getByLabelText('Reading')).toBeTruthy();
+  expect(statusBar()).toEqual({ style: 'dark' });
+  await act(async () => finish(parseScanResult(coreJson('inv_0007'))));
+  expect(screen.queryByLabelText('Reading')).toBeNull();
+  expect(statusBar()).toEqual({ style: 'light' });
 });
 
 test('auto-capture confirms with one haptic; a shutter photo has none', async () => {

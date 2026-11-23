@@ -60,6 +60,14 @@ export type KeptResult = Omit<ScanResult, 'source' | 'pageCount' | 'picture' | '
     reads: (Omit<BoxRead, 'fromText'> & { fromText?: boolean })[];
   };
 
+/**
+ * A text PDF: a PDF whose page isn't a picture, so its boxes come from its own text, not a camera. The Scan screen's
+ * subtitle says so ("FROM THE PDF'S TEXT"), and so do its boxes' sheets.
+ */
+export function isTextPdf(r: Pick<ScanResult, 'source' | 'picture'>): boolean {
+  return r.source === 'pdf' && r.picture === false;
+}
+
 /** A kept result with every field: one from before PDFs is a photo's, as parseScanResult reads an old JSON. */
 export function withPdfFields(r: KeptResult): ScanResult {
   return {

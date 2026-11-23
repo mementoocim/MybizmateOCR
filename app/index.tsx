@@ -108,8 +108,9 @@ export default function Home() {
               },
             ]}
           />
-          {/* caps by the overline style: MYBIZMATE INVOICE · SERVICE INVOICE · BIR 2307 */}
-          <Text style={[type.overline, styles.caption]}>MyBizMate invoice · Service Invoice · BIR 2307</Text>
+          {/* caps by the overline style: MYBIZMATE INVOICE · SERVICE INVOICE · BIR 2307, the form's name kept on one
+              line by a no-break space */}
+          <Text style={[type.overline, styles.caption]}>{'MyBizMate invoice · Service Invoice · BIR\u00A02307'}</Text>
         </View>
 
         {firstRun && <Tips />}

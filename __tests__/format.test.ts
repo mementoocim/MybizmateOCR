@@ -1,4 +1,15 @@
-import { amount, formatClock, formatMs, monthDay, monthSpan, monthYear, peso, prettyDate, qty } from '../lib/format';
+import {
+  amount,
+  formatClock,
+  formatMs,
+  formatSeconds,
+  monthDay,
+  monthSpan,
+  monthYear,
+  peso,
+  prettyDate,
+  qty,
+} from '../lib/format';
 
 test('amount: rows without the peso sign', () => {
   expect(amount(5810.5)).toBe('5,810.50');
@@ -52,9 +63,19 @@ test('the months a period spans', () => {
 });
 
 test('times under a second in ms, longer ones in seconds', () => {
+  // the team's: the speed test and the Scan screen's stage timings
   expect(formatMs(57)).toBe('57 ms');
   expect(formatMs(1400)).toBe('1.4 s');
   expect(formatMs(12345)).toBe('12.3 s');
+});
+
+test("a read's time in seconds with one decimal, under a second too", () => {
+  // design §9.5: the Scan screen's "FROM THE PDF'S TEXT · 0.7 S" and "Read on this phone in 3.2 s"
+  expect(formatSeconds(214)).toBe('0.2 s');
+  expect(formatSeconds(700)).toBe('0.7 s');
+  expect(formatSeconds(3240)).toBe('3.2 s');
+  expect(formatSeconds(12345)).toBe('12.3 s');
+  expect(formatSeconds(0)).toBe('0.0 s');
 });
 
 test('a clock time', () => {

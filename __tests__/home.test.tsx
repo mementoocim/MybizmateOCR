@@ -173,7 +173,8 @@ test('capture: Take photo, From gallery, Import PDF, and what it reads', async (
   // what it reads, in caps by the overline style
   const caption = screen.getByText('MyBizMate invoice · Service Invoice · BIR 2307');
   expect(caption).toHaveStyle({ ...type.overline, color: colors.mute, textAlign: 'center' });
-  expect(String(caption.props.children).toUpperCase()).toBe('MYBIZMATE INVOICE · SERVICE INVOICE · BIR 2307');
+  // the form's name stays on one line: a no-break space joins BIR and 2307 (QA pass 1 had "… · BIR" / "2307")
+  expect(String(caption.props.children).toUpperCase()).toBe('MYBIZMATE INVOICE · SERVICE INVOICE · BIR\u00A02307');
 
   // From gallery reads the photo and opens its result. The picker hands over its own copy in the app's cache; the
   // scanner deletes only files inside the cache, never the person's photo.

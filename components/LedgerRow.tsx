@@ -14,6 +14,13 @@ import { Tap } from './Tap';
 //
 // The key keeps its natural width and the value block has a basis of half the row, in a wrapping line, so the value
 // moves under the key exactly when the key takes more than half the row: §11's stacking, measured by layout.
+//
+// A key is never cut short (QA pass 1 drew "VAT 12%" as "VAT"). Its box is exactly as wide as its words measured, and
+// as tall as their lines (the value's line, at least). Android lays the words out again inside that box, and when
+// that needs a hair more than the measure did, the last word breaks to a line the box hasn't got, which Text's own
+// overflow: 'hidden' cuts off. So the words end in a space: it's measured with them, but hangs past the line's end
+// when Android breaks the line, which gives the box a space's width to spare at any font size. The key never shrinks
+// below its words, and nothing fixes its height: a key too long for its line wraps, and the row grows with it.
 
 type LedgerRowProps = {
   label?: string; // the key ("Date"); none on item rows
@@ -36,6 +43,8 @@ type LedgerRowProps = {
 
 /** The flag bar's width, in dp (§5.1). */
 const FLAG_BAR = 3;
+/** After a key's words: measured with them, it hangs past the line's end, so Android's layout has room to spare. */
+const HANG = ' ';
 
 /**
  * The ref is the row's own view (the pressable, when it has a press): a flag chip scrolls to it, and a sheet returns
@@ -75,7 +84,12 @@ export const LedgerRow = forwardRef<ViewInstance, LedgerRowProps>(function Ledge
       {flagged ? <View testID="flag-bar" style={styles.bar} /> : null}
       <View style={styles.line}>
         <View style={styles.keyAndValue}>
-          {label ? <Text style={[type.label, styles.key]}>{label}</Text> : null}
+          {label ? (
+            <Text style={[type.label, styles.key]}>
+              {label}
+              {HANG}
+            </Text>
+          ) : null}
           <View style={styles.valueBlock}>
             <View style={styles.valueLine}>
               <Text style={[type[valueStyle], styles.value]}>{value ?? '—'}</Text>
@@ -171,7 +185,7 @@ const styles = StyleSheet.create({
   // The right column sits on the value's first line, as in a ledger.
   line: { flexDirection: 'row', alignItems: 'flex-start', gap: space.m },
   keyAndValue: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', columnGap: space.m, rowGap: space.xs },
-  key: { color: colors.mute, paddingTop: 1 }, // optical: the key's 18 sp line sits level with the value's 20
+  key: { color: colors.mute, flexShrink: 0, paddingTop: 1 }, // optical: the key's 18 sp line level with the value's 20
   valueBlock: { flexGrow: 1, flexBasis: '50%' },
   valueLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space.s, rowGap: space.xs },
   value: { color: colors.ink },

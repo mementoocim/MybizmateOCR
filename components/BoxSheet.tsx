@@ -22,7 +22,7 @@ import {
 
 import { fieldLabel, fieldType } from '../lib/forms';
 import { boxValue } from '../lib/sale';
-import { confirmBox, setEdit, type StoredScan } from '../lib/scans';
+import { confirmBox, isTextPdf, setEdit, type StoredScan } from '../lib/scans';
 import { annotationOn, subscribeSettings } from '../lib/settings';
 import { colors, radius, space, touch, type } from '../lib/theme';
 import { boxState, type BoxState, trainingBoxes } from '../lib/training/boxes';
@@ -40,14 +40,16 @@ import { codeKeyboard, TextField } from './TextField';
 // the caller keeps it a list (alwaysList: annotation mode's "Check every box first", ruling T13-5), the sheet lists the
 // boxes, full-bleed rows each with its crop (none for the PDF's own text: ruling T13-6), what was read and its badges,
 // with what comes under them (children: the party, a new item; full-bleed too, so they pad their own text), and Done.
+// The party sheet has a heading over its boxes (heading), which says where they were read, as the editor's overline
+// does for a box with no read: the PDF's text on a text PDF, else what the camera saw (ruling T26-1).
 // A listed box opens its editor in the same sheet, with Back to the list.
-// The editor: what the camera saw (or that the box is the PDF's own text), the reading with no percentage and "Hard
-// to read" under 0.90, the other readings as chips that fill the field and start typing in it (§9.5), and the field,
-// not focused on open, with the keyboard for the box's kind (call 15). Cancel, Looks right (annotation mode) and Save
-// are the sheet's pinned actions (ruling T7-4), so a fix for the keyboard over a sheet only has to lift them. Save, or
-// Looks right, goes back to the list, or closes a one-box sheet and calls onSaved (the Scan screen then gives TalkBack
-// focus to its strip). Cancel leaves at once; Back, Close, the scrim and system back ask first while the field differs
-// from where it started.
+// The editor: what the camera saw, or that the box is the PDF's own text (an empty box, which has no read to say where
+// it came from, follows the scan), the reading with no percentage and "Hard to read" under 0.90, the other readings as
+// chips that fill the field and start typing in it (§9.5), and the field, not focused on open, with the keyboard for
+// the box's kind (call 15). Cancel, Looks right (annotation mode) and Save are the sheet's pinned actions (ruling
+// T7-4), so a fix for the keyboard over a sheet only has to lift them. Save, or Looks right, goes back to the list, or
+// closes a one-box sheet and calls onSaved (the Scan screen then gives TalkBack focus to its strip). Cancel leaves at
+// once; Back, Close, the scrim and system back ask first while the field differs from where it started.
 // A box opened from the list is a step of the sheet (focusKey), so TalkBack focus moves to its title, the box's label;
 // back at the list, focus goes to that box's row, which opened it (ruling T13-2, design §7). A box from the PDF's own
 // text has no reading line in its editor: its overline says so, and the field holds the text (ruling T13-3).
@@ -76,11 +78,23 @@ const STATE: Record<BoxState, BadgeSpec> = {
 
 const hasOwn = (o: object, key: string) => Object.prototype.hasOwnProperty.call(o, key);
 
-/** How a box was read (§6): "Read as “Oct 29, 2026”", nothing made out, the PDF's own text, or no read at all. */
+/**
+ * How a box was read (§6): "Read as “Oct 29, 2026”", or nothing made out; from the PDF's own text, with what it holds
+ * ("From the PDF's text: “Oct 29, 2026”"), so a list of them doesn't read the same on every line (ruling T26-1); or
+ * an empty box, with no read or no text.
+ */
 export function readingLine(read: BoxRead | null): string {
-  if (!read) return 'Empty box';
-  if (read.fromText) return "From the PDF's text";
+  if (!read || (read.fromText && read.text === '')) return 'Empty box';
+  if (read.fromText) return `From the PDF's text: “${read.text}”`;
   return read.text === '' ? "Couldn't make out any writing" : `Read as “${read.text}”`;
+}
+
+/**
+ * Where a box's reading came from, as an overline says it (caps by its style): the PDF's own text, or what the camera
+ * saw (a photo's, and a picture PDF's, which is read like one).
+ */
+function sourceWords(fromPdfText: boolean): string {
+  return fromPdfText ? "From the PDF's text" : 'What the camera saw';
 }
 
 /**
@@ -121,6 +135,7 @@ export function BoxSheet({
   onSaved,
   returnFocus,
   alwaysList = false,
+  heading = false,
   children,
 }: {
   visible: boolean;
@@ -131,6 +146,7 @@ export function BoxSheet({
   onSaved?: () => void; // a one-box sheet: after Save (or Looks right) closes it
   returnFocus?: RefObject<ViewInstance | null>; // the row that opened it, which TalkBack focus goes back to
   alwaysList?: boolean; // a list even with one box ("Check every box first", as milestone 4 had it)
+  heading?: boolean; // over the listed boxes, where they were read (the party sheet's: design §9.5)
   children?: ReactNode; // under the list: the party section, the payor line, a new item
 }) {
   const annotation = useSyncExternalStore(subscribeSettings, annotationOn);
@@ -151,6 +167,7 @@ export function BoxSheet({
     if (row) AccessibilityInfo.sendAccessibilityEvent(row, 'focus');
   }, [editor, rowRefs]);
   const form = scan.result.form!;
+  const textPdf = isTextPdf(scan.result); // its boxes come from its own text: there's no camera to name
   const readOf = (box: string) => scan.result.reads.find((r) => r.name === box) ?? null;
   // in annotation mode, the boxes that can become training data: only they have a state, and Looks right
   const training = new Set(annotation ? trainingBoxes(scan).map((r) => r.name) : []);
@@ -165,6 +182,12 @@ export function BoxSheet({
         returnFocus={returnFocus}
         gutter={false}
         actions={[{ label: 'Done', onPress: onClose }]}>
+        {heading ? (
+          // caps by the overline style, on the gutter over the rows: WHAT THE CAMERA SAW, FROM THE PDF'S TEXT
+          <Text accessibilityRole="header" style={[type.overline, styles.mute, styles.heading]}>
+            {sourceWords(textPdf)}
+          </Text>
+        ) : null}
         {boxes.map((box) => (
           <ListedBox
             key={box}
@@ -186,6 +209,8 @@ export function BoxSheet({
 
   const { box, draft, start, fromList } = editor;
   const read = readOf(box);
+  // Where the box was read: its read says so; an empty box has none, and follows the scan (ruling T26-1).
+  const fromPdfText = read ? read.fromText : textPdf;
   const state = stateOf(box);
   // "Looks right" checks the box's value as it stands: a backup reading picked or other words typed is a correction,
   // which only Save keeps
@@ -245,10 +270,8 @@ export function BoxSheet({
       <View style={styles.editor}>
         <View style={styles.group}>
           {/* caps by the overline style: WHAT THE CAMERA SAW, FROM THE PDF'S TEXT */}
-          <Text style={[type.overline, styles.mute]}>
-            {read?.fromText ? "From the PDF's text" : 'What the camera saw'}
-          </Text>
-          {read?.fromText ? null : read?.cropUri ? (
+          <Text style={[type.overline, styles.mute]}>{sourceWords(fromPdfText)}</Text>
+          {fromPdfText ? null : read?.cropUri ? (
             <Image
               testID="editor-crop"
               source={{ uri: read.cropUri }}
@@ -384,6 +407,7 @@ const styles = StyleSheet.create({
   editorCrop: { height: EDITOR_CROP },
   // badges keep their own width in a row that wraps
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: space.s },
+  heading: { paddingHorizontal: space.l }, // the list's rows are full-bleed: its words keep to the gutter
   editor: { gap: space.l, paddingBottom: space.l },
   group: { gap: space.s },
   reading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.s },

@@ -193,7 +193,8 @@ test("a 2307's sections", async () => {
 
   await press(screen.getByText('WI050 · Consultancy fees'));
   expect(screen.getByText('Row 1 · ATC')).toBeTruthy();
-  expect(screen.getAllByText("From the PDF's text")).toHaveLength(7);
+  // each from the PDF's text, with what it holds (ruling T26-1), so the 7 lines don't read alike
+  expect(screen.getAllByText(/^From the PDF's text: “.+”$/)).toHaveLength(7);
 });
 
 test('a period that is not one calendar quarter', async () => {

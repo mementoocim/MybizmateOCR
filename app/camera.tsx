@@ -31,7 +31,8 @@ import {
 // pill names the form once it's found), the Auto switch and the flashlight switch. At its foot, the status pill. Under
 // it, the gallery (an icon over its label) and the shutter, which waits while the camera starts or takes the photo. A
 // problem (no permission, no camera, a camera that won't start) shows a panel in the picture's place, and the gallery
-// stays. A photo Auto took gets one confirm haptic (§5.5), then the reading card.
+// stays. A photo Auto took gets one confirm haptic (§5.5), then the reading card. The status bar's icons are light,
+// and dark while the reading card's light wash covers the screen (§8).
 
 type Permission = 'checking' | 'granted' | 'ask' | 'settings'; // ask: refused, may ask again; settings: refused for good
 type Status = { status: CameraStatus | 'starting'; form: FormName | null };
@@ -207,7 +208,8 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.screen}>
-      <StatusBar style="light" />
+      {/* light icons on the camera; dark over the reading card's light wash while it shows (§8: dark on light) */}
+      <StatusBar style={flow.reading ? 'dark' : 'light'} />
       <View style={[styles.top, { paddingTop: insets.top + space.xs }]}>
         <IconButton icon={Close} label="Close" tone="camera" onPress={close} />
         <View style={styles.grow} />

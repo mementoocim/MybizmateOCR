@@ -35,7 +35,7 @@ import { localIsoDate } from '../lib/checks/dates';
 import { confirmDeleteSaved } from '../lib/confirmDelete';
 import { blockWords, saveBlock } from '../lib/exportRows';
 import { flagTarget, PAYOR_ROW } from '../lib/flagTargets';
-import { formatClock, formatMs, monthDay } from '../lib/format';
+import { formatClock, formatMs, formatSeconds, monthDay } from '../lib/format';
 import { FORMS } from '../lib/forms';
 import { addItem } from '../lib/lists';
 import { goBackOrHome } from '../lib/navigation';
@@ -44,7 +44,7 @@ import { compareWithSample, sampleInfo } from '../lib/samples';
 import type { SavedSummary } from '../lib/saved';
 import { useScanFlow } from '../lib/scanFlow';
 import { shownLabel, useScanCheck } from '../lib/scanState';
-import { getScan, type InvoiceKind, type StoredScan, subscribeRecent, updateScan } from '../lib/scans';
+import { getScan, type InvoiceKind, isTextPdf, type StoredScan, subscribeRecent, updateScan } from '../lib/scans';
 import { colors, radius, space, type } from '../lib/theme';
 import { toast } from '../lib/toast';
 import { uncheckedBoxes } from '../lib/training/boxes';
@@ -384,15 +384,16 @@ const noop = () => {};
 
 /**
  * The header's line under the form's name, the first that applies: where it came from and when, when the form wasn't
- * found; saved, and when; a sample's name; a text PDF; else the invoice's number (a 2307 has none) and the read time.
+ * found; saved, and when; a sample's name; a text PDF; else the invoice's number (a 2307 has none) and the read time,
+ * in seconds ("· 0.7 S", design §9.5).
  */
 function subtitleOf(scan: StoredScan, found: boolean, sale: SaleView | null, summary: SavedSummary | undefined): string {
   const r = scan.result;
-  const t = formatMs(r.timing.totalMs);
+  const t = formatSeconds(r.timing.totalMs);
   if (!found) return `${shownLabel(scan)} · ${formatClock(scan.at)}`;
   if (summary) return `Saved as a ${summary.kind} · ${dayOf(summary.savedAt)}`;
   if (scan.source === 'sample') return `${scan.label} · Read in ${t}`;
-  if (r.source === 'pdf' && r.picture === false) return `From the PDF's text · ${t}`;
+  if (isTextPdf(r)) return `From the PDF's text · ${t}`;
   const number = r.form ? FORMS[r.form].number : '';
   const no = sale?.final.invoice_no ?? '';
   return number && no ? `${number} ${no} · Read in ${t}` : `Read in ${t}`;
@@ -464,12 +465,13 @@ function Footnote({ lines }: { lines: readonly string[] }) {
 }
 
 /**
- * The footnote's lines: how long it took, on the phone; in team builds, its stages; how many boxes were read; a PDF's
- * own line; and for a sample, how it read against what's written on it.
+ * The footnote's lines: how long it took, on the phone, in seconds as the subtitle has it; in team builds, its stages,
+ * in the team's own format; how many boxes were read; a PDF's own line; and for a sample, how it read against what's
+ * written on it.
  */
 function footnoteOf(scan: StoredScan): string[] {
   const r = scan.result;
-  const total = formatMs(r.timing.totalMs);
+  const total = formatSeconds(r.timing.totalMs);
   const boxes = `${r.reads.length} ${r.reads.length === 1 ? 'box' : 'boxes'}`;
   const lines: (string | null)[] = r.aligned
     ? [
