@@ -426,6 +426,11 @@ no path is given) checks the first two items and lists the network permissions; 
   CameraX and nlohmann/json included, with its license, its version and the full text (pdfium's with the notices of
   the code it holds; see below). After a dependency changes, run `npm run licenses` to gather the texts again into
   `assets/licenses`, and commit what changed; the tests fail when something the app ships has no entry.
+- **The notices still missing:** before a client release, the notices also need to cover the libraries OpenCV's `.so`
+  builds in (libjpeg-turbo, OpenJPEG, libwebp, protobuf, ITT, carotene and KleidiCV) and the transitive libraries the
+  app ships (react-navigation, AndroidX, Kotlin's standard library and Hermes). Gather their texts with
+  `npm run licenses` (or add them to its sources), and check them in Settings › About › Open-source licenses. This was
+  the user's call on 2026-11-23: "Before release".
 
 ## Run it on the Android emulator
 
@@ -599,6 +604,90 @@ run the same `scan_file` again.
   synthetic 2307s and PDFs) and `test_export_core_fixtures.py` (everything the core's exporter writes).
 - From `../prototype/training`: `..\..\.venv\Scripts\python.exe -I test_read_scan_exports.py`: the tests of the
   training exports' reader.
+
+## Checked on the emulator (UI pass)
+
+Design B (`../docs/2026-11-22-mybizmate-scan-ui-ux-design.md`, whose § the items cite), as a debug build on
+`UI_QA_Phone`, an AVD made for this check with made-up data only (the user's call, "Separate QA AVD"): Android 16 (API
+36), 1080×2400 at 420 dpi, x86_64, no hardware keyboard; 2026-11-23 and 24. Built from `ce4e67d` (with 26a's keyboard
+view); the JavaScript came from Metro, through the fixes below (26a to 26d) up to `ebb1e79`. On that final tree every
+suite passed: jest (75 suites, 693 tests), the typecheck and ESLint, and the core's doctest (`npm run test:core`: 73
+test cases, 9102 assertions). Every scan and list is synthetic: the samples, `?test=` images, and the fixtures' photos,
+PDFs and CSVs. The captures sit outside git, with their `index.md`, in `../.superpowers/brainstorm/ui-2026-11-22/qa/`.
+
+1. **The rebuild and install:** `npm run check:apk` passed on the new debug APK (241 MB): no `TelemetryInitializer`, and
+   no socket imports in ONNX Runtime's libraries or pdfium's. Its first start showed the first-run Home: the tips, and
+   "Get set up · 0 of 2".
+2. **Sheets above the keyboard** (26a, `ce4e67d`; the user's call, "Native IME view"): a sheet is a window of its own,
+   where React Native's keyboard height stays 0, so the keyboard covered its field. A native view in the scanner module
+   (`ImeInsetsView`) now reads it there, and the sheet's actions rise by it. On the device the field, Cancel and Save
+   sat above the docked Gboard (`defaults-boxsheet-keyboard-ime.png`), at 200% and on 3-button navigation too.
+3. **Pass 1, defaults** (86 captures): headers clear the status bar, bars and sheets' actions the gesture handle, and
+   contrast as rendered matches §5.1 (danger text, the lowest, 5.16:1). Its issues, fixed in 26b (`051e5ab`):
+   - "VAT 12%" showed as "VAT" on one-line VAT rows: the key now ends in a space, which gives Android's layout room.
+   - The status-bar icons were white over the reading card's light wash (1.44:1): they're dark while it shows.
+   - Home's caption split "BIR" / "2307": a no-break space keeps the form's name together.
+   - A text PDF's empty box spoke of the camera, and its list lines showed no value: both name the PDF's text now.
+   - The party sheet had no heading over its boxes: it now says where they were read.
+   - Reads under a second showed in ms ("214 ms"): read times are now in seconds ("0.2 s").
+4. **Pass 2, font size 200%** (76 captures): pass 1's fixes held, and none of about 90 values, badges and keys measured
+   lost its last word. Its issues, fixed in 26c (`67c5587`, `26b6a66`; pinned in jest, not re-checked at 200%):
+   - Segmented options split words ("Custo" / "mers" / "21"). They now stack, one full-width option per row: from 150%
+     (ruling T26-2), then when width over font scale is under 310 dp (T26-3, for 130% on a 360 dp phone), and since 26d
+     under 104 dp per option (T26-5), so Sale | Purchase keeps one row at 130% on 360 dp.
+   - A focused field scrolled its label under the header: the whole field now comes into view.
+   - The read time split from its unit ("3.7" / "S"): a no-break space keeps them together.
+   - A restart with a sheet open logged a dev error from the sheet's focus return: it now skips a view that's gone.
+   - Accepted as a limit: Your lists' search placeholder is cut ("Search name, TIN or co…"); a one-line hint can't wrap.
+5. **Pass 3, 3-button navigation** (25 captures): every bottom bar's and sheet's buttons end about 12 dp above the bar,
+   and the ends of sheets and scrolls clear it. That answers the audit's p3-01, p3-02, p3-02b, p3-03, p3-04 and p3-04b.
+   Under the camera and the photo viewer the bar stays the system's light grey, as §8 leaves it (p3-05).
+6. **Pass 4, 360 dp wide** (24 captures; it answers p4-01 to p4-03). Its issues, fixed in 26d (`ebb1e79`): Back after
+   the display-size change restarted the screen (item 7), and a saved scan's subtitle splitting its date ("NOV" / "23"),
+   now kept whole. Accepted: Your lists' "Customers 21" wraps to two lines (audit p4-04). The wrap falls between words,
+   whichever tab is chosen, and nothing clips; §5.2 and §5.6 let a label wrap.
+7. **Back after the screen restarts (26d):** a font-size or display-size change makes Android rebuild the app's screen
+   while its JavaScript keeps running, so a new root mounts before the old one goes. expo-router 58 shares one global
+   `router` between them, and the old root's late unmount left it unbound for good, so Back threw "The imperative router
+   is unavailable before the first render has finished." Going back now uses the screen's own navigation
+   (`useGoBackOrHome`), a test bans the global `router`, and `navigation.test.tsx` replays the restart. On the device
+   the old code threw; with the fix, Back went where it should after display-size and font-size restarts, as did the
+   camera's Close and a sample's Retake after one; eight restarts left no router error in the log.
+8. **Keyboard states:** an amount box (Gboard's visible-password layout: letters with a number row), a name box, the
+   save sheet's Revenue account, Settings' Offset account (nearest the end) and Your lists' search: each field, and each
+   sheet's actions, sat above the keyboard. The emulator's touch counts as a stylus, so plain fields got Gboard's
+   floating handwriting toolbar: stylus handwriting was off for those, then unset.
+9. **Accessibility, as text:** 29 compressed uiautomator dumps, Home to the team screens, had no failing control: each
+   has a name, the 12 option groups are radio groups with one checked, badges are part of their row's name, and the
+   sheets' scrim is hidden. A dump can't show headings, hints or live regions (jest covers them), and Saved's long-press
+   delete isn't among TalkBack's actions (the Scan screen's ⋮ has it). TalkBack wasn't run: the user's call.
+10. **Font size in place:** a font-size change restarts the app, splash to Home, in the same process: the Scan screen
+    and its sheet close and what was typed there is lost; the scan doesn't change, and Back works (item 7). Ruling T0-4
+    (Task 0) is why: with the config-changes plugin the screen survived, but its text didn't grow.
+11. **Recent scans keep 20:** after 30 scans, Home lists 20 and the scans folder holds 20.
+12. **The scale check:** 500 made-up saved scans and 2,000 made-up parties, written through the app's own stores by a
+    temporary team-only screen. `dumpsys gfxinfo` over ten flings a run, as janky frames and the 50th/90th/95th/99th
+    percentile in ms: Saved (508 scans) 94.5% (69/113/133/200) and 95.6% (65/117/150/150); Your lists' Customers (1,021)
+    88.8% (65/105/133/150) and 93.0% (61/101/121/150); Home's light list, the baseline, 94.0% (53/101/133/250) and 92.1%
+    (57/113/150/300). This debug build runs Metro's JavaScript on an emulated GPU, so each is an upper bound; Home's are
+    about the same, so the emulator sets the floor, and these can't show the lists' own jank: a phone has to. No blank
+    areas showed. The transition starts 0.89 s after the press for Saved and 1.09 s for Your lists (0.67 s for Settings,
+    with no list); a search in Your lists settles 0.26 s after the last keystroke.
+
+**Still open:**
+- **A real phone:** the feel and speed; the keyboard view (and Android 8 to 10, where it relies on androidx's own
+  inset); and a hardware Back with the keyboard up: adb's Back closed the keyboard and the sheet together.
+- **The real camera** (and its flashlight: the emulator's has none), and **iOS** (milestone 9).
+- **TalkBack**, on the user's phone: the Scan screen's fix loop, and whether a message that appears with its text is
+  announced (T8-2).
+- **A release build:** none was run. expo-router's two warnings after a restart are dev-only, and an uncaught error,
+  which a debug build shows in LogBox, would likely close a release.
+- **Home's first-run tips:** captured only under the dev client's menu note.
+- **Android's system dialogs** (Discard, Clear, Delete, the PDF refusals): teal all-caps buttons, no danger colour, and
+  an empty band when there's no message: a native theme question, with the user.
+- **The font-size restart** loses what was typed in an open sheet (item 10).
+- **Not reached here:** marking scans as exported (every share was backed out of), the camera's refused-for-good panel,
+  and a 2307 with no payments.
 
 ## Checked on the emulator (milestone 4)
 
