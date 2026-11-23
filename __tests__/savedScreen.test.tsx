@@ -1,25 +1,23 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { Alert, type AlertButton } from 'react-native';
 
 import SavedScreen from '../app/saved';
-import { addParty, clearParties, markPartiesExported, type Party } from '../lib/lists';
+import { addParty, clearParties, type Party } from '../lib/lists';
 import { type InvoiceSummary, loadSaved, saveScan } from '../lib/saved';
 import { addScan } from '../lib/scans';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 import { memoryFs } from '../test-utils/memoryFs';
 
+// Saved invoices' list, and its buttons, which open the export at their own file. The export itself, its question
+// included, is __tests__/exportSheet.test.tsx's.
+
 const mockPush = jest.fn();
 const mockToast = jest.fn();
-const mockShare = jest.fn(async (_uri: string, _options: object) => {});
-const mockAvailable = jest.fn(async () => true);
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }) }));
 jest.mock('../lib/toast', () => ({ toast: (m: string) => mockToast(m) }));
-jest.mock('expo-sharing', () => ({
-  shareAsync: (uri: string, options: object) => mockShare(uri, options),
-  isAvailableAsync: () => mockAvailable(),
-}));
+jest.mock('expo-sharing', () => ({ shareAsync: jest.fn(), isAvailableAsync: async () => true }));
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 
 function summary(id: string, date: string, extra: Partial<InvoiceSummary> = {}): InvoiceSummary {
@@ -80,62 +78,6 @@ const addFromScan = (name: string): Promise<Party> =>
     fromScan: true,
   });
 
-test('export new customers and suppliers', async () => {
-  await addFromScan('Bagong Tindahan');
-  await showSaved([]);
-  await press(screen.getByText('Export new customers and suppliers'));
-  expect(screen.getByText("A file in MyBizMate's Parties import format, with the customers and suppliers you added from scans.")).toBeTruthy();
-  expect(screen.getByText('1 party')).toBeTruthy();
-  expect(
-    screen.getByText(
-      "Before you import, fill in each one's City / Municipality, Province and ZIP, and its TIN where it's blank: MyBizMate needs them. Import this file before the sales and purchases that name them.",
-    ),
-  ).toBeTruthy();
-  await press(screen.getByText('Share the file'));
-  expect(mockShare).toHaveBeenCalledWith(expect.stringMatching(/Parties import .*\.xlsx$/), {
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    dialogTitle: 'Send the file',
-  });
-  expect(alertSpy).toHaveBeenCalledWith(
-    'Did the file go where you wanted?',
-    'Mark this party as exported, so the next file leaves it out.',
-    expect.anything(),
-  );
-  await answer('Mark as exported');
-  expect(mockToast).toHaveBeenCalledWith('Marked 1 party as exported.');
-});
-
-test('marked parties leave the next Parties file', async () => {
-  await addFromScan('Bagong Tindahan');
-  await showSaved([]);
-  await press(screen.getByText('Export new customers and suppliers'));
-  await press(screen.getByText('Share the file'));
-  await answer('Mark as exported');
-  expect(screen.getByText('Nothing to export for this choice.')).toBeTruthy();
-  await press(screen.getByText('All added from scans'));
-  expect(screen.getByText('1 party')).toBeTruthy();
-  expect(screen.getByText('1 of them was exported before. Importing it again adds it to MyBizMate twice.')).toBeTruthy();
-});
-
-test('the sales sheet says to send new parties first', async () => {
-  const p = await addFromScan('Bagong Tindahan');
-  await showSaved([summary('a', '2026-10-05', { listed: false, partyName: 'Bagong Tindahan', partyId: p.id })]);
-  await press(screen.getByText('Export sales'));
-  expect(
-    screen.getByText(
-      'Check that these are in MyBizMate before you import: Bagong Tindahan. Export new customers and suppliers first: they go in before this file.',
-    ),
-  ).toBeTruthy();
-});
-
-test('a party that went out is no longer a name to check', async () => {
-  const p = await addFromScan('Bagong Tindahan');
-  await markPartiesExported([p.id], new Date(2026, 10, 19));
-  await showSaved([summary('a', '2026-10-05', { listed: false, partyName: 'Bagong Tindahan', partyId: p.id })]);
-  await press(screen.getByText('Export sales'));
-  expect(screen.queryByText(/Check that these are in MyBizMate/)).toBeNull();
-});
-
 test('no saved invoices', async () => {
   await showSaved([]);
   expect(
@@ -153,71 +95,17 @@ test('rows and their tags', async () => {
   expect(screen.getByText('Exported')).toBeTruthy();
 });
 
-test('export sales: share, then mark', async () => {
-  await showSaved([summary('a', '2026-10-05'), summary('b', '2026-10-06')]);
-  await press(screen.getByText('Export sales'));
-  expect(screen.getByText("A file in MyBizMate's Sales import format, to import at mybizmate.io.")).toBeTruthy();
-  expect(screen.getByText('2 sales · ₱200.00')).toBeTruthy();
-  await press(screen.getByText('Share the file'));
-  expect(mockShare).toHaveBeenCalledWith(expect.stringMatching(/\.xlsx$/), {
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    dialogTitle: 'Send the file',
-  });
-  expect(alertSpy).toHaveBeenCalledWith(
-    'Did the file go where you wanted?',
-    'Mark these 2 sales as exported, so the next export leaves them out.',
-    expect.anything(),
-  );
-  await answer('Mark as exported');
-  expect(mockToast).toHaveBeenCalledWith('Marked 2 sales as exported.');
-  expect(screen.getAllByText('Exported')).toHaveLength(2);
-});
-
-test('"Not yet" keeps them for the next export', async () => {
+test('each export button opens the export at its own file', async () => {
+  await addFromScan('Bagong Tindahan'); // so the parties' button shows
   await showSaved([summary('a', '2026-10-05')]);
-  await press(screen.getByText('Export sales'));
-  await press(screen.getByText('Share the file'));
-  expect(alertSpy).toHaveBeenCalledWith(
-    'Did the file go where you wanted?',
-    'Mark this sale as exported, so the next export leaves it out.',
-    expect.anything(),
-  );
-  await answer('Not yet');
-  expect(screen.getByText('To export')).toBeTruthy();
-  expect(screen.getByText('1 sale · ₱100.00')).toBeTruthy();
-});
-
-test('marked invoices leave the default export', async () => {
-  await showSaved([summary('a', '2026-10-05')]);
-  await press(screen.getByText('Export sales'));
-  await press(screen.getByText('Share the file'));
-  await answer('Mark as exported');
-  expect(screen.getByText('Nothing to export for this choice.')).toBeTruthy();
-});
-
-test('a choice with exported invoices warns', async () => {
-  await showSaved([summary('a', '2026-10-05'), summary('b', '2026-10-06', { exportedAt: '2026-10-07T00:00:00.000Z' })]);
-  await press(screen.getByText('Export sales'));
-  expect(screen.queryByText(/exported before/)).toBeNull();
-  await press(screen.getByText('All'));
-  expect(
-    screen.getByText('1 of them was exported before. Importing it again adds it to MyBizMate twice.'),
-  ).toBeTruthy();
-});
-
-test('names to check', async () => {
-  await showSaved([summary('a', '2026-10-05', { listed: false, partyName: 'Bagong Tindahan' })]);
-  await press(screen.getByText('Export sales'));
-  expect(screen.getByText('Check that these are in MyBizMate before you import: Bagong Tindahan.')).toBeTruthy();
-});
-
-test('a phone that cannot share', async () => {
-  mockAvailable.mockResolvedValueOnce(false);
-  await showSaved([summary('a', '2026-10-05')]);
-  await press(screen.getByText('Export sales'));
-  await press(screen.getByText('Share the file'));
-  expect(mockToast).toHaveBeenCalledWith("This phone can't share files.");
-  expect(mockShare).not.toHaveBeenCalled();
+  for (const name of ['Export sales', 'Export purchases', 'Export 2307s', 'Export new customers and suppliers']) {
+    await press(screen.getByRole('button', { name }));
+    // the sheet's own title, at that file, with Back to the list of files
+    expect(screen.getByRole('header', { name })).toBeOnTheScreen();
+    expect(within(screen.getByTestId('sheet-panel')).getByRole('button', { name: 'Back' })).toBeOnTheScreen();
+    await press(within(screen.getByTestId('sheet-actions')).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByTestId('sheet-panel')).toBeNull();
+  }
 });
 
 test('open a saved invoice', async () => {
@@ -253,40 +141,6 @@ test('a 2307 in Saved invoices', async () => {
   for (const label of ['Export sales', 'Export purchases', 'Export 2307s']) {
     expect(screen.getByRole('button', { name: label })).toBeTruthy();
   }
-});
-
-test('Export 2307s', async () => {
-  await show2307();
-  await press(screen.getByText('Export 2307s'));
-  expect(screen.getByText("A file in MyBizMate's 2307-CWT import format, to import at mybizmate.io.")).toBeTruthy();
-  for (const range of ['Not exported yet', 'This month', 'Last month', 'All']) {
-    expect(screen.getByRole('radio', { name: range })).toBeTruthy();
-  }
-  expect(screen.getByText('1 2307 · tax ₱57,400.54')).toBeTruthy();
-  expect(screen.getByText('Check that these are in MyBizMate before you import: Castillo Eatery.')).toBeTruthy();
-  await press(screen.getByText('Share the file'));
-  expect(mockShare).toHaveBeenCalledWith(expect.stringMatching(/\/MyBizMate 2307-CWT import \d{4}-\d{2}-\d{2}\.xlsx$/), {
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    dialogTitle: 'Send the file',
-  });
-  expect(alertSpy).toHaveBeenCalledWith(
-    'Did the file go where you wanted?',
-    'Mark this 2307 as exported, so the next export leaves it out.',
-    expect.anything(),
-  );
-  await answer('Mark as exported');
-  expect(mockToast).toHaveBeenCalledWith('Marked 1 2307 as exported.');
-  expect(screen.getByText('Exported')).toBeTruthy();
-  expect(screen.getByText('Nothing to export for this choice.')).toBeTruthy();
-  await press(screen.getByText('All'));
-  expect(screen.getByText('1 2307 · tax ₱57,400.54')).toBeTruthy();
-  expect(screen.getByText('1 of them was exported before. Importing it again adds it to MyBizMate twice.')).toBeTruthy();
-});
-
-test("a 2307 isn't in the sales' export", async () => {
-  await show2307();
-  await press(screen.getByText('Export sales'));
-  expect(screen.getByText('Nothing to export for this choice.')).toBeTruthy();
 });
 
 test('delete', async () => {

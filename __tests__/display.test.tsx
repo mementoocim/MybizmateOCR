@@ -460,6 +460,18 @@ test('Banner: role alert, tone fill and border', async () => {
   expect(iconsIn(warning, colors.warning).map((icon) => icon.toJSON())).toEqual([triangle]);
 });
 
+test('Banner: live, for one an action raises, is a polite live region; one shown with its screen is not', async () => {
+  // Task 4's minor, carried to Task 18: an error a press brings up (a file that couldn't be made) is read out
+  await render(
+    <>
+      <Banner tone="danger" text="Couldn't make the file." live />
+      <Banner tone="warning" text="1 of them was exported before. Importing it again adds it to MyBizMate twice." />
+    </>,
+  );
+  expect(screen.getByRole('alert', { name: "Couldn't make the file." }).props.accessibilityLiveRegion).toBe('polite');
+  expect(screen.getByRole('alert', { name: /exported before/ }).props.accessibilityLiveRegion).toBeUndefined();
+});
+
 test('EmptyState: a title, its body, and its actions', async () => {
   const takePhoto = jest.fn();
   const sample = jest.fn();

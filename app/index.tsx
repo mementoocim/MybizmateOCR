@@ -13,6 +13,7 @@ import { RecentRow } from '../components/RecentRow';
 import { Screen } from '../components/Screen';
 import { SectionHeader } from '../components/SectionHeader';
 import { Sheet } from '../components/Sheet';
+import { totalOf, waitingOf } from '../lib/exportFile';
 import { peso } from '../lib/format';
 import { lists, subscribeLists } from '../lib/lists';
 import { type SavedSummary, savedList, subscribeSaved } from '../lib/saved';
@@ -40,8 +41,6 @@ const EXPORTS: readonly { kind: Kind; title: string; sub: (n: number) => string 
 const LOCK = 16; // dp: the footer's lock, beside its overline
 
 const handwriting = (font: string) => `${font === 'PatrickHand' ? 'Patrick Hand' : font} handwriting`;
-/** What a saved scan adds to its kind's total: an invoice's gross, a 2307's tax withheld. */
-const totalOf = (s: SavedSummary) => (s.kind === '2307' ? s.tax : s.gross);
 
 export default function Home() {
   const router = useRouter();
@@ -205,12 +204,12 @@ function Tips() {
 }
 
 /**
- * The saved scans: a row per kind with any waiting to export, with their count (figureSmall) and total (figure), each
- * opening Saved for its kind; or, with none waiting, one row saying everything is exported.
+ * The saved scans: a row per kind with any waiting to export (lib/exportFile's waitingOf, as Export counts them), with
+ * their count (figureSmall) and total (figure), each opening Saved for its kind; or, with none waiting, one row saying
+ * everything is exported.
  */
 function ToExport({ saved, onOpen }: { saved: readonly SavedSummary[]; onOpen: (kind?: Kind) => void }) {
-  const waiting = saved.filter((s) => s.exportedAt === null);
-  if (waiting.length === 0) {
+  if (waitingOf(null, saved).length === 0) {
     return (
       <>
         <SectionHeader title="Saved" />
@@ -222,7 +221,7 @@ function ToExport({ saved, onOpen }: { saved: readonly SavedSummary[]; onOpen: (
     <>
       <SectionHeader title="To export" action={{ label: 'All saved', onPress: () => onOpen() }} />
       {EXPORTS.map(({ kind, title, sub }) => {
-        const mine = waiting.filter((s) => s.kind === kind);
+        const mine = waitingOf(kind, saved);
         if (mine.length === 0) return null;
         return (
           <ListRow
@@ -230,7 +229,7 @@ function ToExport({ saved, onOpen }: { saved: readonly SavedSummary[]; onOpen: (
             title={title}
             sub={sub(mine.length)}
             subMono
-            amount={peso(mine.reduce((sum, s) => sum + totalOf(s), 0))}
+            amount={peso(totalOf(mine))}
             chevron
             onPress={() => onOpen(kind)}
           />

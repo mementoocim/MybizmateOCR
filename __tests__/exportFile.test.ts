@@ -1,7 +1,7 @@
-import { exportChoice, exportFileName, partiesToCheck, writeExport } from '../lib/exportFile';
+import { exportChoice, exportFileName, partiesToCheck, totalOf, waitingOf, writeExport } from '../lib/exportFile';
 import { CWT_COLUMNS, type ExportRow } from '../lib/exportRows';
 import type { Lists } from '../lib/lists';
-import { type CertSummary, type InvoiceSummary, loadSaved, type SavedSummary } from '../lib/saved';
+import { type CertSummary, type InvoiceSummary, loadSaved, type SavedSummary, savedList } from '../lib/saved';
 import { columnLetter } from '../lib/xlsx';
 import { memoryFs } from '../test-utils/memoryFs';
 import { party } from '../test-utils/packLists';
@@ -75,6 +75,34 @@ test('exportChoice: by invoice date, oldest first; "new" is what was never expor
   expect(ids(exportChoice('sale', 'new', new Date(2026, 10, 1)))).toEqual(['c', 'a']);
   expect(ids(exportChoice('sale', 'all', new Date(2026, 10, 1)))).toEqual(['c', 'a', 'b']);
   expect(ids(exportChoice('purchase', 'all', new Date(2026, 10, 1)))).toEqual(['d']);
+});
+
+test('waitingOf: what never went out in an import file, of one kind or of every kind', () => {
+  // Ruling T17-3: the one rule Home's To export, Export's files and Saved count by; savedList keeps the newest first
+  const saved = savedList();
+  expect(ids(waitingOf('sale', saved))).toEqual(['a', 'c']); // b went out
+  expect(ids(waitingOf('purchase', saved))).toEqual(['d']);
+  expect(ids(waitingOf('2307', saved))).toEqual([]);
+  expect(ids(waitingOf(null, saved))).toEqual(['d', 'a', 'c']);
+  // only what it's given
+  expect(waitingOf(null, [])).toEqual([]);
+  expect(ids(waitingOf('sale', [summary('x', 'sale', '2026-11-01')]))).toEqual(['x']);
+  // the export's "Not exported yet" is them, oldest first
+  for (const kind of ['sale', 'purchase', '2307'] as const) {
+    const waiting = ids(waitingOf(kind, saved));
+    expect(ids(exportChoice(kind, 'new', new Date(2026, 10, 1))).sort()).toEqual(waiting.sort());
+  }
+});
+
+test("totalOf: what saved ones add up to, the invoices' gross and the 2307s' tax withheld", () => {
+  expect(totalOf([])).toBe(0);
+  expect(
+    totalOf([summary('x', 'sale', '2026-11-01', { gross: 1200.5 }), summary('y', 'purchase', '2026-11-02', { gross: 38240 })]),
+  ).toBe(39440.5);
+  // a 2307 adds its tax withheld, not a gross
+  const cert = { ...certSummary('z', '2026-12-31', [{ 'Tax Base (Net)': 9999 }]), tax: 4160.25 };
+  expect(totalOf([cert])).toBe(4160.25);
+  expect(totalOf([cert, summary('x', 'sale', '2026-11-01', { gross: 0.5 })])).toBe(4160.75);
 });
 
 test('partiesToCheck: unlisted names, once each; a party that went out in a Parties import file is left out', () => {

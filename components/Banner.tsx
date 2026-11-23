@@ -5,7 +5,8 @@ import { CircleAlert, type IconComponent, TriangleAlert } from './icons';
 
 // Design B §5.6: a banner in place of the warning lines in sheets, and for a file that couldn't be read. A tint fill
 // in a 1 dp line border (the tone's line color: ruling T4-3), then an icon and the words in the tone's color, so the
-// meaning isn't color alone. For TalkBack it's one alert.
+// meaning isn't color alone. For TalkBack it's one alert. One that a press brings up (live: Export's file error) is a
+// polite live region too, so TalkBack reads it out as it shows; one there as its screen or step opens isn't.
 
 type Tone = 'warning' | 'danger';
 
@@ -14,10 +15,14 @@ const TONES: Record<Tone, { Icon: IconComponent; color: string; fill: string; bo
   danger: { Icon: CircleAlert, color: colors.danger, fill: colors.dangerTint, border: colors.dangerLine },
 };
 
-export function Banner({ tone, text }: { tone: Tone; text: string }) {
+export function Banner({ tone, text, live = false }: { tone: Tone; text: string; live?: boolean }) {
   const { Icon, color, fill, border } = TONES[tone];
   return (
-    <View accessible accessibilityRole="alert" style={[styles.banner, { backgroundColor: fill, borderColor: border }]}>
+    <View
+      accessible
+      accessibilityRole="alert"
+      accessibilityLiveRegion={live ? 'polite' : undefined}
+      style={[styles.banner, { backgroundColor: fill, borderColor: border }]}>
       <Icon size={touch.iconSmall} color={color} />
       <Text style={[type.body, styles.text, { color }]}>{text}</Text>
     </View>
