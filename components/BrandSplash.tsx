@@ -13,12 +13,13 @@ import { LoadingBar } from './ReadingOverlay';
 
 // Design B §9.1 and §12 A11: the brand while the scanner gets ready. The model loads, what the app keeps on the phone
 // comes back (recent scans, saved scans, lists, settings), and one sample is read once so the first real scan is quick.
-// It shows for half a second at least, so it doesn't flash, then fades out and calls onReady; nothing else on it moves
-// (§5.5). The logo sits where the phone's own splash drew it (104 dp, centred), so it doesn't jump, with the words
-// under it. A start that fails says so in plain words, each a polite live region, with Try again outside them, so its
-// spinner doesn't read them out again. Try again runs the whole start again, which is safe, as each piece reads its
-// files again and replaces what it holds. The button loads until that start has finished, so a double tap runs once.
-// The raw message shows in team builds only.
+// It shows for half a second at least, so it doesn't flash, then fades out and calls onReady. Apart from that fade,
+// only its loading bar moves, looping while it waits (§5.5's progress bar; it stands still with reduced motion). The
+// logo sits where the phone's own splash drew it (104 dp, centred), so it doesn't jump, with the words under it. A
+// start that fails says so in plain words, each a polite live region, with Try again outside them, so its spinner
+// doesn't read them out again. Try again runs the whole start again, which is safe, as each piece reads its files
+// again and replaces what it holds. The button loads until that start has finished, so a double tap runs once. The raw
+// message shows in team builds only.
 
 const MIN_MS = 500; // the splash shows at least this long
 const FADE_MS = 300;

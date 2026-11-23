@@ -10,8 +10,8 @@ import { Tap } from './Tap';
 // a cameraText fill with an ink label, and the others are cameraText on the viewer.
 
 const BORDER = 1;
-/** How far inside the outline the selection sits (optical). */
-const INSET = 2;
+/** How far inside the outline the selection sits. */
+const INSET = 2; // optical: a hair between the outline and the chosen fill, finer than the space scale's 4 dp
 /** The selection's corner, concentric with the group's inside its border and inset. */
 const OPTION_RADIUS = radius.field - BORDER - INSET;
 
@@ -44,7 +44,7 @@ export function Segmented<T extends string>({
             accessibilityLabel={o.label}
             accessibilityState={{ checked }}
             onPress={() => onChange(o.value)}
-            ripple={dark ? 'camera' : 'light'}
+            ripple={dark ? 'dark' : 'light'}
             // the options sit edge to edge inside the outline, so the ring goes on the option's own edge
             focusRing="inside"
             focusRadius={OPTION_RADIUS}

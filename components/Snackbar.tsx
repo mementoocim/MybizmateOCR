@@ -99,7 +99,7 @@ export function SnackbarHost({ bottomOffset }: { bottomOffset?: number }) {
         <Tap
           accessibilityRole="button"
           accessibilityLabel={action.label}
-          ripple="camera" // white at 20%: it's on ink
+          ripple="dark" // white at 20%: it's on ink
           onPress={() => {
             if (currentSnack()?.id !== shown.id) return; // a second tap before it has gone: the action runs once
             dismissSnack(shown.id);

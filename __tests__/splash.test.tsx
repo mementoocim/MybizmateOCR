@@ -6,10 +6,11 @@ import { colors, type } from '../lib/theme';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
 // Design B §9.1 and §12 A11: the brand while the scanner gets ready (the model, what the phone keeps, a warm-up read),
-// for at least half a second so it doesn't flash, then a 300 ms fade; nothing else moves (§5.5). The logo sits where
-// the phone's own splash drew it. A start that fails says so in plain words, each a polite live region, with Try again
-// outside them: it runs the start again, once per tap (Review Focus 3). The raw message shows in team builds only.
-// Animations in jest end at once (test-utils/jestSetup.ts), so fake timers carry the floor and the fade.
+// for at least half a second so it doesn't flash, then a 300 ms fade; apart from that, only the loading bar moves,
+// as it loops (§5.5's progress bar). The logo sits where the phone's own splash drew it. A start that fails says so
+// in plain words, each a polite live region, with Try again outside them: it runs the start again, once per tap
+// (Review Focus 3). The raw message shows in team builds only. Animations in jest end at once
+// (test-utils/jestSetup.ts), so fake timers carry the floor and the fade.
 
 const mockPreload = jest.fn();
 const mockScan = jest.fn();
@@ -256,4 +257,3 @@ test('the words under the logo show at once: nothing moves in (design §5.5)', a
   expect(screen.getByText('mybizmate.io')).toBeVisible();
   expect(screen.getByText(TAGLINE)).toBeVisible();
 });
-

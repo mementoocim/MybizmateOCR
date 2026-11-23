@@ -22,6 +22,20 @@ test('every color role has its design value', () => {
   });
 });
 
+test('the retired colors are gone', () => {
+  const RETIRED = [
+    'coral', 'ember', 'coralText', 'coralTint', 'pine', 'pineTint', 'amber', 'amberTint', 'imageBg', 'cropBg',
+    'fullScreen', 'backdrop',
+  ];
+  for (const key of RETIRED) expect(colors).not.toHaveProperty(key);
+});
+
+test('the retired text styles are gone: the type scale has every style', () => {
+  const theme: Record<string, unknown> = require('../lib/theme');
+  expect(theme).not.toHaveProperty('bold');
+  expect(theme).not.toHaveProperty('sectionLabel');
+});
+
 type Role = keyof typeof colors;
 
 const PAIRS: [Role, Role, string, number, number][] = [
@@ -77,6 +91,29 @@ test('type follows the scale', () => {
   }
 });
 
+test('on Android, each type style is in its family: Schibsted Grotesk for words, IBM Plex Mono for figures', () => {
+  // The scale is made when lib/theme loads, and jest runs as iOS, where face() sets no family: so it loads again, in a
+  // registry of its own whose react-native says Android.
+  let android: typeof type = type;
+  jest.isolateModules(() => {
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'android');
+    android = require('../lib/theme').type;
+  });
+  const WORDS = 'SchibstedGrotesk';
+  const FIGURES = 'IBMPlexMono'; // figures, dates, codes, section labels and badges
+  const families: Record<keyof typeof type, string> = {
+    title: WORDS, headerTitle: WORDS, headline: WORDS, value: WORDS, body: WORDS, button: WORDS, buttonLarge: WORDS,
+    label: WORDS, figure: FIGURES, figureStrong: FIGURES, figureSmall: FIGURES, overline: FIGURES, badge: FIGURES,
+  };
+  expect(android).not.toBe(type);
+  const familyOf = Object.fromEntries(Object.entries(android).map(([name, style]) => [name, style.fontFamily]));
+  expect(familyOf).toEqual(families); // every style, by name
+  for (const name of Object.keys(families) as (keyof typeof type)[]) {
+    // and the rest as the scale has it: the weight (which picks the face), size, line height and spacing
+    expect(android[name]).toEqual({ ...type[name], fontFamily: families[name] });
+  }
+});
+
 test('face picks the families', () => {
   expect(EMBEDDED_FONTS).toBe(true);
   expect(face('grotesk', 800)).toEqual({ fontWeight: '800' }); // jest runs as iOS, which keeps the system font
@@ -88,13 +125,16 @@ test('face picks the families', () => {
 test('space, shape, touch, ripple and motion have their design values', () => {
   expect(space).toEqual({ xs: 4, s: 8, m: 12, l: 16, xl: 24, xxl: 32 });
   expect(radius).toEqual({ badge: 4, field: 6, button: 10, panel: 10, sheet: 16, pill: 999 });
-  expect(touch).toEqual({ target: 48, chip: 40, icon: 24, iconSmall: 20, shutter: 72, thumbW: 36, thumbH: 48 });
+  expect(touch).toEqual({
+    target: 48, buttonLarge: 56, chip: 40, icon: 24, iconSmall: 20, shutter: 72, thumbW: 36, thumbH: 48,
+  });
+  // Each is named by the surface it's on: light, the brand fill, or dark (the camera, the photo viewer, the snackbar).
   expect(ripple).toEqual({
     light: { color: '#1A15121A' }, // ink at 10%
     brand: { color: '#1A151229' }, // ink at 16%
-    camera: { color: '#FFFFFF33' }, // white at 20%
+    dark: { color: '#FFFFFF33' }, // white at 20%
     icon: { color: '#1A15121A', borderless: true, radius: 24 },
-    iconCamera: { color: '#FFFFFF33', borderless: true, radius: 24 },
+    iconDark: { color: '#FFFFFF33', borderless: true, radius: 24 },
   });
   expect(elevation).toEqual({ overlay: 8 });
   expect(durations).toEqual({

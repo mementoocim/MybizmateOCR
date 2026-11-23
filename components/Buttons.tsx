@@ -8,7 +8,7 @@ import { Tap } from './Tap';
 // Design B's buttons (§5.6). Primary is the brand fill with an ink label; secondary a panel fill in an outline border,
 // with an ink label; text a brandText label; destructive a panel fill in a dangerLine border, with a danger label;
 // destructiveText a danger label. On the camera's dark panels (tone camera), a text button has a coral (brand) label,
-// 6.52:1 on cameraPanel where brandText would be 2.85:1, and the camera's white ripple (ruling T16-2); the filled
+// 6.52:1 on cameraPanel where brandText would be 2.85:1, and the dark surfaces' white ripple (ruling T16-2); the filled
 // variants look the same on either. Large is at least 56 dp tall and default 48; both grow with the label. Disabled is
 // a sand fill with a mute label, on every variant. Loading keeps the label, shows a spinner before it and blocks
 // presses, and so does a press whose promise hasn't settled: a double tap runs once. A button can report how many lines
@@ -30,8 +30,6 @@ export type ButtonProps = {
   onLabelLines?: (lines: number) => void; // from the label's onTextLayout
   ref?: Ref<ViewInstance>; // its pressable (a sheet's returnFocus)
 };
-
-const LARGE = 56; // a large button's minimum height (§5.6)
 
 export function Button({
   label,
@@ -77,7 +75,7 @@ export function Button({
       testID={testID}
       disabled={disabled || busy}
       onPress={press}
-      ripple={variant === 'primary' ? 'brand' : onCamera ? 'camera' : 'light'}
+      ripple={variant === 'primary' ? 'brand' : onCamera ? 'dark' : 'light'}
       style={({ pressed }) => [
         styles.button,
         size === 'large' ? styles.large : styles.default,
@@ -100,21 +98,6 @@ export function Button({
   );
 }
 
-/** @deprecated design B: removed in Task 25. A Button with variant 'primary'. */
-export function PrimaryButton(p: Omit<ButtonProps, 'variant'>) {
-  return <Button {...p} variant="primary" />;
-}
-
-/** @deprecated design B: removed in Task 25. A Button with variant 'secondary'. */
-export function OutlinedButton(p: Omit<ButtonProps, 'variant'>) {
-  return <Button {...p} variant="secondary" />;
-}
-
-/** @deprecated design B: removed in Task 25. A Button with variant 'text', or 'destructiveText' in ember. */
-export function TextButton({ color, ...p }: Omit<ButtonProps, 'variant'> & { color?: string }) {
-  return <Button {...p} variant={color === colors.ember ? 'destructiveText' : 'text'} />;
-}
-
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   return typeof (value as PromiseLike<unknown> | undefined)?.then === 'function';
 }
@@ -128,7 +111,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.l,
     borderRadius: radius.button,
   },
-  large: { minHeight: LARGE },
+  large: { minHeight: touch.buttonLarge },
   default: { minHeight: touch.target },
   primary: { backgroundColor: colors.brand },
   primaryPressed: { backgroundColor: colors.brandPressed },

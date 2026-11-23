@@ -1,13 +1,13 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import type { BadgeSpec, BadgeTone } from '../lib/badge';
 import { colors, radius, space, type } from '../lib/theme';
 
 // Design B §5.6: a badge is a short status in caps mono (the `badge` style uppercases it, so the words stay sentence
 // case for TalkBack and tests), on its tone's tint, in a 1 dp line of the text color at 30%. In a row, its words are
-// part of the row's spoken label (§7); the row says so, not the badge.
+// part of the row's spoken label (§7); the row says so, not the badge. Its spec is lib/badge's, so lib/ can name one.
 
-export type BadgeTone = 'warning' | 'success' | 'brand' | 'neutral' | 'danger';
-export type BadgeSpec = { label: string; tone: BadgeTone };
+export type { BadgeSpec, BadgeTone };
 
 /** Each tone's text on its fill, and its line: warningLine for warning, and line for the others. */
 const TONES: Record<BadgeTone, { text: string; fill: string; line: string }> = {

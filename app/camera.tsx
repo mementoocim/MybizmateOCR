@@ -220,7 +220,7 @@ export default function CameraScreen() {
             accessibilityHint={
               auto ? 'Takes the photo by itself when the form holds still' : 'Take the photo with the round button'
             }
-            ripple="camera"
+            ripple="dark"
             focusRadius={radius.pill}
             hitSlop={{ top: SLOP, bottom: SLOP }}
             onPress={() => setAuto((a) => !a)}
@@ -301,7 +301,7 @@ export default function CameraScreen() {
           <Tap
             accessibilityRole="button"
             accessibilityLabel="Gallery"
-            ripple="camera"
+            ripple="dark"
             onPress={() => void flow.fromGallery({ replace: true })}
             style={styles.gallery}>
             <ImageIcon size={touch.icon} color={colors.cameraText} />
@@ -314,7 +314,7 @@ export default function CameraScreen() {
               accessibilityRole="button"
               accessibilityLabel="Take the photo"
               disabled={shutterOff}
-              ripple="camera"
+              ripple="dark"
               focusRadius={touch.shutter / 2}
               onPress={takePhoto}
               style={styles.shutter}>

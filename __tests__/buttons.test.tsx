@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Platform, processColor, Text } from 'react-native';
 
-import { Button, OutlinedButton, PrimaryButton, TextButton } from '../components/Buttons';
+import { Button } from '../components/Buttons';
 import { IconButton } from '../components/IconButton';
 import { Flashlight, SettingsIcon } from '../components/icons';
 import { Tap } from '../components/Tap';
@@ -166,7 +166,7 @@ test("a text button on the camera: a coral label and the camera's white ripple",
     // brand on cameraPanel is text-grade (theme.test's pairs: 6.52:1); brandText would be 2.85:1 there
     expect(screen.getByText("Use the phone's camera app instead")).toHaveStyle({ color: colors.brand });
     expect(rippleOf("Use the phone's camera app instead")).toMatchObject({
-      color: processColor(ripple.camera.color),
+      color: processColor(ripple.dark.color),
       borderless: false,
     });
     expect(button("Use the phone's camera app instead")).toHaveStyle({ backgroundColor: undefined, minHeight: 48 });
@@ -248,19 +248,4 @@ test("an inside focus ring sits on the control's edge, for full-bleed rows (ruli
 
   await fireEvent(button('Card'), 'focus'); // the default radius, not 3 dp out
   expect(screen.getByTestId('focus-ring')).toHaveStyle({ top: 0, borderRadius: radius.button });
-});
-
-test('the adapters map to variants', async () => {
-  await render(
-    <>
-      <PrimaryButton label="Save sale" onPress={noop} />
-      <OutlinedButton label="Retake" onPress={noop} />
-      <TextButton label="Which columns?" onPress={noop} />
-      <TextButton label="Clear suppliers" color={colors.ember} onPress={noop} />
-    </>,
-  );
-  expect(button('Save sale')).toHaveStyle({ backgroundColor: colors.brand });
-  expect(button('Retake')).toHaveStyle({ backgroundColor: colors.panel, borderColor: colors.outline });
-  expect(screen.getByText('Which columns?')).toHaveStyle({ color: colors.brandText });
-  expect(screen.getByText('Clear suppliers')).toHaveStyle({ color: colors.danger });
 });

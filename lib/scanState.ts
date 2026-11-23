@@ -1,6 +1,6 @@
 import { useMemo, useSyncExternalStore } from 'react';
 
-import type { BadgeSpec } from '../components/Badge';
+import type { BadgeSpec } from './badge';
 import { certOf, type CertView, is2307 } from './cert';
 import { blockWords, saveBlock, sameRows } from './exportRows';
 import { lists, subscribeLists } from './lists';
