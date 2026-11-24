@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 
 import type { Capture } from '../lib/captureQueue';
-import { certOf, is2307 } from '../lib/cert';
+import { certOf, is2307, taxWithheld } from '../lib/cert';
 import { formatClock, monthDay } from '../lib/format';
 import { clearItems, clearParties, type Lists, lists } from '../lib/lists';
 import { isInvoice, saleOf } from '../lib/sale';
@@ -15,6 +15,7 @@ import {
   dayTitle,
   homeCounts,
   type Member,
+  memberAmount,
   membersOf,
   nextToCheck,
   oldestWithWork,
@@ -517,6 +518,32 @@ test("a scan's sub-line: Sale · SI 0007655, Purchase · Inv 0007655, 2307 · Q1
   // saved: Saved's sub-line
   await saveScan(sale.id, DETAILS);
   expect(scanSub(member(getScan(sale.id)!, savedSummary(sale.id)!))).toBe(savedSub(savedSummary(sale.id)!));
+});
+
+test("a scan's amount: an invoice's gross, a 2307's tax withheld, a saved one's as saved; none with no form", async () => {
+  // ruling T8-2: the one helper Sessions' search and the session screen use
+  const sale = scanOf('inv_0007');
+  const gross = saleOf(sale, lists(), settings()).gross;
+  expect(gross).not.toBeNull();
+  expect(memberAmount(member(sale))).toBe(gross);
+  const cert = scanOf('bir2307_text_0', { source: 'pdf' });
+  const tax = taxWithheld(certOf(cert, lists(), settings()).cert);
+  expect(tax).toBeGreaterThan(0);
+  expect(memberAmount(member(cert))).toBe(tax);
+  expect(memberAmount(member(scanOf('blank_page')))).toBeNull();
+
+  // a saved one: its summary's, even after an edit since the save changed what it reads now (as Saved shows it)
+  await saveScan(sale.id, DETAILS);
+  const kept = savedSummary(sale.id)!;
+  expect(kept.kind === 'sale' && kept.gross).toBe(gross);
+  for (const box of ['total_due', 'total_sales']) setEdit(sale.id, box, '1.00'); // two votes: the total is 1.00 now
+  const edited = getScan(sale.id)!;
+  expect(saleOf(edited, lists(), settings()).gross).not.toBe(gross);
+  expect(memberAmount(member(edited, savedSummary(sale.id)!))).toBe(gross);
+  // a summary alone: an invoice's gross, a 2307's tax (not a gross it hasn't)
+  expect(memberAmount(membersOf([], [summaryLike(sale, { gross: 250.5 })])[0])).toBe(250.5);
+  const certSummary = summaryLike(cert, { kind: '2307', period: 'Q1 2026', tax: 12.5, rows: [], gross: 999 } as never);
+  expect(memberAmount(membersOf([], [certSummary])[0])).toBe(12.5);
 });
 
 test("Saved's sub-line: kind, date and number; a 2307's quarter", () => {

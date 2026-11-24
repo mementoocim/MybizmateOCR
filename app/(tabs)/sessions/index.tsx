@@ -1,4 +1,5 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useNavigation } from 'expo-router';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { FlatList, SectionList, StyleSheet, View } from 'react-native';
 
 import { EmptyState } from '../../../components/EmptyState';
@@ -9,17 +10,16 @@ import { ListRow } from '../../../components/ListRow';
 import { Screen, useEndPadding } from '../../../components/Screen';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { TextField } from '../../../components/TextField';
-import { certOf, is2307, taxWithheld } from '../../../lib/cert';
 import { amount } from '../../../lib/format';
-import { type Lists, lists, subscribeLists } from '../../../lib/lists';
+import { lists, subscribeLists } from '../../../lib/lists';
 import { useOpenOnce } from '../../../lib/navigation';
-import { isInvoice, saleOf } from '../../../lib/sale';
 import { openSaved } from '../../../lib/saved';
 import { getScan } from '../../../lib/scans';
 import { fold, matchesScan } from '../../../lib/search';
 import {
   byDay,
   type Member,
+  memberAmount,
   rowTitle,
   type Session,
   scanBadge,
@@ -29,7 +29,7 @@ import {
   tallyOf,
   useSessions,
 } from '../../../lib/sessions';
-import { type Settings, settings, subscribeSettings } from '../../../lib/settings';
+import { settings, subscribeSettings } from '../../../lib/settings';
 import { space } from '../../../lib/theme';
 import { toast } from '../../../lib/toast';
 
@@ -41,23 +41,27 @@ import { toast } from '../../../lib/toast';
 // matchesScan), listed newest first, each opening its Scan screen. Every press goes through the one guard (ruling T6-1),
 // so a double tap, or two rows tapped at once, opens one screen.
 
-/** A scan's amount as its row shows it: a saved one's gross (a 2307's tax withheld); an unsaved one's, as checked now. */
-function amountOf(m: Member, theLists: Lists, theSettings: Settings): string | null {
-  const s = m.summary;
-  if (s) return amount(s.kind === '2307' ? s.tax : s.gross);
-  const scan = m.scan;
-  if (scan && isInvoice(scan)) {
-    const gross = saleOf(scan, theLists, theSettings).gross;
-    return gross === null ? null : amount(gross);
-  }
-  if (scan && is2307(scan)) return amount(taxWithheld(certOf(scan, theLists, theSettings).cert));
-  return null;
+/** A scan's amount as its row shows it (lib/sessions' memberAmount), or none. */
+function amountOf(m: Member): string | null {
+  const v = memberAmount(m);
+  return v === null ? null : amount(v);
 }
 
 const newestFirst = (a: Member, b: Member) => b.at.getTime() - a.at.getTime();
 
 export default function SessionsScreen() {
   const { push } = useOpenOnce(); // one guard for every press (ruling T6-1): a session, a scan, a search result
+  const navigation = useNavigation();
+  // A saved scan's read back (openSaved) is in flight: every press waits for it (ruling T8-3), and what it opens opens
+  // only while Sessions is still here and on top.
+  const reading = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const { sessions, statuses, states, saved } = useSessions();
   const theLists = useSyncExternalStore(subscribeLists, lists);
   const theSettings = useSyncExternalStore(subscribeSettings, settings);
@@ -70,8 +74,16 @@ export default function SessionsScreen() {
 
   /** A scan's Scan screen: a saved one no longer among the recent ones is read back first; one that's gone says so. */
   async function openScan(id: string) {
+    if (reading.current) return;
     if (!getScan(id)) {
-      const scan = await openSaved(id);
+      reading.current = true;
+      let scan;
+      try {
+        scan = await openSaved(id);
+      } finally {
+        reading.current = false;
+      }
+      if (!mounted.current || !navigation.isFocused()) return; // left while it was read: nothing opens over the new screen
       if (!scan) {
         toast("Couldn't open that scan.");
         return;
@@ -81,6 +93,7 @@ export default function SessionsScreen() {
   }
 
   function openSession(s: Session) {
+    if (reading.current) return;
     if (s.id !== null) push({ pathname: '/sessions/[id]', params: { id: s.id } });
     else void openScan(s.members[0].id);
   }
@@ -130,14 +143,14 @@ export default function SessionsScreen() {
           data={found}
           keyExtractor={(m) => m.id}
           keyboardShouldPersistTaps="handled"
-          ListEmptyComponent={<EmptyState title={`No scan matches “${query}”`} />}
+          ListEmptyComponent={<EmptyState title={`No scan matches “${query.trim()}”`} />}
           renderItem={({ item }) => (
             <ListRow
               title={scanFields(item, theLists, theSettings).name}
               sub={scanSub(item)}
               subMono
               subCaps
-              amount={amountOf(item, theLists, theSettings)}
+              amount={amountOf(item)}
               badge={badgeOf(item)}
               onPress={() => void openScan(item.id)}
             />

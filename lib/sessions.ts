@@ -2,7 +2,7 @@ import { useMemo, useSyncExternalStore } from 'react';
 
 import type { BadgeSpec } from './badge';
 import type { Capture } from './captureQueue';
-import { certOf, is2307, periodName } from './cert';
+import { certOf, is2307, periodName, taxWithheld } from './cert';
 import { localIsoDate } from './checks/dates';
 import { formatClock, monthDay } from './format';
 import { type Lists, lists, subscribeLists } from './lists';
@@ -262,6 +262,20 @@ export function scanSub(m: SessionMember): string {
   const no = saleOf(scan, lists(), settings()).final.invoice_no;
   const sale = scan.kind !== 'purchase';
   return `${sale ? 'Sale' : 'Purchase'} · ${no ? `${sale ? 'SI' : 'Inv'} ${no}` : time}`;
+}
+
+/**
+ * A scan's amount on Sessions' search and the session screen: an invoice's gross, a 2307's tax withheld. A saved scan's
+ * comes from its summary, so one edited since its save still shows the amount saved, as Saved does. A scan whose form
+ * wasn't found has none.
+ */
+export function memberAmount(m: Member): number | null {
+  const s = m.summary;
+  if (s) return s.kind === '2307' ? s.tax : s.gross;
+  const scan = m.scan;
+  if (scan && isInvoice(scan)) return saleOf(scan, lists(), settings()).gross;
+  if (scan && is2307(scan)) return taxWithheld(certOf(scan, lists(), settings()).cert);
+  return null;
 }
 
 /**

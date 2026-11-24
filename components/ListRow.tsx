@@ -74,8 +74,8 @@ export function ListRow({
               importantForAccessibility="no-hide-descendants"
               accessibilityElementsHidden
               style={styles.badges}>
-              {shown.map((b) => (
-                <Badge key={b.label} {...b} />
+              {shown.map((b, i) => (
+                <Badge key={`${i}:${b.label}`} {...b} />
               ))}
             </View>
           ) : null}
