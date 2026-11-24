@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
 
-import { currentSession } from '../lib/session';
+import { currentSession, loadSession } from '../lib/session';
 import { currentShutter } from '../lib/shutter';
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
@@ -14,6 +14,8 @@ import { appRoutes } from '../test-utils/routes';
 // shutter while it's on top, and Camera on another tab. The real session store and queue, on a memory file system;
 // the scanner's reads are deferred promises; the other screens stand in. The global router is the test's, never the
 // app's.
+
+jest.setTimeout(15000); // the whole app's router, with its reads: slow under a full run's load (ruling T7-5)
 
 type Read = { resolve: (r: ScanResult) => void };
 const mockReads: Read[] = [];
@@ -125,4 +127,48 @@ test('Done opens the session screen in the Sessions tab, with the bar; Back goes
   expect(tab('Take photo')).toBeEnabled();
   await shoot();
   expect(currentSession()!.id).not.toBe(id);
+});
+
+test("Done on a second session, with the first one's screen left in Sessions, shows the second; Back goes to Sessions, then the camera", async () => {
+  // ruling T7-6: the Sessions tab keeps its own Stack, which still holds session A's screen
+  await act(async () => mockReads.splice(0).forEach((r) => r.resolve(parseScanResult(coreJson('inv_0007', null)))));
+  await act(() => loadSession()); // the last test's session closes, as a new start closes it
+  memoryFs.reset();
+  photos = 0;
+  mockTakePhoto.mockClear();
+  await renderRouter(appRoutes({ '(tabs)/camera': require('../app/(tabs)/camera').default }), {
+    initialUrl: '/camera',
+  });
+  await settle();
+  await send('status', { status: 'looking', form: null });
+  await shoot();
+  await shoot();
+  const a = currentSession()!.id;
+  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Done · 2' })));
+  await read();
+  await read();
+  expect(screen).toHavePathname(`/sessions/${a}`);
+
+  // back to the camera by its tab, session A's screen still in the Sessions tab
+  await act(async () => fireEvent.press(tab('Camera')));
+  await settle();
+  expect(screen).toHavePathname('/camera');
+  await send('status', { status: 'looking', form: null });
+  await shoot();
+  await shoot();
+  const b = currentSession()!.id;
+  expect(b).not.toBe(a);
+  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Done · 2' })));
+  await read();
+  await read();
+  expect(screen).toHavePathname(`/sessions/${b}`);
+  expect(onTop()).toEqual(['Session: on top']);
+  expect(tab('Sessions')).toBeSelected();
+
+  await act(() => router.back());
+  expect(screen).toHavePathname('/sessions');
+  expect(onTop()).toEqual(['Sessions: on top']);
+  await act(() => router.back());
+  expect(screen).toHavePathname('/camera');
+  expect(router.canGoBack()).toBe(false);
 });

@@ -14,7 +14,7 @@ import { addFailedRead, touchSession } from './session';
 //
 // Reads go one at a time, in the order taken, through the camera's read path (scanPhoto, readPdf). Each is kept as a
 // scan in its session, as of when it was taken (ruling P-F2); a Retake's new scan replaces the unsaved one it was taken
-// for. A read that throws is the session's failed read, in plain words only (lib/readFailures), with no dialog and
+// for once its form was found (ruling T7-3). A read that throws is the session's failed read, in plain words only (lib/readFailures), with no dialog and
 // nothing logged. A photo is deleted once recent.json holds its scan, or once its read has failed; when recent.json
 // can't be written, it stays for the next start (ruling T2-2), and a scan recent.json already holds is never read twice
 // (ruling P-F2). Review Focus 1.
@@ -252,7 +252,9 @@ async function read(entry: Entry): Promise<void> {
     }
     remove(entry); // in the same tick: the tray never shows it twice
     touchSession(c.session, new Date());
-    if (c.replaces !== null) {
+    // a Retake replaces its scan only with one whose form was found: a new one that wasn't is a retake beside it, and
+    // never costs the person a scan they could use (ruling T7-3)
+    if (c.replaces !== null && result.aligned) {
       try {
         deleteScan(c.replaces);
       } catch {

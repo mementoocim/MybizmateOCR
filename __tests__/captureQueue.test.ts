@@ -660,6 +660,34 @@ test('a failed Retake never deletes the scan it was for: a read that throws, or 
   expect(scans.recentScans().map((s) => s.id)).toEqual([old]);
 });
 
+test('a Retake whose read finds no form keeps the original too; an aligned one still replaces it (ruling T7-3)', async () => {
+  const { queue, scans, session } = m;
+  const old = scans.addScan({ label: 'Camera photo', source: 'camera', result: result(), session: A });
+  const oldDir = scans.getScan(old)!.result.scanDir!;
+  const retake = async (seconds: number, name: string) => {
+    session.retakeIn(A, old, at(seconds));
+    const { session: id, replaces } = session.takeCapture(at(seconds));
+    await queue.queuePhoto(photo(name), { session: id, source: 'camera', replaces }, at(seconds));
+  };
+
+  await retake(1, 'capture_1.jpg');
+  await read(result('blank_page')); // the form not found: no better than what it was for
+  const notFound = scans.recentScans()[0];
+  expect(notFound.result.aligned).toBe(false);
+  expect(scans.getScan(old)).toBeDefined();
+  expect(filesIn(oldDir)).not.toEqual([]);
+  expect(scans.recentScans().map((s) => [s.id, s.session])).toEqual([
+    [notFound.id, A],
+    [old, A],
+  ]);
+
+  await retake(2, 'capture_2.jpg');
+  await read(result()); // found: it replaces the original, as before
+  expect(scans.getScan(old)).toBeUndefined();
+  expect(filesIn(oldDir)).toEqual([]);
+  expect(scans.recentScans()).toHaveLength(2);
+});
+
 test("a photo that can't be moved is read where it is", async () => {
   const { queue, scans, fs } = m;
   jest.spyOn(fs.File.prototype, 'move').mockRejectedValueOnce(new Error('No space left on device'));

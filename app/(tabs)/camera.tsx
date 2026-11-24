@@ -52,10 +52,10 @@ import {
 //
 // The camera keeps shooting: every capture (Auto, the shutter, the gallery, the camera app, a PDF) joins the open
 // session (lib/session's takeCapture) and goes to the queue (lib/captureQueue), which reads while the camera stays live.
-// A read never opens a dialog: a failed one is a "!" in the tray. Done ends the session, waits for its reads, then opens
-// the session screen, or a lone scan's Scan screen. A problem (no permission, no camera, a camera that won't start)
-// shows a panel in the picture's place, and the tray stays. A photo Auto took gets one confirm haptic (§5.5). The status
-// bar's icons are light. Nothing starts, and no permission is asked for, until the splash has gone (call 8).
+// A read never opens a dialog: a failed one is a "!" in the tray. Done waits while a photo is being taken, then ends the
+// session, waits for its reads, and opens the session screen, or a lone scan's Scan screen. A problem (no permission,
+// no camera, a camera that won't start) shows a panel in the picture's place, and the tray stays. A photo Auto took gets
+// one confirm haptic (§5.5). The status bar's icons are light. Nothing starts, and no permission is asked for, until the splash has gone (call 8).
 
 type Permission = 'checking' | 'granted' | 'ask' | 'settings'; // ask: refused, may ask again; settings: refused for good
 type Status = { status: CameraStatus | 'starting'; form: FormName | null };
@@ -127,10 +127,11 @@ export default function CameraScreen() {
   const [torch, setTorch] = useState(false);
   const camera = useRef<ScannerCameraRef>(null);
   const shutterPressed = useRef(false); // the photo on its way is the shutter's, not one Auto took
+  const [shooting, setShooting] = useState(false); // the middle button was pressed, and its photo isn't back yet
   const pickingRef = useRef(false); // set at once, so a second picker is refused before the re-render
   const [picking, setPicking] = useState(false);
   const [finishing, setFinishing] = useState<string | null>(null); // Done: the session it waits for
-  const finishingRef = useRef(false);
+  const finishingRef = useRef<string | null>(null);
 
   // The permission: checked each time the screen is shown and when the app comes back (from the settings, say),
   // and asked for once; never behind the splash.
@@ -195,6 +196,7 @@ export default function CameraScreen() {
 
   function takePhoto() {
     shutterPressed.current = true;
+    setShooting(true);
     void camera.current?.takePhoto();
   }
 
@@ -205,7 +207,10 @@ export default function CameraScreen() {
   }
 
   function onCameraError(code: CameraErrorCode, message: string) {
-    if (code === 'capture' || code === 'keep') shutterPressed.current = false; // no photo comes for that press
+    if (code === 'capture' || code === 'keep') {
+      shutterPressed.current = false; // no photo comes for that press
+      setShooting(false);
+    }
     if (code === 'capture') showError(CAMERA_ERRORS.capture);
     else if (code === 'keep') showError(CAMERA_ERRORS.keep);
     else setProblem({ code, message });
@@ -213,24 +218,30 @@ export default function CameraScreen() {
 
   const testImages = testParam !== null;
 
-  /** A photo the camera took: into the open session's queue, unless the camera wasn't on top (ruling P-F9). */
+  /**
+   * A photo the camera took: into the open session's queue, unless the camera wasn't on top (ruling P-F9). One that
+   * lands while Done waits was being taken as Done was tapped (its 'capturing' still on its way): it joins the session
+   * Done is finishing, and Done waits for it too (ruling T7-2).
+   */
   function onPhoto(uri: string) {
     const byAuto = auto && !shutterPressed.current; // the person's eyes are on the paper, not the screen
     shutterPressed.current = false;
-    // taken as the screen was left, as a picker opened, or after Done: no session takes it
-    if (!focusedRef.current || pickingRef.current || finishingRef.current) {
+    setShooting(false);
+    // taken as the screen was left, or as a picker opened: no session takes it
+    if (!focusedRef.current || pickingRef.current) {
       discard(uri);
       return;
     }
     if (byAuto) confirmHaptic();
     const now = new Date();
-    const { session: id, replaces } = takeCapture(now);
+    const { session: id, replaces } =
+      finishingRef.current !== null ? { session: finishingRef.current, replaces: null } : takeCapture(now);
     void queuePhoto(uri, { session: id, source: 'camera', testImage: testImages, replaces }, now).catch(() => {});
   }
 
   /** A picker, one at a time, with the camera off while it's open. A cancel opens no session (ruling P-F9). */
   async function whilePicking(pick: () => Promise<void>): Promise<void> {
-    if (pickingRef.current || finishingRef.current) return;
+    if (pickingRef.current || finishingRef.current !== null) return;
     pickingRef.current = true;
     setPicking(true);
     try {
@@ -301,7 +312,7 @@ export default function CameraScreen() {
    * session screen, or the Scan screen when it kept one scan and no read failed. Its Button runs it once.
    */
   async function done(id: string): Promise<void> {
-    finishingRef.current = true;
+    finishingRef.current = id;
     setFinishing(id);
     try {
       endSession(id);
@@ -314,10 +325,11 @@ export default function CameraScreen() {
       if (kept.length === 1 && theFailed.length === 0) {
         open.push({ pathname: '/result', params: { id: kept[0].id, session: id } });
       } else {
-        open.navigate({ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }); // Sessions under it
+        // Sessions under it; the Sessions Stack keeps one session screen (its layout, ruling T7-6)
+        open.navigate({ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true });
       }
     } finally {
-      finishingRef.current = false;
+      finishingRef.current = null;
       setFinishing(null);
     }
   }
@@ -326,11 +338,19 @@ export default function CameraScreen() {
     !testParam && (permission === 'ask' || permission === 'settings') ? permission : (problem?.code ?? null);
   const ready = started && (testParam ? testImage !== null : permission === 'granted');
   const viewUp = !panel && ready;
-  // Live while it reads (approach 1): off behind the splash, on another tab, while a picker or a dialog is up, and once
-  // Done has ended the session.
-  const live = started && focused && !picking && !sayingWhy && finishing === null;
-  const shutterOff =
-    !viewUp || !live || status.status === 'starting' || status.status === 'capturing';
+  // Live while it reads (approach 1): off behind the splash, on another tab, and while a picker or a dialog is up. While
+  // Done waits it stays on, with Auto off and the middle button waiting: stopping it would drop a photo still being
+  // saved (ScannerCameraView.kt deletes one that lands once it has stopped), and none new is taken (ruling T7-2).
+  const live = started && focused && !picking && !sayingWhy;
+  const capturing = status.status === 'capturing' || shooting; // a photo on its way: Done waits for it
+  const shutterOff = !viewUp || !live || finishing !== null || status.status === 'starting' || capturing;
+
+  // A camera that stops drops a photo on its way: nothing is coming back for the middle button's press.
+  const [wasLive, setWasLive] = useState(live);
+  if (live !== wasLive) {
+    setWasLive(live);
+    if (!live) setShooting(false);
+  }
 
   // The tabs' middle button is the shutter while the camera is on top; on another tab it's Camera again.
   const owner = useRef(null); // this camera, as lib/shutter knows it: a stable object
@@ -428,7 +448,7 @@ export default function CameraScreen() {
             ref={camera}
             style={styles.fill}
             active={live}
-            auto={auto}
+            auto={auto && finishing === null}
             torch={torch}
             testImage={testImage}
             onReady={(e) => setHasTorch(e.nativeEvent.hasTorch)}
@@ -474,6 +494,7 @@ export default function CameraScreen() {
             : {
                 label: finishing !== null && pending > 0 ? `Reading ${pending} more…` : `Done · ${tray.length}`,
                 busy: finishing !== null,
+                disabled: finishing === null && capturing,
                 onPress: () => done(trayId),
               }
         }

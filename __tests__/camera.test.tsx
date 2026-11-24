@@ -364,6 +364,8 @@ test('the middle button takes the photo while the camera is on top, and waits wh
   await send('status', { status: 'capturing', form: 'sales_invoice' });
   expect(currentShutter()?.disabled).toBe(true); // taking the photo
   await send('status', { status: 'taken', form: 'sales_invoice' });
+  expect(currentShutter()?.disabled).toBe(true); // its photo isn't back yet
+  await photo('shutter_1.jpg');
   expect(currentShutter()?.disabled).toBe(false); // it keeps shooting: the next one any time
 
   // while a picker is open, it waits too
@@ -679,6 +681,50 @@ test('Done runs once on a double tap', async () => {
   ]);
 });
 
+test('Done waits while a photo is being taken; a photo that lands as Done waits joins its session (ruling T7-2)', async () => {
+  // The last sheet: Auto, or the middle button, is taking it as the person reaches for Done
+  await open();
+  await send('status', { status: 'looking', form: null });
+  await photo('capture_1.jpg');
+  const id = sessionId()!;
+  await send('status', { status: 'capturing', form: 'sales_invoice' }); // Auto took it
+  expect(doneButton()).toBeDisabled();
+  await photo('capture_2.jpg');
+  await send('status', { status: 'taken', form: 'sales_invoice' });
+  expect(doneButton()).toBeEnabled();
+  await take(); // the middle button: until its photo is back, Done waits
+  expect(doneButton()).toBeDisabled();
+  await photo('capture_3.jpg');
+  expect(doneButton()).toBeEnabled();
+  await take(); // a press whose capture failed leaves Done free again
+  await send('cameraError', { code: 'capture', message: 'x' });
+  expect(doneButton()).toBeEnabled();
+
+  // the 'capturing' event still on its way as Done is tapped: the camera stays on, Auto off, and the photo isn't lost
+  await press(doneButton());
+  expect(camera().props.active).toBe(true);
+  expect(camera().props.auto).toBe(false);
+  expect(currentShutter()?.disabled).toBe(true);
+  const uri = await photo('capture_4.jpg');
+  expect(memoryFs.files.has(uri)).toBe(false); // moved into the queue, not deleted
+  expect(captures().map((c) => c.session)).toEqual([id, id, id, id]);
+  expect(doneButton().props.accessibilityLabel).toBe('Reading 4 more…');
+  for (let i = 0; i < 4; i++) await read();
+  expect(recentScans().filter((s) => s.session === id)).toHaveLength(4);
+  expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
+});
+
+test('a press whose photo the stopped camera dropped never leaves Done or the middle button waiting', async () => {
+  const view = await open();
+  await send('status', { status: 'looking', form: null });
+  await photo('capture_1.jpg');
+  await take();
+  expect(doneButton()).toBeDisabled();
+  await refocus(view); // another tab: the camera stopped, and its photo was dropped natively
+  expect(doneButton()).toBeEnabled();
+  expect(currentShutter()?.disabled).toBe(false);
+});
+
 test('leaving keeps the session and the queue; coming back continues it; 30 minutes later it has closed', async () => {
   const view = await open();
   await photo('capture_1.jpg');
@@ -854,12 +900,17 @@ test("the gallery, the camera app and a PDF join the session the same way; a pic
 
 test('cancelling a picker keeps the open session, its tray and count; with none open, it opens none (ruling P-F9)', async () => {
   await open();
-  // with no session open: a cancelled gallery, camera app or PDF opens none
+  // with no session open: a cancelled gallery, camera app or PDF opens none (the camera app is the start panel's)
   await press(button('Gallery'));
   await press(button('Import PDF'));
+  await send('cameraError', { code: 'start', message: '' });
+  await press(button(CAMERA_APP));
   await settle();
+  expect(mockCameraApp).toHaveBeenCalledTimes(1);
   expect(currentSession()).toBeNull();
   expect(thumbs()).toEqual([]);
+  await press(button('Try again'));
+  await settle();
 
   // in an open session: its tray and its count stay as they were
   await photo('capture_1.jpg');

@@ -15,7 +15,8 @@ import { useTabBarSpace } from './Screen';
 // thumbnail has a 16 dp mark on its corner: a brand ring while it's read, a ✓ once it's read, a "!" for a retake (a
 // form not found, or a read that failed). The "!" is a glyph, drawn as the ✓ is (ruling P-F8).
 
-type DoneProps = { label: string; busy: boolean; onPress: () => Promise<void> };
+// disabled: a photo is still being taken, which Done must not leave behind (ruling T7-2)
+type DoneProps = { label: string; busy: boolean; disabled: boolean; onPress: () => Promise<void> };
 
 const MARK = 16; // dp: a thumbnail's mark
 const MARK_GLYPH = 12; // dp: the ✓ or ! inside it
@@ -93,7 +94,15 @@ export function SessionTray({
                 <Thumbnail key={item.key} item={item} n={i + 1} />
               ))}
             </ScrollView>
-            {done && <Button label={done.label} variant="secondary" loading={done.busy} onPress={done.onPress} />}
+            {done && (
+              <Button
+                label={done.label}
+                variant="secondary"
+                loading={done.busy}
+                disabled={done.disabled}
+                onPress={done.onPress}
+              />
+            )}
           </>
         )}
       </View>
