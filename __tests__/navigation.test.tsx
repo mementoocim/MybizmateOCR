@@ -18,6 +18,7 @@ import { toast } from '../lib/toast';
 
 jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(async () => {}) }));
 jest.mock('../components/BrandSplash', () => ({ BrandSplash: () => null })); // the scanner's start (splash.test)
+jest.mock('../lib/captureQueue', () => ({ resumeQueue: async () => {} })); // its reads (captureQueue.test)
 
 function Where({ name }: { name: string }) {
   return <Text>{`${name}: ${useIsFocused() ? 'on top' : 'under'}`}</Text>;

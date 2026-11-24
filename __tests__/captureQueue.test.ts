@@ -506,6 +506,42 @@ test('a photo whose scan recent.json failed to hold stays queued, and the next s
   expect(queued()).toEqual([]);
 });
 
+test('a photo kept back goes once a later write holds its scan; a resume meanwhile neither reads nor deletes one', async () => {
+  // recent.json can't be written for the first scan (a full phone), then the second one's write is held
+  const write = m.jsonFile.writeJson;
+  let full = true;
+  let land = () => {};
+  jest.spyOn(m.jsonFile, 'writeJson').mockImplementation((path, value) => {
+    if (path !== 'recent.json') return write(path, value);
+    if (full) return Promise.reject(new Error('No space left on device'));
+    return new Promise<void>((resolve, reject) => {
+      land = () => void write(path, value).then(resolve, reject);
+    });
+  });
+  await m.queue.queuePhoto(photo('capture_1.jpg'), { session: A, source: 'camera' }, T);
+  await read(result());
+  const first = `${A}/${T.getTime()}-1-camera.jpg`;
+  expect(queued()).toEqual([first]);
+
+  full = false;
+  await m.queue.queuePhoto(photo('capture_2.jpg'), { session: A, source: 'camera' }, at(1));
+  await read(result());
+  const second = `${A}/${at(1).getTime()}-2-camera.jpg`;
+  expect(queued()).toEqual([first, second]); // recent.json doesn't hold the second scan yet
+  // the start run again in the same JS context: the scans are in memory, but recent.json doesn't hold them yet
+  await m.queue.resumeQueue();
+  expect(mockScanPhoto).toHaveBeenCalledTimes(2);
+  expect(queued()).toEqual([first, second]);
+
+  land(); // it holds every scan so far, the first one's too
+  await flush();
+  expect(JSON.parse(memoryFs.files.get(RECENT) as string).map((s: { at: string }) => s.at)).toEqual([
+    at(1).toISOString(),
+    T.toISOString(),
+  ]);
+  expect(queued()).toEqual([]);
+});
+
 test("a photo that can't be moved is read where it is", async () => {
   const { queue, scans, fs } = m;
   jest.spyOn(fs.File.prototype, 'move').mockRejectedValueOnce(new Error('No space left on device'));

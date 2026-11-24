@@ -87,7 +87,8 @@ let recent: readonly StoredScan[] = []; // replaced, never changed in place: scr
 const opened = new Map<string, StoredScan>(); // saved scans opened from Saved
 let counter = 0;
 const listeners = new Set<() => void>();
-let written: Promise<void> = Promise.resolve(); // recent.json's latest write, its failure caught: scansWritten
+let written: Promise<boolean> = Promise.resolve(true); // recent.json's latest write: whether it landed (scansWritten)
+let loading: Promise<void> | null = null; // recent.json's one read in this JS context (loadRecent)
 
 function changed(): void {
   listeners.forEach((listener) => listener());
@@ -102,16 +103,19 @@ export function subscribeRecent(listener: () => void): () => void {
 }
 
 function save(): void {
-  written = writeJson(FILE, recent.map((s) => ({ ...s, at: s.at.toISOString() }))).catch(() => {
-    // the list is a convenience: a scan still shows when it can't be saved
-  });
+  // the list is a convenience: a scan still shows when it can't be saved
+  written = writeJson(FILE, recent.map((s) => ({ ...s, at: s.at.toISOString() }))).then(
+    () => true,
+    () => false,
+  );
 }
 
 /**
- * Resolves once recent.json holds every change made so far, or its write failed: its writes go one at a time
- * (lib/jsonFile), so the latest one lands last.
+ * True once recent.json holds every change made so far; false when its latest write failed (ruling T2-2), so the
+ * queue keeps a photo whose scan it may not hold. Its writes go one at a time (lib/jsonFile), so the latest one lands
+ * last, with every change before it.
  */
-export function scansWritten(): Promise<void> {
+export function scansWritten(): Promise<boolean> {
   return written;
 }
 
@@ -131,9 +135,12 @@ const FRESH = {
 /** A BIR Form 2307 (its form found) is a 2307; any other scan keeps its kind, a sale until the person says otherwise. */
 const kindOf = (r: ScanResult, kept: Kind = 'sale'): Kind => (r.aligned && r.form === 'bir_2307' ? '2307' : kept);
 
+/** A time that is one: an invalid Date would make recent.json's every later write throw (ruling T2-1). */
+const isTime = (at: Date | undefined): at is Date => at instanceof Date && !Number.isNaN(at.getTime());
+
 /**
  * Keeps a scan just read as the newest, with the session it was taken in, if any. It's kept as of now, or as of the time
- * given: a queued photo's, when it was taken (ruling P-F2).
+ * given: a queued photo's, when it was taken (ruling P-F2). A time that is no time is now (ruling T2-1).
  */
 export function addScan(
   s: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'result' | 'testImage' | 'session'> & { at?: Date },
@@ -145,7 +152,7 @@ export function addScan(
     kind: kindOf(s.result),
     made: { app: APP_VERSION, model: modelVersion() },
     id: `${Date.now()}-${++counter}`,
-    at: s.at ?? new Date(),
+    at: isTime(s.at) ? s.at : new Date(),
   };
   recent = [scan, ...recent].slice(0, KEEP);
   changed();
@@ -261,9 +268,16 @@ export function recentScans(): readonly StoredScan[] {
 
 /**
  * At start: the saved list, without scans whose folder is gone. Older entries get the new fields' starting values,
- * and a 2307 kept as a sale (before a 2307 could be saved) is a 2307.
+ * and a 2307 kept as a sale (before a 2307 could be saved) is a 2307. It's read once per JS context (ruling P-F1): a
+ * start run again (a font-size or display-size change, or the splash's Try again) keeps what memory holds, which can
+ * be ahead of the file while the queue writes it.
  */
-export async function loadRecent(): Promise<void> {
+export function loadRecent(): Promise<void> {
+  loading ??= readRecent();
+  return loading;
+}
+
+async function readRecent(): Promise<void> {
   try {
     const saved = await readJson<(Omit<StoredScan, 'at' | 'result'> & { at: string; result: KeptResult })[]>(FILE);
     if (!saved) return;
