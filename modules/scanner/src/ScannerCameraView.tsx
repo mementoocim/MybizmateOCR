@@ -5,9 +5,10 @@ import type { ViewProps } from 'react-native';
 import type { FormName } from './types';
 
 // The scanner camera (ScannerCameraView.kt): the back camera in a 3:4 box with the sheet's live outline, taking the
-// photo by itself (auto) or on takePhoto(). Status events come only when the status or the form changes.
+// photo by itself (auto) or on takePhoto(). Status events come only when the status or the form changes. After each
+// photo it keeps shooting: 'taken' while Auto waits for that sheet to leave the frame before it takes the next one.
 
-export type CameraStatus = 'looking' | 'holding' | 'blurry' | 'found' | 'capturing';
+export type CameraStatus = 'looking' | 'holding' | 'blurry' | 'found' | 'capturing' | 'taken';
 export type CameraErrorCode = 'no_camera' | 'start' | 'capture' | 'keep';
 
 export type ScannerCameraProps = ViewProps & {

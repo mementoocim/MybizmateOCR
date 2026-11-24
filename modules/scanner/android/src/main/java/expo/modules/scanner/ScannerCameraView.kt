@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.util.Size
 import android.view.View
 import android.widget.FrameLayout
@@ -42,9 +43,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * The scanner camera: the back camera's preview fitted in a 3:4 box on black, the sheet's live outline over it, and
  * the photo, taken by itself (AutoCapture) or by takePhoto(). A port of the test app's CameraActivity.java with
  * CameraX instead of Camera2. TypeScript gets onReady, onStatus (only when it changes), onPhoto and onCameraError.
+ * After each photo the camera stays bound and looks again; Auto takes the next sheet once the last has left the frame.
  *
  * In debuggable builds, testImage (a file:// photo) stands in for the camera, checked every 250 ms after 400 ms, the
- * way the test app's camera:asset: mode works; capturing copies it.
+ * way the test app's camera:asset: mode works; capturing copies it. Debuggable builds also log the form checks of each
+ * second (CheckRate) to logcat as MbsCheckRate, figures only.
  */
 class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
   override val shouldUseAndroidLayout = true
@@ -68,6 +71,7 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
   private val main = Handler(Looper.getMainLooper())
   private val debuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
   private val auto = AutoCapture()
+  private val rate = CheckRate()  // used on the analysis thread only
 
   // props (applied together in applyProps, after each update)
   private var active = false
@@ -236,12 +240,23 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
       val fw = if (upright) image.width else image.height
       val fh = if (upright) image.height else image.width
       val found = scannerModule()?.detectFrame(plane.buffer, image.width, image.height, plane.rowStride, rotation)
+      countCheck()
       onDetection(found?.let(::detectionOf), fw, fh)
     } catch (e: Exception) {
       // a frame that couldn't be checked is skipped, like a frame dropped while another was checked
     } finally {
       image.close()
     }
+  }
+
+  /**
+   * Debug builds: counts one form check (on the analysis thread), and logs each window's checks, its length in ms and
+   * whether a photo or PDF read ran in it. Figures only.
+   */
+  private fun countCheck() {
+    if (!debuggable) return
+    rate.onCheck(SystemClock.uptimeMillis(), scannerModule()?.reading() == true)
+      ?.let { (checks, elapsedMs, reading) -> Log.d("MbsCheckRate", "checks=$checks ms=$elapsedMs reading=$reading") }
   }
 
   private fun onDetection(d: Detection?, fw: Int, fh: Int) {
@@ -274,7 +289,7 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
       if (source != null) {
         try {
           source.copyTo(file, overwrite = true)
-          onPhoto(mapOf("uri" to Uri.fromFile(file).toString()))
+          sendPhoto(file)
         } catch (e: Exception) {
           failed("keep", e.message)
         }
@@ -290,7 +305,7 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
               file.delete()
               return
             }
-            onPhoto(mapOf("uri" to Uri.fromFile(file).toString()))  // EXIF holds the turn; the core applies it
+            sendPhoto(file)  // EXIF holds the turn; the core applies it
           }
 
           override fun onError(e: ImageCaptureException) {
@@ -299,6 +314,14 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
         },
       )
     }
+  }
+
+  /** Hands the photo to TypeScript, then looks again: the camera stays bound, and Auto waits for the sheet to leave. */
+  private fun sendPhoto(file: File) {
+    onPhoto(mapOf("uri" to Uri.fromFile(file).toString()))
+    synchronized(auto) { auto.photoTaken() }
+    capturing = false
+    lastStatus = null
   }
 
   private fun failed(code: String, message: String?) {
@@ -339,6 +362,7 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
           if (capturing || !running.get()) return@execute
           try {
             val found = scannerModule()?.detectFrame(frame, TEST_W, TEST_H, TEST_W, 0)
+            countCheck()
             onDetection(found?.let(::detectionOf), TEST_W, TEST_H)
           } catch (e: Exception) {
             // skipped, like a camera frame

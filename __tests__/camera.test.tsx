@@ -149,6 +149,8 @@ test('status copy', async () => {
   expect(statusText('blurry', 'sales_invoice')).toBe('MyBizMate Sales Invoice · blurry, hold still');
   expect(statusText('found', 'sales_invoice')).toBe('MyBizMate Sales Invoice found · tap the button');
   expect(statusText('capturing', 'service_invoice')).toBe('Taking the photo…');
+  expect(statusText('taken', 'sales_invoice')).toBe('Taken · put in the next one');
+  expect(statusText('taken', null)).toBe('Taken · put in the next one');
 
   await open();
   expect(screen.getByText('Starting the camera…')).toBeTruthy();

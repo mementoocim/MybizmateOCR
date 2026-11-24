@@ -6,10 +6,10 @@ import { readJson, writeJson } from './jsonFile';
 import type { TaxType } from './settings';
 import { APP_VERSION, modelVersion } from './versions';
 
-// Recent scans: the newest 20, kept on the phone so they survive closing the app, with what the person did to each:
+// Recent scans: the newest 100, kept on the phone so they survive closing the app, with what the person did to each:
 // the boxes they fixed (kept apart from the readings) or checked, the terms they picked, sale or purchase (a BIR 2307
 // is always a 2307), the customer or supplier they chose, and whether they saved it (in annotation mode, with its
-// source tag). Each scan's files live in its own folder (the scanner keeps the newest 20 folders too); the list is a
+// source tag). Each scan's files live in its own folder (the scanner keeps the newest 100 folders too); the list is a
 // JSON file in the app's documents. A saved scan opened from Saved is kept here too while the app runs.
 
 /** How the scan came in. Not the result's own source, which is what the scanner read: a photo or a PDF. */
@@ -79,7 +79,8 @@ export function withPdfFields(r: KeptResult): ScanResult {
   };
 }
 
-const KEEP = 20;
+/** The scans recent.json keeps, newest first; ScannerModule's KEEP_SCANS is the same number. */
+export const KEEP = 100;
 const FILE = 'recent.json';
 let recent: readonly StoredScan[] = []; // replaced, never changed in place: screens subscribe to it
 const opened = new Map<string, StoredScan>(); // saved scans opened from Saved
@@ -208,7 +209,7 @@ export function forgetScan(id: string): void {
   changed();
 }
 
-/** Newest first, 20 at most; the same list until it changes. */
+/** Newest first, KEEP at most; the same list until it changes. */
 export function recentScans(): readonly StoredScan[] {
   return recent;
 }

@@ -126,4 +126,72 @@ class AutoCaptureTest {
     assertEquals(CameraStatus.HOLDING, fresh.status)
     assertEquals(0f, fresh.held)
   }
+
+  /** Auto took a photo at 800 (frames at 0, 400 and 800), and it went to TypeScript. */
+  private fun tookAPhoto(): AutoCapture {
+    val a = AutoCapture()
+    a.onFrame(sales(), width, 0, auto = true)
+    a.onFrame(sales(), width, 400, auto = true)
+    assertTrue(a.onFrame(sales(), width, 800, auto = true).capture)
+    a.photoTaken()
+    return a
+  }
+
+  @Test
+  fun `after a photo, the same sheet in view is never taken again`() {
+    val a = tookAPhoto()
+    var t = 900L
+    while (t <= 10000) {
+      val step = a.onFrame(sales(), width, t, auto = true)
+      assertEquals(CameraStatus.TAKEN, step.status)
+      assertFalse(step.capture)
+      t += 100
+    }
+  }
+
+  @Test
+  fun `no outline for 500 ms re-arms it, and the next sheet is taken after its hold`() {
+    val a = tookAPhoto()
+    assertEquals(CameraStatus.LOOKING, a.onFrame(null, width, 1000, auto = true).status)
+    assertEquals(CameraStatus.LOOKING, a.onFrame(null, width, 1499, auto = true).status)
+    assertEquals(CameraStatus.LOOKING, a.onFrame(null, width, 1500, auto = true).status)  // gone 500 ms: re-armed
+    val next = a.onFrame(sales(), width, 1600, auto = true)
+    assertEquals(CameraStatus.HOLDING, next.status)
+    assertEquals(0f, next.held)
+    assertFalse(a.onFrame(sales(), width, 2000, auto = true).capture)
+    assertTrue(a.onFrame(sales(), width, 2400, auto = true).capture)  // 800 ms and 3 frames, as for the first
+  }
+
+  @Test
+  fun `an outline back within 500 ms starts the wait over`() {
+    val a = tookAPhoto()
+    a.onFrame(null, width, 1000, auto = true)
+    assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 1400, auto = true).status)
+    a.onFrame(null, width, 1500, auto = true)
+    assertEquals(CameraStatus.LOOKING, a.onFrame(null, width, 1999, auto = true).status)
+    assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 2000, auto = true).status)  // still waiting
+  }
+
+  @Test
+  fun `manual mode shows the form found while Auto waits`() {
+    val a = AutoCapture()
+    assertEquals(CameraStatus.FOUND, a.onFrame(sales(), width, 0, auto = false).status)
+    a.photoTaken()  // the shutter's photo
+    val step = a.onFrame(sales(), width, 100, auto = false)
+    assertEquals(CameraStatus.FOUND, step.status)
+    assertFalse(step.capture)
+    assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 200, auto = true).status)  // Auto still waits for it
+  }
+
+  @Test
+  fun `a stop keeps the wait, so the sheet still in view isn't taken again`() {
+    val a = tookAPhoto()
+    a.reset()
+    assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 900, auto = true).status)
+    // nor is the time the camera was stopped counted as time without the sheet
+    a.onFrame(null, width, 1000, auto = true)
+    a.reset()
+    a.onFrame(null, width, 1500, auto = true)
+    assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 1600, auto = true).status)
+  }
 }

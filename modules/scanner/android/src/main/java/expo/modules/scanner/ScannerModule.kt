@@ -22,6 +22,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 
@@ -80,6 +81,9 @@ class ScannerModule : Module() {
     },
     destroy = { NativeScanner.destroy(it) },
   )
+
+  /** Photo and PDF reads in flight (scan, readPdf). */
+  private val readsInFlight = AtomicInteger()
 
   override fun definition() = ModuleDefinition {
     Name("Scanner")
@@ -146,7 +150,20 @@ class ScannerModule : Module() {
   internal fun detectFrame(y: ByteBuffer, width: Int, height: Int, rowStride: Int, rotation: Int): FloatArray? =
     scanner.use { NativeScanner.detectFrame(it, y, width, height, rowStride, rotation) }
 
-  private fun scan(uri: String, options: ScanOptions): String = scanner.use { handle ->
+  /** A photo or PDF read is under way: the camera's debug counter (CheckRate) notes it with its checks. */
+  internal fun reading(): Boolean = readsInFlight.get() > 0
+
+  /** scanner.use for a photo or PDF read, counted in readsInFlight from its start to its end, even when it fails. */
+  private fun <T> useForRead(block: (Long) -> T): T {
+    readsInFlight.incrementAndGet()
+    try {
+      return scanner.use(block)
+    } finally {
+      readsInFlight.decrementAndGet()
+    }
+  }
+
+  private fun scan(uri: String, options: ScanOptions): String = useForRead { handle ->
     val work = File(context.cacheDir, "scan-work").apply {
       deleteRecursively()
       mkdirs()
@@ -238,7 +255,7 @@ class ScannerModule : Module() {
    * changed or deleted. Every failure rejects with a code (PdfInput.CODES); a file its app says is over 20 MB is
    * refused before any of it is copied. Once it has been read, or refused, the picker's lasting access to it is given up.
    */
-  private fun readPdf(uri: String): String = scanner.use { handle ->
+  private fun readPdf(uri: String): String = useForRead { handle ->
     val work = File(context.cacheDir, "scan-work").apply {
       deleteRecursively()
       mkdirs()
@@ -372,7 +389,7 @@ class ScannerModule : Module() {
     0L
   }
 
-  /** Recent scans live in the app's files: keep the newest few folders (Recent scans shows 20), delete the rest. */
+  /** Recent scans live in the app's files: keep the newest folders, one for each scan the app keeps; delete the rest. */
   private fun keepNewest(dir: File, keep: Int) {
     dir.listFiles()
       ?.filter { it.isDirectory }
@@ -382,6 +399,7 @@ class ScannerModule : Module() {
   }
 
   private companion object {
-    const val KEEP_SCANS = 20
+    /** Sessions keep 100 unsaved scans, and lib/scans.ts's KEEP is the same. */
+    const val KEEP_SCANS = 100
   }
 }

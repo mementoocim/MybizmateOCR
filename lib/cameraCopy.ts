@@ -13,6 +13,7 @@ const WITH_FORM = {
 export function statusText(status: CameraStatus | 'starting', form: FormName | null): string {
   if (status === 'starting') return 'Starting the camera…';
   if (status === 'capturing') return 'Taking the photo…';
+  if (status === 'taken') return 'Taken · put in the next one';
   if (status === 'looking' || !form) return 'Looking for the form…';
   return FORMS[form].title + WITH_FORM[status];
 }

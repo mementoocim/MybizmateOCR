@@ -29,17 +29,29 @@ beforeEach(() => {
   jest.resetModules();
 });
 
-test('keeps the newest 20, newest first', () => {
+test('keeps the newest 100, newest first', async () => {
   const { addScan, getScan, recentScans } = require('../lib/scans');
-  const ids = Array.from({ length: 21 }, (_, i) =>
+  const ids = Array.from({ length: 101 }, (_, i) =>
     addScan({ label: `Scan ${i + 1}`, source: 'gallery', result: result(`/s/${i + 1}`) }),
   );
+  await flush(); // the 101 queued saves of recent.json land now, not in the next test's files
   const recent = recentScans();
-  expect(recent).toHaveLength(20);
-  expect(recent[0].label).toBe('Scan 21');
-  expect(recent[19].label).toBe('Scan 2');
+  expect(recent).toHaveLength(100);
+  expect(recent[0].label).toBe('Scan 101');
+  expect(recent[99].label).toBe('Scan 2');
   expect(getScan(ids[0])).toBeUndefined();
-  expect(getScan(ids[20])?.label).toBe('Scan 21');
+  expect(getScan(ids[100])?.label).toBe('Scan 101');
+});
+
+test('the scanner keeps as many scan folders as the app keeps scans', () => {
+  const { KEEP } = require('../lib/scans');
+  // jest runs from the repo's root
+  const kotlin: string = require('fs').readFileSync(
+    'modules/scanner/android/src/main/java/expo/modules/scanner/ScannerModule.kt',
+    'utf8',
+  );
+  const m = kotlin.match(/const val KEEP_SCANS = ([0-9]+)/);
+  expect(Number(m?.[1])).toBe(KEEP);
 });
 
 test('edits, checked boxes, terms, kind and party are kept, and come back after a restart', async () => {
