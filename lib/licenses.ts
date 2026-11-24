@@ -1,6 +1,6 @@
 import { MODEL } from './versions';
 
-// Design B §9.10: what Settings › About › Open-source licenses lists (app/licenses.tsx), each with its license, its
+// Design B §9.10: what Profile › About › Open-source licenses lists (app/licenses.tsx), each with its license, its
 // version and the text the app ships for it (app/license.tsx). The texts are .txt assets that
 // scripts/collect-licenses.mjs gathers into assets/licenses, a file each (`npm run licenses`). A version is its
 // source's: the installed package's (node_modules/<package>/package.json, which is what ships), the scanner module's

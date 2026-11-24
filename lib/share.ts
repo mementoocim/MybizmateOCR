@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
 import { toast } from './toast';
 
 // Sharing an export file: the import files (the export sheet, which asks its question as a step of its own) and the
-// team's training data (Settings › Team tools, which asks it in an Alert).
+// team's training data (Profile › Team tools, which asks it in an Alert).
 
 /** How what's in a file is counted ("1 sale", "2 sales"), and what leaves it out once marked ("the next export"). */
 export type Wording = { one: string; many: string; next: string };

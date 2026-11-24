@@ -4,7 +4,7 @@ import { readJson, writeJson } from './jsonFile';
 // The export defaults, kept on the phone: whether the business is VAT-registered, the accounts the imports need (as
 // a code or a name from the business's chart of accounts, which isn't on the phone: an invoice's revenue or expense
 // account, and the offset account a 2307's withheld tax goes to), and the last withholding tax ATC. And the team's
-// own: whether annotation mode is on (Settings › Team tools, team builds only), and the client and writer codes the
+// own: whether annotation mode is on (Profile › Team tools, team builds only), and the client and writer codes the
 // last annotated save used, which the next one starts from. And whether Home's "Get set up" was finished once: it
 // never shows again after that (design B §9.2).
 

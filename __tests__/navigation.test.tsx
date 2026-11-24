@@ -9,9 +9,9 @@ import { currentSnack } from '../lib/snackbar';
 import { toast } from '../lib/toast';
 import { appRoutes } from '../test-utils/routes';
 
-// lib/navigation: going back, as the header's Back does it (and a Retake that goes back, and a
-// saved scan deleted from ⋮): to the screen under this one, or Home with nothing under it (ruling T24-1). It's bound to
-// the screen's own navigation, never expo-router's global router (ruling T26-4). A new font size, display size or
+// lib/navigation: going back, as the header's Back does it (and a Retake that goes back, and a saved scan deleted from
+// ⋮): to the screen under this one, or the camera with nothing under it (rulings T24-1, T6-2). It's bound to the
+// screen's own navigation, never expo-router's global router (ruling T26-4). A new font size, display size or
 // language restarts Android's activity in the same JS context: the new root mounts before the old one has gone, and the
 // old one's late unmount unbinds that router, whose every method then throws, and empties the navigation ref it reads.
 // And opening a screen from a press, as the app's screens do it: once, until the screen is on top again.
@@ -107,13 +107,14 @@ test('a press opens its screen once, until this screen is on top again (final re
   expect(onTop()).toEqual(['Your lists: on top']);
 });
 
-test('with nothing under the screen, Back goes Home (ruling T24-1)', async () => {
+test('with nothing under the screen, Back goes to the camera, where the app starts (rulings T24-1, T6-2)', async () => {
   await openHome();
   await press("Licenses in Home's place");
   expect(onTop()).toEqual(['Open-source licenses: on top']);
-  expect(screen.queryByText('Home: under')).toBeNull(); // nothing under it
+  expect(screen.queryByText(/: under$/)).toBeNull(); // nothing under it
   await press('Back');
-  expect(onTop()).toEqual(['Home: on top']);
+  expect(screen).toHavePathname('/camera');
+  expect(onTop()).toEqual(['Camera: on top']);
 });
 
 test('after Android restarts the screen, Back still goes back, to the screen under it (ruling T26-4)', async () => {

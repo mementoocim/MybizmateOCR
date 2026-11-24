@@ -6,7 +6,7 @@ import { Screen, useEndPadding } from '../components/Screen';
 import { LICENSES } from '../lib/licenses';
 import { usePushOnce } from '../lib/navigation';
 
-// Design B §9.10: Settings › About › Open-source licenses. What the app ships (lib/licenses), a row each: the name,
+// Design B §9.10: Profile › About › Open-source licenses. What the app ships (lib/licenses), a row each: the name,
 // then its license and version in figures, and a chevron. A row opens its text (app/license), by its place here.
 
 export default function LicensesScreen() {

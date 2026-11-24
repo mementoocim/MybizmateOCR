@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
 
 import { Button } from '../components/Buttons';
-import { useNavigateOnce } from '../lib/navigation';
+import { useNavigateOnce, useOpenOnce } from '../lib/navigation';
 import { appRoutes, standIn } from '../test-utils/routes';
 
 // Camera first (spec §6.1, calls 1 and 8): the app's routes. The tabs, Home, Sessions, the camera, Export and Profile,
@@ -197,6 +197,41 @@ test('a press that opens a tab from a screen switches to it once, with one tabs 
   await act(() => router.back());
   expect(screen).toHavePathname('/camera');
   expect(router.canGoBack()).toBe(false);
+});
+
+test("a screen's presses share one guard: a push and a tab in one act open one of them, with one tabs (ruling T6-1)", async () => {
+  // Home's Your lists (a push over the tabs) then Take photo (the camera tab), before anything re-renders: with a guard
+  // each, the tab's href resolved once Your lists was on top, and pushed a second tabs, a second camera in it
+  function Home() {
+    const open = useOpenOnce();
+    const Where = standIn('Home');
+    return (
+      <>
+        <Where />
+        <Button label="Your lists" onPress={() => open.push('/lists')} />
+        <Button label="Take photo" onPress={() => open.navigate('/camera')} />
+      </>
+    );
+  }
+  const both = (first: string, second: string) =>
+    act(async () => {
+      await fireEvent.press(screen.getByRole('button', { name: first }));
+      await fireEvent.press(screen.getByRole('button', { name: second }));
+    });
+
+  const view = await renderRouter(appRoutes({ '(tabs)/index': Home }), { initialUrl: '/camera' });
+  await press(tab('Home'));
+  await both('Your lists', 'Take photo');
+  expect(rootStack(view)).toEqual(['(tabs)', 'lists']); // the first press only
+  expect(onTop()).toEqual(['Your lists: on top']);
+  await act(() => router.back());
+  expect(onTop()).toEqual(['Home: on top']);
+
+  // the other way round: the camera tab, and no Your lists over it
+  await both('Take photo', 'Your lists');
+  expect(rootStack(view)).toEqual(['(tabs)']);
+  expect(screen).toHavePathname('/camera');
+  expect(onTop()).toEqual(['Camera: on top']);
 });
 
 test('a press that opens a tab from another tab switches to it, and Back goes to the camera', async () => {

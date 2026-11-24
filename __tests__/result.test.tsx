@@ -706,11 +706,11 @@ test('not found: a PDF chooses a PDF; Retake opens the camera, the camera app ag
   await press(button('Retake'));
   expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
 
-  // with nothing under it, Home (ruling T24-1: the Stack's anchor, so a fallback)
+  // with nothing under it, the camera (ruling T6-2: the tabs are the Stack's anchor, so a fallback)
   mockNavigation.canGoBack.mockReturnValue(false);
   await show('blank_page', { source: 'gallery', from: 'recent' });
   await press(button('Retake'));
-  expect(mockRouter.replace).toHaveBeenLastCalledWith('/');
+  expect(mockRouter.replace).toHaveBeenLastCalledWith('/camera');
   expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
 });
 
@@ -845,7 +845,7 @@ test('deleting from ⋮: a delete that fails says so, once the screen has gone b
 });
 
 test('deleting from ⋮ with nothing under the screen goes Home, in the same order (ruling T24-1)', async () => {
-  // The Stack is anchored on Home (app/_layout), so this is the fallback, as for the header's Back
+  // The Stack is anchored on the tabs (app/_layout), so the camera is the fallback, as for the header's Back
   mockNavigation.canGoBack.mockReturnValue(false);
   const remove = jest.spyOn(savedStore, 'deleteSaved');
   const id = await showSaved('inv_0007');
@@ -853,7 +853,7 @@ test('deleting from ⋮ with nothing under the screen goes Home, in the same ord
   await press(button('More options'));
   await press(screen.getByRole('menuitem', { name: 'Delete saved scan' }));
   await act(async () => alertButtons()[1].onPress!());
-  expect(mockRouter.replace.mock.calls).toEqual([['/']]);
+  expect(mockRouter.replace.mock.calls).toEqual([['/camera']]);
   expect(mockNavigation.goBack).not.toHaveBeenCalled();
   // Review Focus 4's order: it leaves, then deletes, in the same press
   expect(mockRouter.replace.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
@@ -1214,10 +1214,10 @@ test('Retake runs once, however fast it is tapped twice (ruling T25b-2)', async 
   await doubleTap();
   expect(mockNavigation.goBack).toHaveBeenCalledTimes(2);
 
-  mockNavigation.canGoBack.mockReturnValue(false); // with nothing under it: Home, once
+  mockNavigation.canGoBack.mockReturnValue(false); // with nothing under it: the camera, once
   await show('inv_0007', { source: 'gallery', from: 'recent' });
   await doubleTap();
-  expect(mockRouter.replace.mock.calls).toEqual([['/']]);
+  expect(mockRouter.replace.mock.calls).toEqual([['/camera']]);
 
   // straight from the camera: down to the camera tab again, this screen gone, once
   mockRouter.replace.mockClear();

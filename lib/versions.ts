@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 
 // The app's and the model's versions. Each scan keeps both from when it was made (StoredScan.made), so an update
-// between scanning and exporting doesn't relabel its training data. Settings › About shows the app's, with the build
+// between scanning and exporting doesn't relabel its training data. Profile › About shows the app's, with the build
 // number when the build has one.
 
 type Model = { name: string; sha256: string; bytes: number };

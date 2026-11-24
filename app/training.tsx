@@ -14,7 +14,7 @@ import { PER_EXPORT, pendingTraining, writeTrainingExport } from '../lib/trainin
 const ZIP_MIME = 'application/zip';
 const WORDS: Wording = { one: 'scan', many: 'scans', next: 'next export' };
 
-// Training data, from Settings › Team tools: the scans saved in annotation mode that haven't gone out yet, shared the
+// Training data, from Profile › Team tools: the scans saved in annotation mode that haven't gone out yet, shared the
 // oldest 50 at a time as a zip of their training boxes' crops and labels, and marked once the person says the file went
 // where they wanted. Design B §9.11: the design's tokens and components, with milestone 4's copy and behaviour.
 export default function TrainingScreen() {

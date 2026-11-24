@@ -10,7 +10,7 @@ import { formatMs } from '../lib/format';
 import { runSpeedTest, type SpeedResult } from '../lib/speedTest';
 import { colors, space, type } from '../lib/theme';
 
-// The team's speed test (the test app's activity_speed.xml and SpeedTestActivity.java), from Settings › Team tools or
+// The team's speed test (the test app's activity_speed.xml and SpeedTestActivity.java), from Profile › Team tools or
 // mybizmatescan://speed, in team builds only. Design B §9.11: the design's tokens and components; what it runs, times
 // and shows is as it was. The bar follows the run's real progress, so it doesn't loop like the loading bar.
 

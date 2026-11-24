@@ -195,6 +195,27 @@ test('a press opens its screen once, until Home is on top again (final review, M
   expect(mockPush).not.toHaveBeenCalled();
 });
 
+test("a push and a tab share Home's one guard: two presses at once open only the first (ruling T6-1)", async () => {
+  // a guard each let both through: Your lists pushed, then the camera's href resolved over it, a second tabs
+  await render(<Home />);
+  const yourLists = () => within(screen.getByTestId('header')).getByRole('button', { name: 'Your lists' });
+  await act(async () => {
+    await fireEvent.press(yourLists());
+    await fireEvent.press(button('Take photo'));
+  });
+  expect(mockPush.mock.calls).toEqual([['/lists']]);
+  expect(mockNavigate).not.toHaveBeenCalled();
+
+  // the other way round, back on Home: the camera tab only
+  await backHome();
+  await act(async () => {
+    await fireEvent.press(button('Take photo'));
+    await fireEvent.press(yourLists());
+  });
+  expect(mockNavigate.mock.calls).toEqual([['/camera']]);
+  expect(mockPush.mock.calls).toEqual([['/lists']]);
+});
+
 test('capture: Take photo, From gallery, Import PDF, and what it reads', async () => {
   await render(<Home />);
   // Take photo: primary and large, on a line of its own

@@ -123,12 +123,12 @@ test("Header: Back goes back by the screen's own navigation, never the global ro
   expect(mockReplace).not.toHaveBeenCalled();
 });
 
-test('Header: with nothing to go back to, Back goes Home (ruling T24-1)', async () => {
-  // A screen with nothing under it: the Stack is anchored on Home (app/_layout), so this is the fallback.
+test('Header: with nothing to go back to, Back goes to the camera (rulings T24-1, T6-2)', async () => {
+  // A screen with nothing under it: the Stack is anchored on the tabs (app/_layout), so the camera is the fallback.
   mockNavigation.canGoBack.mockReturnValue(false);
   await render(<Header title="Speed test" />);
   await fireEvent.press(button('Back'));
-  expect(mockReplace.mock.calls).toEqual([['/']]);
+  expect(mockReplace.mock.calls).toEqual([['/camera']]);
   expect(mockNavigation.goBack).not.toHaveBeenCalled();
 });
 
@@ -141,7 +141,7 @@ test('Header: Back goes back once, however fast it is tapped twice', async () =>
   });
   expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
 
-  // with nothing under it: Home, once
+  // with nothing under it: the camera, once
   mockNavigation.goBack.mockReset();
   mockNavigation.canGoBack.mockReturnValue(false);
   await render(<Header title="Speed test" />);
@@ -149,7 +149,7 @@ test('Header: Back goes back once, however fast it is tapped twice', async () =>
     await fireEvent.press(button('Back'));
     await fireEvent.press(button('Back'));
   });
-  expect(mockReplace.mock.calls).toEqual([['/']]);
+  expect(mockReplace.mock.calls).toEqual([['/camera']]);
   expect(mockNavigation.goBack).not.toHaveBeenCalled();
 });
 

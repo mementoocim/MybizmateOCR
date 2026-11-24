@@ -19,12 +19,13 @@ import { colors, space, touch, type } from '../../lib/theme';
 import { versionLine } from '../../lib/versions';
 
 // Design B §9.10: Settings, in groups, as the Profile tab (camera first, spec §6.8, call 17), so with no Back. Your
-// business: VAT-registered or not, which suggests each sale's tax type. Export defaults: what MyBizMate's imports need that isn't on the paper (lib/settings.ts), in figures. A field is
-// saved as it's typed: going back while a field still has the cursor doesn't blur it (React Native calls no onBlur on
-// unmount), so saving when it's left would lose the change. An ATC that isn't 2 letters and 3 digits gets a warning in
-// place of its helper, and is saved all the same. The fields scroll into view above the keyboard through the Screen.
-// Your lists: Customers and items, with their counts, opens Your lists. About: Privacy, in plain words in a sheet; the
-// open-source licenses; the version. In team builds, Team tools (§9.11).
+// business: VAT-registered or not, which suggests each sale's tax type. Export defaults: what MyBizMate's imports need
+// that isn't on the paper (lib/settings.ts), in figures. A field is saved as it's typed: going back while a field still
+// has the cursor doesn't blur it (React Native calls no onBlur on unmount), so saving when it's left would lose the
+// change. An ATC that isn't 2 letters and 3 digits gets a warning in place of its helper, and is saved all the same.
+// The fields scroll into view above the keyboard through the Screen. Your lists: Customers and items, with their
+// counts, opens Your lists. About: Privacy, in plain words in a sheet; the open-source licenses; the version. In team
+// builds, Team tools (§9.11).
 
 const NOTE =
   "These fill in what MyBizMate's import needs that isn't on the paper. You can change them on each invoice when you save it. Changes save as you type.";

@@ -15,7 +15,7 @@ import { Sheet } from '../../components/Sheet';
 import { totalOf, waitingOf } from '../../lib/exportFile';
 import { peso } from '../../lib/format';
 import { lists, subscribeLists } from '../../lib/lists';
-import { useNavigateOnce, usePushOnce } from '../../lib/navigation';
+import { useOpenOnce } from '../../lib/navigation';
 import { type SavedSummary, savedList, subscribeSaved } from '../../lib/saved';
 import { SAMPLES } from '../../lib/samples';
 import { useScanFlow } from '../../lib/scanFlow';
@@ -43,8 +43,8 @@ const LOCK = 16; // dp: the footer's lock, beside its overline
 const handwriting = (font: string) => `${font === 'PatrickHand' ? 'Patrick Hand' : font} handwriting`;
 
 export default function Home() {
-  const push = usePushOnce(); // a screen over the tabs
-  const navigateOnce = useNavigateOnce(); // another tab: the camera, Profile
+  // one guard for every press (ruling T6-1): push, a screen over the tabs; navigate, another tab (the camera, Profile)
+  const { push, navigate: navigateOnce } = useOpenOnce();
   const flow = useScanFlow();
   const recent = useSyncExternalStore(subscribeRecent, recentScans); // a scan read on any screen shows at once
   const saved = useSyncExternalStore(subscribeSaved, savedList);

@@ -11,7 +11,7 @@ import { APP_VERSION } from '../versions';
 import { zipStored } from '../zip';
 import { isTrainingScan, type TrainingBox, type TrainingScan, trainingRecord } from './record';
 
-// The training-data export (Settings › Team tools, team builds): the scans saved in annotation mode that haven't gone
+// The training-data export (Profile › Team tools, team builds): the scans saved in annotation mode that haven't gone
 // out in one yet, the oldest 50 at a time, as a zip of manifest.json (each scan's training record) and each training
 // box's crop at the path its record gives. Nothing else goes in: no personal box, no page or photo, no other file.
 

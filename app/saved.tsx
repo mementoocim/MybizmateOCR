@@ -17,7 +17,7 @@ import { confirmDeleteSaved } from '../lib/confirmDelete';
 import { waitingOf } from '../lib/exportFile';
 import { amount, monthYear } from '../lib/format';
 import { lists, newParties, subscribeLists } from '../lib/lists';
-import { useNavigateOnce, usePushOnce } from '../lib/navigation';
+import { useOpenOnce } from '../lib/navigation';
 import { openSaved, type SavedSummary, savedList, subscribeSaved } from '../lib/saved';
 import type { Kind } from '../lib/scans';
 import { savedSub } from '../lib/sessions';
@@ -54,8 +54,8 @@ const EXPORTED: BadgeSpec = { label: 'Exported', tone: 'neutral' };
 type Month = { month: string; key: string; data: SavedSummary[] };
 
 export default function SavedScreen() {
-  const push = usePushOnce();
-  const navigateOnce = useNavigateOnce(); // the camera, a tab under this screen
+  // one guard for every press (ruling T6-1): push, a scan's screen; navigate, the camera, a tab under this screen
+  const { push, navigate: navigateOnce } = useOpenOnce();
   const { kind } = useLocalSearchParams<{ kind?: Kind }>();
   const all = useSyncExternalStore(subscribeSaved, savedList);
   const theLists = useSyncExternalStore(subscribeLists, lists);
