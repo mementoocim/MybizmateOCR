@@ -1,0 +1,972 @@
+# Review package: 54258f9..515d06f
+
+## Commits
+515d06f feat(app): a scan keeps the session it was taken in; the open session, its 30 minutes, its failed reads and its retake
+
+## Files changed
+ __tests__/saved.test.ts   |  36 +++++++-
+ __tests__/scans.test.ts   | 114 +++++++++++++++++++++++
+ __tests__/session.test.ts | 230 ++++++++++++++++++++++++++++++++++++++++++++++
+ __tests__/startup.test.ts |  24 ++++-
+ lib/saved.ts              |   7 +-
+ lib/scans.ts              |  62 ++++++++++---
+ lib/session.ts            | 112 ++++++++++++++++++++++
+ lib/startup.ts            |   5 +-
+ 8 files changed, 569 insertions(+), 21 deletions(-)
+
+## Diff
+diff --git a/__tests__/saved.test.ts b/__tests__/saved.test.ts
+index ee5541d..615c4ca 100644
+--- a/__tests__/saved.test.ts
++++ b/__tests__/saved.test.ts
+@@ -23,27 +23,30 @@ type Modules = {
+   lists: typeof import('../lib/lists');
+   settings: typeof import('../lib/settings');
+ };
+ const load = (): Modules => ({
+   scans: require('../lib/scans'),
+   saved: require('../lib/saved'),
+   lists: require('../lib/lists'),
+   settings: require('../lib/settings'),
+ });
+ 
+-/** A camera scan of Sample 0007 whose files are in the scanner's folder, as the core writes them. */
+-function cameraScan(m: Modules, dir = SCAN_DIR): string {
++/**
++ * A camera scan of Sample 0007 whose files are in the scanner's folder, as the core writes them; taken in a session, or
++ * before camera first.
++ */
++function cameraScan(m: Modules, dir = SCAN_DIR, session?: string): string {
+   const result = parseScanResult(coreJson('inv_0007', dir));
+   for (const uri of [result.pageUri, result.originalUri, ...result.reads.map((r) => r.cropUri)]) {
+     memoryFs.files.set(uri!, 'image');
+   }
+-  return m.scans.addScan({ label: 'Camera photo', source: 'camera', result });
++  return m.scans.addScan({ label: 'Camera photo', source: 'camera', result, session });
+ }
+ 
+ beforeAll(() => pinToday(new Date(2026, 10, 18, 10, 0)));
+ afterAll(() => jest.useRealTimers());
+ 
+ beforeEach(() => {
+   memoryFs.reset();
+   jest.resetModules();
+   mockTeam = false;
+ });
+@@ -287,16 +290,43 @@ test("a 2307's summary: checked as a 2307, one import row per payment", async ()
+   await m.saved.deleteSaved(unsure);
+   // a save cut short is summarised again as a 2307
+   memoryFs.files.delete('file:///docs/saved.json');
+   jest.resetModules();
+   const again = load();
+   await again.lists.loadLists();
+   await again.saved.loadSaved();
+   expect(again.saved.savedList()).toEqual([summary]);
+ });
+ 
++test("a save keeps the scan's session in saved.json and scan.json; a summary from before has none, and loads", async () => {
++  const first = load();
++  const session = '1795000000000-ab12'; // lib/session's newSessionId
++  const id = cameraScan(first, SCAN_DIR, session);
++  const old = cameraScan(first, 'file:///docs/scans/124'); // as before camera first: no session
++  await first.saved.saveScan(id, DETAILS);
++  await first.saved.saveScan(old, DETAILS);
++  expect(first.saved.savedSummary(id)?.session).toBe(session);
++  expect(first.saved.savedSummary(old)?.session).toBeUndefined();
++  const index: { id: string; session?: string }[] = JSON.parse(memoryFs.files.get('file:///docs/saved.json') as string);
++  expect(index.find((s) => s.id === id)?.session).toBe(session);
++  expect(index.find((s) => s.id === old)).not.toHaveProperty('session'); // saved.json as design B wrote it
++  const scanJson = (scanId: string) => JSON.parse(memoryFs.files.get(`file:///docs/saved/${scanId}/scan.json`) as string);
++  expect(scanJson(id).session).toBe(session);
++  expect(scanJson(old)).not.toHaveProperty('session');
++
++  jest.resetModules();
++  const again = load();
++  await again.saved.loadSaved();
++  expect(again.saved.savedList().map((s) => s.id).sort()).toEqual([id, old].sort());
++  expect(again.saved.savedSummary(id)?.session).toBe(session);
++  expect(again.saved.savedSummary(old)?.session).toBeUndefined();
++  expect((await again.saved.openSaved(id))?.session).toBe(session);
++  expect(await again.saved.openSaved(old)).toMatchObject({ id: old, saved: { details: DETAILS } });
++  expect(again.scans.getScan(old)?.session).toBeUndefined();
++});
++
+ test('a sample is never saved', async () => {
+   const m = load();
+   const id = m.scans.addScan({ label: 'Sample 0007', source: 'sample', result: parseScanResult(coreJson('inv_0007')) });
+   await expect(m.saved.saveScan(id, DETAILS)).rejects.toThrow('sample');
+   expect(m.saved.savedList()).toHaveLength(0);
+ });
+diff --git a/__tests__/scans.test.ts b/__tests__/scans.test.ts
+index b0139c8..aaaad62 100644
+--- a/__tests__/scans.test.ts
++++ b/__tests__/scans.test.ts
+@@ -1,18 +1,23 @@
+ import type { ScanResult } from '../modules/scanner';
+ import { parseScanResult } from '../modules/scanner/src/parse';
+ import { coreJson } from '../test-utils/coreJson';
+ import { memoryFs } from '../test-utils/memoryFs';
+ 
+ jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
+ 
+ const flush = () => new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
++const RECENT = 'file:///docs/recent.json';
++const SESSION = '1795000000000-ab12'; // lib/session's newSessionId
++/** The ids recent.json holds, newest first; none before its first write. */
++const recentIds = (): string[] =>
++  (JSON.parse((memoryFs.files.get(RECENT) as string | undefined) ?? '[]') as { id: string }[]).map((s) => s.id);
+ /** A scan as it starts, before the person does anything to it. */
+ const UNTOUCHED = {
+   edits: {},
+   confirmed: [],
+   terms: null,
+   kind: 'sale',
+   party: null,
+   saved: null,
+   annotated: false,
+   tag: null,
+@@ -211,10 +216,119 @@ test('saves the list and loads it back, without scans whose folder is gone', asy
+   const second = require('../lib/scans');
+   expect(second.recentScans()).toEqual([]);
+   await second.loadRecent();
+   const loaded = second.recentScans();
+   expect(loaded).toHaveLength(1);
+   expect(loaded[0].label).toBe('Sample 0007');
+   expect(loaded[0].sampleId).toBe('inv_0007');
+   expect(loaded[0].at).toBeInstanceOf(Date);
+   expect(loaded[0].result.reads[0].text).toBe('0007655');
+ });
++
++test('a scan keeps its session, in recent.json too; one kept before camera first has none', async () => {
++  // recent.json as design B wrote it: a scan from before camera first
++  const old = { id: 'old-4', label: 'Camera photo', source: 'camera', at: '2026-11-20T01:00:00.000Z', result: result('/s/old') };
++  memoryFs.files.set(RECENT, JSON.stringify([old]));
++  memoryFs.dirs.add('file:///s/old');
++  const first = require('../lib/scans');
++  await first.loadRecent();
++  const id = first.addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a'), session: SESSION });
++  const sample = first.addScan({ label: 'Sample 0007', source: 'sample', sampleId: 'inv_0007', result: result('/s/c') });
++  expect(first.getScan(id).session).toBe(SESSION);
++  expect(first.getScan(sample).session).toBeUndefined(); // a sample is never part of a session
++  await flush();
++  const kept: { id: string; session?: string }[] = JSON.parse(memoryFs.files.get(RECENT) as string);
++  expect(kept.map((s) => s.id)).toEqual([sample, id, 'old-4']);
++  expect(kept[1].session).toBe(SESSION);
++  expect(kept[0]).not.toHaveProperty('session');
++  expect(kept[2]).not.toHaveProperty('session');
++
++  memoryFs.dirs.add('file:///s/a');
++  memoryFs.dirs.add('file:///s/c');
++  jest.resetModules();
++  const second = require('../lib/scans');
++  await second.loadRecent();
++  expect(second.getScan(id).session).toBe(SESSION);
++  expect(second.getScan('old-4')).toMatchObject(UNTOUCHED);
++  expect(second.getScan('old-4').session).toBeUndefined();
++});
++
++test("a queued photo's scan keeps the time the photo was taken, not the time it was read (ruling P-F2)", async () => {
++  const { addScan, getScan } = require('../lib/scans');
++  const taken = new Date(2026, 10, 24, 9, 41, 7);
++  const id = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a'), session: SESSION, at: taken });
++  expect(getScan(id).at).toEqual(taken);
++  await flush();
++  expect(JSON.parse(memoryFs.files.get(RECENT) as string)[0].at).toBe(taken.toISOString());
++});
++
++test('scansWritten waits until recent.json holds the scan just added', async () => {
++  const { addScan, scansWritten, updateScan } = require('../lib/scans');
++  await scansWritten(); // nothing written yet
++  const a = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a'), session: SESSION });
++  const b = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/b'), session: SESSION });
++  expect(recentIds()).toEqual([]); // still being written
++  await scansWritten();
++  expect(recentIds()).toEqual([b, a]);
++
++  // a write that fails: it resolves all the same, and the next change is written
++  const { File } = require('expo-file-system'); // the one lib/jsonFile uses until the next reset
++  jest.spyOn(File.prototype, 'write').mockRejectedValueOnce(new Error('No space left on device'));
++  const c = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/c'), session: SESSION });
++  await expect(scansWritten()).resolves.toBeUndefined();
++  expect(recentIds()).toEqual([b, a]);
++  updateScan(c, { kind: 'purchase' });
++  await scansWritten();
++  expect(recentIds()).toEqual([c, b, a]);
++});
++
++test('deleting an unsaved scan forgets it and its folder; a saved one is refused', async () => {
++  const { addScan, deleteScan, getScan, recentScans, scansWritten, subscribeRecent, updateScan } = require('../lib/scans');
++  /** A scan whose files are in the folder given, as the core writes them. */
++  const scanned = (dir: string): ScanResult => {
++    const r = result(dir);
++    for (const uri of [r.pageUri, r.originalUri, ...r.reads.map((b) => b.cropUri)]) memoryFs.files.set(uri!, 'image');
++    return r;
++  };
++  const filesIn = (dir: string) => [...memoryFs.files.keys()].filter((k) => k.startsWith(`${dir}/`));
++  // two scans in the scanner's own folders, files/scans/<ms>/ (Paths.document is file:///docs/ here)
++  const GONE = 'file:///docs/scans/1795000000001';
++  const KEPT = 'file:///docs/scans/1795000000002';
++  const gone = addScan({ label: 'Camera photo', source: 'camera', result: scanned(GONE), session: SESSION });
++  const kept = addScan({ label: 'Camera photo', source: 'camera', result: scanned(KEPT), session: SESSION });
++  const keptFiles = filesIn(KEPT);
++  expect(keptFiles.length).toBeGreaterThan(0);
++  const listener = jest.fn();
++  subscribeRecent(listener);
++
++  deleteScan(gone);
++  expect(getScan(gone)).toBeUndefined();
++  expect(recentScans().map((s: { id: string }) => s.id)).toEqual([kept]);
++  expect(listener).toHaveBeenCalled();
++  expect(filesIn(GONE)).toEqual([]);
++  expect(filesIn(KEPT)).toEqual(keptFiles); // only its own folder
++  await scansWritten();
++  expect(recentIds()).toEqual([kept]);
++
++  // a scan that kept no files: forgotten, and nothing on disk goes; a folder that isn't one of the scanner's is never
++  // deleted
++  const none = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('inv_0007', null)) });
++  deleteScan(none);
++  expect(getScan(none)).toBeUndefined();
++  const ELSEWHERE = 'file:///s/e';
++  const elsewhere = addScan({ label: 'Camera photo', source: 'camera', result: scanned(ELSEWHERE) });
++  const elsewhereFiles = filesIn(ELSEWHERE);
++  deleteScan(elsewhere);
++  expect(getScan(elsewhere)).toBeUndefined();
++  expect(filesIn(ELSEWHERE)).toEqual(elsewhereFiles);
++  expect(filesIn(KEPT)).toEqual(keptFiles);
++
++  // a saved one is refused: its folder is under saved/ now, and Saved's own delete is its way out
++  updateScan(kept, { saved: { savedAt: '2026-11-24T01:41:00.000Z', details: { account: '1205' } } });
++  expect(() => deleteScan(kept)).toThrow('saved');
++  expect(getScan(kept)).toBeDefined();
++  expect(filesIn(KEPT)).toEqual(keptFiles);
++
++  deleteScan('missing'); // no such scan: nothing to do
++  await scansWritten();
++  expect(recentIds()).toEqual([kept]);
++});
+diff --git a/__tests__/session.test.ts b/__tests__/session.test.ts
+new file mode 100644
+index 0000000..d2e758d
+--- /dev/null
++++ b/__tests__/session.test.ts
+@@ -0,0 +1,230 @@
++import { memoryFs } from '../test-utils/memoryFs';
++import { pinToday } from '../test-utils/today';
++
++jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
++
++// lib/session: the session the camera continues (spec §6.3 and §6.9, the plan's calls 2, 3, 23 and 24). The first
++// capture opens it and the next ones join it, until Done ends it, another one starts, 30 minutes pass since its last
++// change, or the app starts again. It keeps the reads that failed, which have no scan to show them, and a Retake's link
++// to the scan its next capture replaces. session.json follows it.
++
++const FILE = 'file:///docs/session.json';
++const T = new Date(2026, 10, 24, 9, 41); // the first capture, at 9:41 AM
++const MINUTE = 60 * 1000;
++const at = (ms: number) => new Date(T.getTime() + ms);
++const flush = () => new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
++const S = (): typeof import('../lib/session') => require('../lib/session');
++const kept = () => JSON.parse(memoryFs.files.get(FILE) as string);
++
++const UNREADABLE = "It isn't a photo the scanner can open.";
++const STOPPED = 'The scanner stopped while reading it.';
++
++beforeAll(() => pinToday(T));
++afterAll(() => jest.useRealTimers());
++
++beforeEach(async () => {
++  await flush(); // the last test's writes land before its files go
++  memoryFs.reset();
++  jest.resetModules();
++});
++
++test('the first capture opens a session; the next ones join it, and session.json follows', async () => {
++  const s = S();
++  const listener = jest.fn();
++  s.subscribeSession(listener);
++  expect(s.currentSession()).toBeNull();
++
++  const first = s.takeCapture(T);
++  expect(first.session).toMatch(/^[0-9]{13}-[0-9a-z]{4}$/);
++  expect(first.session.startsWith(`${T.getTime()}-`)).toBe(true); // the time it started (the plan's call 23)
++  expect(first.replaces).toBeNull();
++  const opened = s.currentSession();
++  expect(opened).toEqual({ id: first.session, changedAt: T.toISOString(), open: true, failed: [], replaces: null });
++
++  expect(s.takeCapture(at(MINUTE))).toEqual({ session: first.session, replaces: null });
++  expect(s.currentSession()).not.toBe(opened); // replaced, never changed in place: screens subscribe to it
++  expect(opened?.changedAt).toBe(T.toISOString());
++  expect(listener).toHaveBeenCalledTimes(2);
++
++  await flush();
++  const { readJson } = require('../lib/jsonFile') as typeof import('../lib/jsonFile');
++  expect(await readJson('session.json')).toEqual({
++    id: first.session,
++    changedAt: at(MINUTE).toISOString(),
++    open: true,
++    failed: [],
++    replaces: null,
++  });
++});
++
++test("Done ends it: the next capture opens another, and the ended one's failed reads go", async () => {
++  const s = S();
++  const { session: a } = s.takeCapture(T);
++  s.addFailedRead(a, UNREADABLE, at(MINUTE));
++  s.endSession('another'); // not this one: nothing changes
++  expect(s.currentSession()?.open).toBe(true);
++
++  s.endSession(a);
++  // ended, its failed read still there for the session screen Done opens (the plan's call 2)
++  expect(s.currentSession()).toEqual({
++    id: a,
++    changedAt: at(MINUTE).toISOString(),
++    open: false,
++    failed: [{ at: at(MINUTE).toISOString(), reason: UNREADABLE }],
++    replaces: null,
++  });
++
++  const next = s.takeCapture(at(2 * MINUTE));
++  expect(next.session).not.toBe(a);
++  expect(next.replaces).toBeNull();
++  expect(s.currentSession()).toEqual({
++    id: next.session,
++    changedAt: at(2 * MINUTE).toISOString(),
++    open: true,
++    failed: [],
++    replaces: null,
++  });
++  await flush();
++  expect(kept()).toEqual(s.currentSession());
++});
++
++test('a failed read is kept, with its time and words, only while its session is the current one', async () => {
++  const s = S();
++  const { session: a } = s.takeCapture(T);
++  s.addFailedRead(a, STOPPED, at(MINUTE));
++  expect(s.currentSession()).toMatchObject({
++    changedAt: at(MINUTE).toISOString(), // a failed read is a change: its 30 minutes start again
++    failed: [{ at: at(MINUTE).toISOString(), reason: STOPPED }],
++  });
++
++  const before = s.currentSession();
++  const listener = jest.fn();
++  s.subscribeSession(listener);
++  s.addFailedRead('other', STOPPED, at(2 * MINUTE));
++  s.touchSession('other', at(2 * MINUTE));
++  expect(s.currentSession()).toBe(before);
++  expect(listener).not.toHaveBeenCalled();
++
++  // a read that ends after Done is still its session's
++  s.endSession(a);
++  s.addFailedRead(a, UNREADABLE, at(3 * MINUTE));
++  expect(s.currentSession()?.failed).toEqual([
++    { at: at(MINUTE).toISOString(), reason: STOPPED },
++    { at: at(3 * MINUTE).toISOString(), reason: UNREADABLE },
++  ]);
++
++  // once another session is the current one, an old one's failed read is kept nowhere
++  const { session: b } = s.takeCapture(at(4 * MINUTE));
++  s.addFailedRead(a, STOPPED, at(5 * MINUTE));
++  expect(s.currentSession()).toMatchObject({ id: b, failed: [] });
++  await flush();
++  expect(kept()).toMatchObject({ id: b, failed: [] });
++});
++
++test('30 minutes after its last change, it closes by itself', async () => {
++  const s = S();
++  const { session: a } = s.takeCapture(T);
++  const t = at(10 * MINUTE);
++  s.touchSession(a, t); // a read stored: its last change
++  expect(s.currentSession()?.changedAt).toBe(t.toISOString());
++  expect(s.closeIdleSession(new Date(t.getTime() + s.IDLE_MS - 1))).toBe(false);
++  expect(s.currentSession()?.id).toBe(a);
++  expect(s.closeIdleSession(new Date(t.getTime() + s.IDLE_MS))).toBe(true);
++  expect(s.currentSession()).toBeNull();
++  expect(s.closeIdleSession(new Date(t.getTime() + 2 * s.IDLE_MS))).toBe(false); // nothing left to close
++
++  // a capture after that idle starts another
++  const u = at(60 * MINUTE);
++  const { session: b } = s.takeCapture(u);
++  const { session: c } = s.takeCapture(new Date(u.getTime() + s.IDLE_MS));
++  expect(c).not.toBe(b);
++  expect(s.currentSession()).toMatchObject({ id: c, open: true });
++
++  // an ended one closes the same way, and its failed reads go
++  s.addFailedRead(c, STOPPED, new Date(u.getTime() + s.IDLE_MS));
++  s.endSession(c);
++  expect(s.closeIdleSession(new Date(u.getTime() + 2 * s.IDLE_MS))).toBe(true);
++  expect(s.currentSession()).toBeNull();
++  await flush();
++  expect(memoryFs.files.get(FILE)).toBe('null');
++});
++
++test('a restart closes it', async () => {
++  // a start with no session kept writes nothing
++  await S().loadSession();
++  expect(memoryFs.files.has(FILE)).toBe(false);
++
++  // a font-size or display-size change runs the start again in the same JS context: it closes the one in memory, its
++  // write under way or not (the plan's call 24)
++  const first = S();
++  first.takeCapture(T);
++  const listener = jest.fn();
++  first.subscribeSession(listener);
++  await first.loadSession();
++  expect(first.currentSession()).toBeNull();
++  expect(listener).toHaveBeenCalledTimes(1);
++  expect(memoryFs.files.get(FILE)).toBe('null');
++
++  // the app stopped with one open
++  const { session } = first.takeCapture(at(MINUTE));
++  await flush();
++  expect(kept()).toMatchObject({ id: session, open: true });
++  jest.resetModules();
++  const second = S();
++  await second.loadSession();
++  expect(second.currentSession()).toBeNull();
++  expect(memoryFs.files.get(FILE)).toBe('null');
++});
++
++test("a write that fails changes nothing in memory, as recent.json's doesn't", async () => {
++  const s = S();
++  const { File } = require('expo-file-system'); // the one lib/jsonFile uses until the next reset
++  jest.spyOn(File.prototype, 'write').mockRejectedValueOnce(new Error('No space left on device'));
++  const { session } = s.takeCapture(T);
++  await flush();
++  expect(s.currentSession()).toMatchObject({ id: session, open: true });
++  expect(memoryFs.files.has(FILE)).toBe(false);
++  s.touchSession(session, at(MINUTE)); // the next change is written
++  await flush();
++  expect(kept()).toMatchObject({ id: session, changedAt: at(MINUTE).toISOString() });
++});
++
++test("Retake: that session is the camera's again, and its next capture replaces the scan, once", async () => {
++  const s = S();
++  const b = s.newSessionId(at(-60 * MINUTE)); // a session from an hour ago, closed since
++  const { session: a } = s.takeCapture(T);
++  s.addFailedRead(a, STOPPED, T);
++
++  // with A open, a Retake in B closes A, with its failed read
++  s.retakeIn(b, 'scan-1', at(MINUTE));
++  expect(s.currentSession()).toEqual({
++    id: b,
++    changedAt: at(MINUTE).toISOString(),
++    open: true,
++    failed: [],
++    replaces: 'scan-1',
++  });
++  expect(s.takeCapture(at(2 * MINUTE))).toEqual({ session: b, replaces: 'scan-1' });
++  expect(s.takeCapture(at(3 * MINUTE))).toEqual({ session: b, replaces: null });
++
++  // a B that Done had ended keeps its failed reads
++  s.addFailedRead(b, UNREADABLE, at(4 * MINUTE));
++  s.endSession(b);
++  s.retakeIn(b, 'scan-2', at(5 * MINUTE));
++  expect(s.currentSession()).toEqual({
++    id: b,
++    changedAt: at(5 * MINUTE).toISOString(),
++    open: true,
++    failed: [{ at: at(4 * MINUTE).toISOString(), reason: UNREADABLE }],
++    replaces: 'scan-2',
++  });
++
++  // Done before that capture spends the link
++  s.endSession(b);
++  expect(s.currentSession()).toMatchObject({ open: false, replaces: null });
++  const after = s.takeCapture(at(6 * MINUTE));
++  expect(after.session).not.toBe(b);
++  expect(after.replaces).toBeNull();
++  await flush();
++  expect(kept()).toEqual(s.currentSession());
++});
+diff --git a/__tests__/startup.test.ts b/__tests__/startup.test.ts
+index b0dca45..1cb1273 100644
+--- a/__tests__/startup.test.ts
++++ b/__tests__/startup.test.ts
+@@ -7,45 +7,50 @@ jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.m
+ 
+ // lib/startup's loadAppData: what the app keeps on the phone, read back at start. The splash's Try again runs the whole
+ // start again after one that failed partway (design B §9.1), so each store replaces what it holds with what its file
+ // says, and never adds to it: run again, no recent scan, saved row, party or item is there twice.
+ 
+ // The made-up lists (fixtures/lists).
+ const PARTIES: string = require('fs').readFileSync('fixtures/lists/parties.csv', 'utf8');
+ const ITEMS: string = require('fs').readFileSync('fixtures/lists/items.csv', 'utf8');
+ const DETAILS = { taxType: 'VAT', account: '4010', terms: 'account', atc: 'WC158' } as const;
+ const INDEX = 'file:///docs/saved.json';
++const SESSION_FILE = 'file:///docs/session.json';
++
++const flush = () => new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
+ 
+ type Modules = {
+   startup: typeof import('../lib/startup');
+   jsonFile: typeof import('../lib/jsonFile');
+   scans: typeof import('../lib/scans');
+   saved: typeof import('../lib/saved');
+   lists: typeof import('../lib/lists');
+   settings: typeof import('../lib/settings');
++  session: typeof import('../lib/session');
+ };
+ const load = (): Modules => ({
+   startup: require('../lib/startup'),
+   jsonFile: require('../lib/jsonFile'),
+   scans: require('../lib/scans'),
+   saved: require('../lib/saved'),
+   lists: require('../lib/lists'),
+   settings: require('../lib/settings'),
++  session: require('../lib/session'),
+ });
+ 
+ /** A camera scan of Sample 0007 whose files are in the scanner's folder, as the core writes them. */
+-function cameraScan(m: Modules, dir: string): string {
++function cameraScan(m: Modules, dir: string, session?: string): string {
+   const result = parseScanResult(coreJson('inv_0007', dir));
+   for (const uri of [result.pageUri, result.originalUri, ...result.reads.map((r) => r.cropUri)]) {
+     memoryFs.files.set(uri!, 'image');
+   }
+-  return m.scans.addScan({ label: 'Camera photo', source: 'camera', result });
++  return m.scans.addScan({ label: 'Camera photo', source: 'camera', result, session });
+ }
+ 
+ beforeAll(() => pinToday(new Date(2026, 10, 18, 10, 0)));
+ afterAll(() => jest.useRealTimers());
+ 
+ beforeEach(() => {
+   memoryFs.reset();
+   jest.resetModules();
+ });
+ 
+@@ -84,10 +89,25 @@ test('run again after a start that failed partway, nothing is there twice', asyn
+   // Try again: once each
+   full = false;
+   await m.startup.loadAppData();
+   once();
+   expect(JSON.parse(memoryFs.files.get(INDEX) as string)).toHaveLength(2); // the cut-short save written down
+ 
+   // and again, with nothing left to find: still once each
+   await m.startup.loadAppData();
+   once();
+ });
++
++test('a session open when the app stopped is closed at the next start; its scans keep their session', async () => {
++  const before = load();
++  const { session } = before.session.takeCapture(new Date());
++  const id = cameraScan(before, 'file:///docs/scans/1', session);
++  await flush(); // recent.json and session.json are written before the app stops
++  expect(JSON.parse(memoryFs.files.get(SESSION_FILE) as string)).toMatchObject({ id: session, open: true });
++
++  jest.resetModules(); // the next start
++  const m = load();
++  await m.startup.loadAppData();
++  expect(m.session.currentSession()).toBeNull();
++  expect(memoryFs.files.get(SESSION_FILE)).toBe('null');
++  expect(m.scans.getScan(id)?.session).toBe(session);
++});
+diff --git a/lib/saved.ts b/lib/saved.ts
+index 79189a4..83be56b 100644
+--- a/lib/saved.ts
++++ b/lib/saved.ts
+@@ -32,20 +32,21 @@ type SummaryBase = {
+   id: string;
+   label: string;
+   partyName: string; // an invoice's customer or supplier, a 2307's payor
+   partyId: string | null; // the list party, when the party is chosen or matched
+   date: string; // the invoice's date; a 2307's period's last day
+   listed: boolean; // the party column is a list party's code, or a VARIOUS-* party
+   savedAt: string;
+   exportedAt: string | null; // when it went out in an import file
+   // when it went out in a training export (team builds); a summary kept before milestone 4 has none, and loads as null
+   trainingExportedAt?: string | null;
++  session?: string; // the session its scan was taken in; none for a scan from before camera first
+ };
+ /** A saved sale or purchase: its row of the Sales or Purchases import. */
+ export type InvoiceSummary = SummaryBase & { kind: InvoiceKind; gross: number; row: ExportRow };
+ /** A saved 2307: its rows of the 2307-CWT import, its period ("Q4 2026") and the tax withheld on its rows. */
+ export type CertSummary = SummaryBase & { kind: '2307'; period: string; tax: number; rows: readonly ExportRow[] };
+ export type SavedSummary = InvoiceSummary | CertSummary;
+ 
+ const INDEX = 'saved.json';
+ let summaries: readonly SavedSummary[] = []; // replaced, never changed in place: screens subscribe to it
+ const listeners = new Set<() => void>();
+@@ -78,27 +79,27 @@ export function summaryRows(s: SavedSummary): readonly ExportRow[] {
+   return s.kind === '2307' ? s.rows : [s.row];
+ }
+ 
+ /** A scan's checks: a 2307's as a certificate (never an invoice's), an invoice's as a sale; null when no form was found. */
+ function checksOf(scan: StoredScan): SaleView | CertView | null {
+   if (is2307(scan)) return certOf(scan, lists(), settings());
+   return isInvoice(scan) ? saleOf(scan, lists(), settings()) : null;
+ }
+ 
+ /**
+- * A saved scan's summary, with the marks of the one it replaces: when it went out in an import file, and in a training
+- * export.
++ * A saved scan's summary, with the session it was taken in, and the marks of the one it replaces: when it went out in an
++ * import file, and in a training export.
+  */
+ function summaryOf(scan: StoredScan, before?: SavedSummary): SavedSummary {
+   const { savedAt, details } = scan.saved!;
+   const marks = { exportedAt: before?.exportedAt ?? null, trainingExportedAt: before?.trainingExportedAt ?? null };
+-  const base = { id: scan.id, label: scan.label, savedAt, ...marks };
++  const base = { id: scan.id, label: scan.label, savedAt, ...marks, session: scan.session };
+   if (is2307(scan)) {
+     const view = certOf(scan, lists(), settings());
+     const { cert, payor } = view;
+     const matched = payor.status === 'auto' ? payor.listParty : null; // an unsure match is only the closest one
+     return {
+       ...base,
+       kind: '2307',
+       partyName: payor.shown,
+       partyId: matched?.id ?? null,
+       date: cert.to ?? '',
+diff --git a/lib/scans.ts b/lib/scans.ts
+index 31f5a95..16cd691 100644
+--- a/lib/scans.ts
++++ b/lib/scans.ts
+@@ -1,11 +1,11 @@
+-import { Directory } from 'expo-file-system';
++import { Directory, Paths } from 'expo-file-system';
+ 
+ import type { BoxRead, ScanResult } from '../modules/scanner';
+ import type { Terms } from './checks/finalize';
+ import { readJson, writeJson } from './jsonFile';
+ import type { TaxType } from './settings';
+ import { APP_VERSION, modelVersion } from './versions';
+ 
+ // Recent scans: the newest 100, kept on the phone so they survive closing the app, with what the person did to each:
+ // the boxes they fixed (kept apart from the readings) or checked, the terms they picked, sale or purchase (a BIR 2307
+ // is always a 2307), the customer or supplier they chose, and whether they saved it (in annotation mode, with its
+@@ -42,20 +42,21 @@ export type StoredScan = {
+   party: PartyChoice | null;
+   saved: { savedAt: string; details: SaveDetails } | null;
+   made?: { app: string; model: string }; // the app and model versions it was read with; none if kept before milestone 4
+   // none of these three on a scan kept before milestone 4:
+   annotated?: boolean; // last saved in annotation mode, so every training box was checked
+   tag?: SourceTag | null; // that save's client and writer codes; null when it wasn't one
+   testImage?: boolean; // read from the camera's test hook: it never becomes training data
+   // a hash of the edits and checks as last saved (marksOf in lib/saved.ts), never what a box says; '' when it has none:
+   // not saved yet, or saved before the save kept one
+   savedMarks?: string;
++  session?: string; // the session it was taken in (lib/session); none on a scan kept before camera first, nor a sample
+ };
+ 
+ /**
+  * A result as recent.json and the saved scans keep it. Kept results aren't parsed again (parseScanResult), so one kept
+  * before PDFs (milestone 5) has none of their fields.
+  */
+ export type KeptResult = Omit<ScanResult, 'source' | 'pageCount' | 'picture' | 'reads'> &
+   Partial<Pick<ScanResult, 'source' | 'pageCount' | 'picture'>> & {
+     reads: (Omit<BoxRead, 'fromText'> & { fromText?: boolean })[];
+   };
+@@ -79,70 +80,83 @@ export function withPdfFields(r: KeptResult): ScanResult {
+   };
+ }
+ 
+ /** The scans recent.json keeps, newest first; ScannerModule's KEEP_SCANS is the same number. */
+ export const KEEP = 100;
+ const FILE = 'recent.json';
+ let recent: readonly StoredScan[] = []; // replaced, never changed in place: screens subscribe to it
+ const opened = new Map<string, StoredScan>(); // saved scans opened from Saved
+ let counter = 0;
+ const listeners = new Set<() => void>();
++let written: Promise<void> = Promise.resolve(); // recent.json's latest write, its failure caught: scansWritten
+ 
+ function changed(): void {
+   listeners.forEach((listener) => listener());
+ }
+ 
+ /** For useSyncExternalStore: called after each change to a scan or the list. */
+ export function subscribeRecent(listener: () => void): () => void {
+   listeners.add(listener);
+   return () => {
+     listeners.delete(listener);
+   };
+ }
+ 
+-async function save(): Promise<void> {
+-  try {
+-    await writeJson(FILE, recent.map((s) => ({ ...s, at: s.at.toISOString() })));
+-  } catch {
++function save(): void {
++  written = writeJson(FILE, recent.map((s) => ({ ...s, at: s.at.toISOString() }))).catch(() => {
+     // the list is a convenience: a scan still shows when it can't be saved
+-  }
++  });
++}
++
++/**
++ * Resolves once recent.json holds every change made so far, or its write failed: its writes go one at a time
++ * (lib/jsonFile), so the latest one lands last.
++ */
++export function scansWritten(): Promise<void> {
++  return written;
+ }
+ 
+ const FRESH = {
+   edits: {},
+   confirmed: [],
+   terms: null,
+   kind: 'sale',
+   party: null,
+   saved: null,
+   annotated: false,
+   tag: null,
+   testImage: false,
+   savedMarks: '',
+ } as const;
+ 
+ /** A BIR Form 2307 (its form found) is a 2307; any other scan keeps its kind, a sale until the person says otherwise. */
+ const kindOf = (r: ScanResult, kept: Kind = 'sale'): Kind => (r.aligned && r.form === 'bir_2307' ? '2307' : kept);
+ 
+-export function addScan(s: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'result' | 'testImage'>): string {
++/**
++ * Keeps a scan just read as the newest, with the session it was taken in, if any. It's kept as of now, or as of the time
++ * given: a queued photo's, when it was taken (ruling P-F2).
++ */
++export function addScan(
++  s: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'result' | 'testImage' | 'session'> & { at?: Date },
++): string {
+   const scan: StoredScan = {
+     ...FRESH,
+     ...s,
+     testImage: s.testImage ?? false,
+     kind: kindOf(s.result),
+     made: { app: APP_VERSION, model: modelVersion() },
+     id: `${Date.now()}-${++counter}`,
+-    at: new Date(),
++    at: s.at ?? new Date(),
+   };
+   recent = [scan, ...recent].slice(0, KEEP);
+   changed();
+-  void save();
++  save();
+   return scan.id;
+ }
+ 
+ export function getScan(id: string): StoredScan | undefined {
+   return recent.find((s) => s.id === id) ?? opened.get(id);
+ }
+ 
+ export function updateScan(
+   id: string,
+   change: Partial<
+@@ -150,21 +164,21 @@ export function updateScan(
+       StoredScan,
+       'edits' | 'confirmed' | 'terms' | 'kind' | 'party' | 'saved' | 'result' | 'annotated' | 'tag' | 'savedMarks'
+     >
+   >,
+ ): StoredScan | undefined {
+   const old = getScan(id);
+   if (!old) return undefined;
+   const scan: StoredScan = { ...old, ...change };
+   if (recent.some((s) => s.id === id)) {
+     recent = recent.map((s) => (s.id === id ? scan : s));
+-    void save();
++    save();
+   }
+   if (opened.has(id)) opened.set(id, scan);
+   changed();
+   return scan;
+ }
+ 
+ /** A box's edit; null when it has none ('' is an edit: the person cleared the box). */
+ const editOf = (edits: Readonly<Record<string, string>>, box: string): string | null =>
+   Object.prototype.hasOwnProperty.call(edits, box) ? edits[box] : null;
+ 
+@@ -196,26 +210,52 @@ export function confirmBox(id: string, box: string): void {
+ /** Keeps a saved scan opened from Saved, so its screen can find and change it. */
+ export function cacheScan(scan: StoredScan): void {
+   opened.set(scan.id, scan);
+   changed();
+ }
+ 
+ /** Forgets a scan (a saved invoice the person deleted): from the recent scans and the opened ones. */
+ export function forgetScan(id: string): void {
+   if (recent.some((s) => s.id === id)) {
+     recent = recent.filter((s) => s.id !== id);
+-    void save();
++    save();
+   }
+   opened.delete(id);
+   changed();
+ }
+ 
++/**
++ * The folder the scanner wrote a scan's files to, files/scans/<ms>/ (ScannerModule's scan and readPdf, which keep only
++ * the newest KEEP), as the result's scanDir gives it; null when it kept no files, or when they're anywhere else.
++ */
++function scannerFolder(r: ScanResult): Directory | null {
++  if (!r.scanDir) return null;
++  const scans = new Directory(Paths.document, 'scans').uri.replace(/\/+$/, '');
++  const dir = r.scanDir.replace(/\/+$/, '');
++  const name = dir.startsWith(`${scans}/`) ? dir.slice(scans.length + 1) : '';
++  return name !== '' && !name.includes('/') ? new Directory(dir) : null;
++}
++
++/**
++ * Deletes an unsaved scan: its folder of files in the scanner's files/scans/, then the scan, from the recent scans. A
++ * folder that can't be deleted throws, and the scan stays. A saved scan throws 'saved': its folder has moved to saved/,
++ * and deleteSaved (lib/saved) is its way out.
++ */
++export function deleteScan(id: string): void {
++  const scan = getScan(id);
++  if (!scan) return;
++  if (scan.saved) throw new Error('saved');
++  const folder = scannerFolder(scan.result);
++  if (folder?.exists) folder.delete();
++  forgetScan(id);
++}
++
+ /** Newest first, KEEP at most; the same list until it changes. */
+ export function recentScans(): readonly StoredScan[] {
+   return recent;
+ }
+ 
+ /**
+  * At start: the saved list, without scans whose folder is gone. Older entries get the new fields' starting values,
+  * and a 2307 kept as a sale (before a 2307 could be saved) is a 2307.
+  */
+ export async function loadRecent(): Promise<void> {
+diff --git a/lib/session.ts b/lib/session.ts
+new file mode 100644
+index 0000000..c3cc01e
+--- /dev/null
++++ b/lib/session.ts
+@@ -0,0 +1,112 @@
++import { readJson, writeJson } from './jsonFile';
++
++// The session the camera continues (spec §6.3 and §6.9): the invoices taken one after another until Done. The first
++// capture opens it, and every scan read in it carries its id. It keeps when it last changed (a capture, a read stored or
++// a read that failed), the reads that failed, which have no scan to show them, and a Retake's link to the scan its next
++// capture replaces (the plan's call 3). Done ends it: no capture goes in, and its failed reads stay for the session
++// screen Done opens (call 2). It closes when another one starts, 30 minutes after its last change, or when the app
++// starts again (call 24); its scans keep its id. It lives in memory, and in session.json, which the next start closes.
++
++/** A read that failed: when (an ISO time), and why in plain words (lib/readFailures), never the scanner's own. */
++export type FailedRead = { at: string; reason: string };
++export type SessionState = {
++  id: string;
++  changedAt: string; // ISO: its last capture, stored read or failed read
++  open: boolean; // false once Done ended it: no capture goes in, its failed reads stay for its screen
++  failed: readonly FailedRead[];
++  replaces: string | null; // Retake: the scan its next capture replaces
++};
++
++/** A session closes this long after its last change. */
++export const IDLE_MS = 30 * 60 * 1000;
++const FILE = 'session.json';
++let current: SessionState | null = null; // replaced, never changed in place: screens subscribe to it
++const listeners = new Set<() => void>();
++
++/** The session from now on. session.json follows it, as a convenience like recent.json: a failed write changes nothing. */
++function set(next: SessionState | null): Promise<void> {
++  current = next;
++  listeners.forEach((listener) => listener());
++  return writeJson(FILE, next).catch(() => {});
++}
++
++const idle = (s: SessionState, now: Date) => now.getTime() - Date.parse(s.changedAt) >= IDLE_MS;
++
++/** A new session's id: the time it starts, in ms, then 4 random base-36 characters (the plan's call 23). */
++export function newSessionId(now: Date): string {
++  const suffix = Math.floor(Math.random() * 36 ** 4)
++    .toString(36)
++    .padStart(4, '0');
++  return `${now.getTime()}-${suffix}`;
++}
++
++export function currentSession(): SessionState | null {
++  return current;
++}
++
++/** For useSyncExternalStore: called after each change to the session. */
++export function subscribeSession(listener: () => void): () => void {
++  listeners.add(listener);
++  return () => {
++    listeners.delete(listener);
++  };
++}
++
++/**
++ * A capture (a photo, a gallery pick or a PDF): the session it goes in, and the scan it replaces after a Retake. An idle
++ * session closes first. An open one is touched, and its Retake's link is spent; otherwise a new session starts in place
++ * of whatever was there, and an ended one's failed reads go with it.
++ */
++export function takeCapture(now: Date): { session: string; replaces: string | null } {
++  closeIdleSession(now);
++  if (current?.open) {
++    const { id, replaces } = current;
++    void set({ ...current, changedAt: now.toISOString(), replaces: null });
++    return { session: id, replaces };
++  }
++  const id = newSessionId(now);
++  void set({ id, changedAt: now.toISOString(), open: true, failed: [], replaces: null });
++  return { session: id, replaces: null };
++}
++
++/** A read stored in the session: its last change, while it's the current one. */
++export function touchSession(id: string, now: Date): void {
++  if (current?.id === id) void set({ ...current, changedAt: now.toISOString() });
++}
++
++/** A read that failed in the session, with its time and plain words, kept while it's the current one: a change too. */
++export function addFailedRead(id: string, reason: string, now: Date): void {
++  if (current?.id !== id) return;
++  const at = now.toISOString();
++  void set({ ...current, changedAt: at, failed: [...current.failed, { at, reason }] });
++}
++
++/** Done: no capture goes in from now on, and a Retake's link is spent. Its failed reads stay for its screen. */
++export function endSession(id: string): void {
++  if (current?.id === id) void set({ ...current, open: false, replaces: null });
++}
++
++/**
++ * Retake: the scan's session is the camera's again, open, and its next capture replaces the scan. It keeps its failed
++ * reads when it's the current one; otherwise the session there closes, with its own.
++ */
++export function retakeIn(id: string, scanId: string, now: Date): void {
++  const failed = current?.id === id ? current.failed : [];
++  void set({ id, changedAt: now.toISOString(), open: true, failed, replaces: scanId });
++}
++
++/** Closes the session, open or ended, once IDLE_MS have passed since its last change; true when it closed one. */
++export function closeIdleSession(now: Date): boolean {
++  if (current === null || !idle(current, now)) return false;
++  void set(null);
++  return true;
++}
++
++/**
++ * At start, the restart rule: no session is open. One session.json still holds from before closes there too. A start
++ * run again in the same JS context (a font-size or display-size change: the plan's call 24) closes the one in memory.
++ */
++export async function loadSession(): Promise<void> {
++  if (current === null && (await readJson<SessionState>(FILE)) === null) return;
++  await set(null);
++}
+diff --git a/lib/startup.ts b/lib/startup.ts
+index 5556a66..0165b81 100644
+--- a/lib/startup.ts
++++ b/lib/startup.ts
+@@ -1,15 +1,16 @@
+ import { loadInstall } from './install';
+ import { loadLists } from './lists';
+ import { loadSaved } from './saved';
+ import { loadRecent } from './scans';
++import { loadSession } from './session';
+ import { loadSettings } from './settings';
+ 
+ /**
+  * Everything the app keeps on the phone, read back at start: the recent scans, the lists, the settings and the install
+  * ID (made on the first start), then the saved invoices (a save a kill cut short is summarised again with the lists and
+- * settings).
++ * settings). And the camera's session closes: a start never continues one (lib/session).
+  */
+ export async function loadAppData(): Promise<void> {
+-  await Promise.all([loadRecent(), loadLists(), loadSettings(), loadInstall()]);
++  await Promise.all([loadRecent(), loadLists(), loadSettings(), loadInstall(), loadSession()]);
+   await loadSaved();
+ }

@@ -1,0 +1,70 @@
+# SDD ledger — plan: C:/Users/Mico/Desktop/OCR with python model with machine learning/docs/superpowers/plans/2026-11-24-scanner-camera-first.md
+
+Spec: C:/Users/Mico/Desktop/OCR with python model with machine learning/docs/2026-11-24-mybizmate-scan-camera-first-design.md (approved by the user 2026-11-24, after a builder check). Mockup: .superpowers/brainstorm/570-1795475173/content/nav-camera-first.html (parent folder).
+
+- Setup (2026-11-24): branch camera-first created from master 3720049 in the mybizmate-ocr checkout itself (no worktree: Windows long paths, as design B).
+- User decisions (AskUserQuestion, 2026-11-24): execution "Subagent-driven (Recommended)"; Lucide icons "Yes, download (Recommended)": house.svg, files.svg, send.svg, circle-user.svg (~2 KB) from raw.githubusercontent.com/lucide-icons/lucide/1.77.0/icons/ (Task 5); device tasks on a "New QA AVD (Recommended)" (made-up data only; delete after only with the user's OK).
+- Standing user rules: merge into master and push only at the user's word, no PRs; nothing leaves the phone; no names/TINs/amounts/photos in logs; team tools out of client builds; data persists; Taglish replies, English docs; only the opus alias works for subagents.
+- Pre-flight: delegated the plan read to a scan agent; table and rulings follow.
+- Pre-flight scan (agent adcc036549ccd65ab, opus): 86 rows (71 task pairs, 15 self-checks), plus 11 spec-coverage rows and 24 call rows, in preflight-scan.md. 21 findings: none blocks execution; 8 to rule before their task; 13 minor.
+- Pre-flight rulings: all 21 ruled in preflight-rulings.md, grouped by task. Each dispatch carries its task's section. In short:
+  - Ruling P-F1 (T3): loadRecent reads recent.json once per JS context — a remount must not drop scans the queue just wrote — cost: none.
+  - Ruling P-F2 (T3): a queued scan's at is its capture ms, and resume skips a photo whose scan is already kept — no double read after a kill — cost: none.
+  - Ruling P-F3 (T4): the one-check test spies on finalize/check2307 — one cache — cost: none.
+  - Ruling P-F4 (T4): useSessions returns saved: Map<string, SavedState> — scanBadge's 'Changed' — cost: none.
+  - Ruling P-F5 (T5): useTabBarSpace is unconditional and 0 with the keyboard up — rules-of-hooks — cost: none.
+  - Ruling P-F6 (T6): the camera's StatusBar keeps 'dark' over the reading card until T7 — test 467 and §8 — cost: none.
+  - Ruling P-F7 (T7): useSayWhy() in lib/readFailures.ts — no duplicate Alert logic — cost: none.
+  - Ruling P-F8 (T7): the '!' is an SVG glyph — 12 sp and no fixed height around text — cost: none.
+  - Ruling P-F9 (T7): takeCapture only after a pick returns a file — no empty session, no spent Retake link — cost: none.
+  - Ruling P-F10 (T11): the Scan screen's ⋮ deletes an unsaved scan too (confirmDeleteScan) — scans from before can be deleted (GC, spec §4) — cost: no long press on Sessions rows.
+  - Ruling P-F11 (T4): one scanSub(m) helper for the sub-line — cost: none.
+  - Ruling P-F12 (T9): confirmDeleteScan resolves at once for saved scans — cost: none.
+  - Ruling P-F13 (T6/T10): the tests use /lists instead of /saved in T6; T10 moves snackbarClearance off Saved — the T10 gate — cost: none.
+  - Ruling P-F14 (T10): the error Banner comes first in step 2 — cost: none.
+  - Ruling P-F15 (T11): the snackbar keeps today's words with no full stop; the spec's quote was illustrative (a recorded exception to the GC's quoted-copy rule) — cost: copy.
+  - Ruling P-F16 (T11): Home's recent-row push becomes from: 'list' in T11 — Retake keeps going back until T12 — cost: none.
+  - Ruling P-F17 (T11): any saved, unchanged scan in a session gets Next invoice / Back to session — cost: none.
+  - Ruling P-F18 (T1): CheckRate logs checks and elapsed ms per window — stalls aren't hidden — cost: none.
+  - Ruling P-F19 (T14): T14 also saves a ?test= sale and purchase before the backup; T15 reuses that backup or names its own /tmp/scan-appdata-cf15.tar — cost: none.
+  - Ruling P-F20 (T15): if the picker refuses not_an_image.jpg, queue it with run-as; the QA AVD's data is all made up — cost: none.
+  - Ruling P-F21 (T14/T15): §5 decides; smoothness is T14's virtual-camera measurement — cost: none.
+- Task 1: dispatched (BASE 3720049, implementer ac256ffaf7d89fcb5, opus; task-1-brief.md; P-F18 changes CheckRate to return CheckWindow(checks, elapsedMs, reading)).
+- Task 1: implementer DONE_WITH_CONCERNS, commit a57b683 (11 files; Gradle :scanner 40/40 incl. 5 AutoCapture + 3 CheckRate; jest 75 suites / 704 tests, clean console; gates clean). Concerns are notes for later tasks, carried by pointer: (T12) Home's caption still says "The last 20 scans stay here" and Home renders up to 100 rows; (T13) "20" left in lib/saved.ts:28 and README 42/100/667; (T7) until the camera tab, a failed read leaves today's camera waiting for the sheet to leave; (T14) a counter window spanning a camera stop is one long ms= line, leave it out of the totals; reading() covers scan() and readPdf() only.
+- Task 1: review dispatched (reviewer a37375bb54da632cb, opus; review-3720049..a57b683.diff; named risks: thread safety and both photo paths incl. onError, AutoCapture's wait, reading()'s symmetry, the KEEP equality test and flush(), debug-only logging).
+- Task 1: review — spec ✅, quality Approved, no Critical/Important (reviewer a37375bb54da632cb, opus). Thread safety, both photo paths and onError, the wait's edges (mutation-backed), reading()'s symmetry and debug-only logging all verified. Trailer on a57b683 checked by the controller.
+- Task 1: minor (deferred): CheckRateTest doesn't pin that a window's closing check's reading belongs to the next window (the mutation readRan || reading passes).
+- Ruling T1-M1: CheckRate windows that span a camera stop or a capture pause are handled in Task 14's protocol, with no native change: keep the camera tab focused, drive reads from files queued into files/queue/ with run-as (read at start, no capture), and leave windows spanning a stop out of the totals — a native change after Task 14's rebuild would cost another rebuild — cost if wrong: the measurement leaves out capture pauses, which the phone check sees anyway.
+- Task 1: ⚠️ confirmed as a real gap: the wait outlives a stop and start (by the brief's design), so a Retake of the sheet in view won't auto-take it; Auto shows "Taken · put in the next one" until the sheet leaves for 0.5 s. That's confusing for a non-technical person on Retake (spec §6.4, §3's anti-goals).
+- Ruling T1-1: add an explicit re-arm. AutoCapture.rearm() clears the wait (waiting and clearSince) and the hold; the camera view exposes it to JS as an AsyncFunction rearm(), next to takePhoto, with ScannerCameraRef.rearm(); Task 7 calls it when the camera opens for a Retake. reset() still keeps the wait, so tab switches never retake the sheet in view (the brief's intent). It's done in Task 1 because a native change after Task 14's rebuild costs another — cost if wrong: a small native method nobody calls.
+- Task 1: fix round 1 dispatched (resumed ac256ffaf7d89fcb5; FIX_BASE a57b683): T1-1 rearm().
+- Task 1: fix round 1 implemented 54258f9 (AutoCapture.rearm(); view AsyncFunction rearm() run directly on Expo's main queue; ScannerCameraRef.rearm; Kotlin 41/41; jest 704/704 clean; tsc TS2741 RED then pass).
+- Task 1: fix round 1/5 (1 addressed, 0 open — T1-1 rearm(); commits a57b683..54258f9). Re-review af40046c01a1c824e (opus): ADDRESSED. It verified that Expo runs view AsyncFunctions on Dispatchers.Main, that a main.post could be dropped by stop(), and that lastStatus stays main-thread and auto is always synchronized.
+- Task 1: minor (deferred): the rearm test pins only waiting = false, not the hold reset; a mid-hold rearm test would pin it.
+- Task 1: minor (deferred, for Task 7's dispatch): ScannerCameraView.tsx's forwarders throw a TypeError at once on a build from before 54258f9 (native.current.rearm undefined); it matters only if Task 7's call runs on a device before Task 14's rebuild.
+- Task 1: complete (commits 3720049..54258f9, review clean)
+- Task 2: dispatched next (BASE 54258f9).
+- Task 2: dispatched (BASE 54258f9, implementer a2ea86f346c88d646, opus; task-2-brief.md; told: FailedRead.reason is a string only, deleteScan finds the folder from today's code, optional at on addScan is allowed for Task 3's P-F2).
+- Task 2: implementer DONE_WITH_CONCERNS, commit 515d06f (8 files; 76 suites / 717 tests; gates clean; 11 deliberate rule breaks each caught). Concerns, carried by pointer: (T3) deleteScan throws 'saved' for a saved scan or when the folder delete fails, so the queue must catch around deleteScan(replaces); samples and text PDFs do have files/scans/<ms> folders, so deleteScan deletes theirs (the dispatch's note was wrong; the behaviour is right); (T14/T15) check on a device that moveToSaved's regex and deleteScan's files/scans/ check agree; (T3/T4) a scan's id is its read time while at can be its capture time, and call 12 dates a saved scan past the newest 100 by its id.
+- Task 2: review dispatched (reviewer a5ca98feb1d686186, opus; review-54258f9..515d06f.diff; named risks: stored-data back-compat, deleteScan's folder scope, the session rules, scansWritten, real-file tests).
+- Task 2: review — spec ✅, quality Needs fixes (reviewer a5ca98feb1d686186, opus). Important 1: scannerFolder lets dot segments through (., .., %2e%2e), so deleteScan's recursive delete could reach files/scans/ or files/ itself; fix with a digits-only folder rule and spy tests.
+- Task 2: minor (deferred): no test for "a folder delete that throws keeps the scan" (Task 9's "Couldn't delete the scan." depends on it).
+- Task 2: minor (deferred, note for Task 4): an explicit session: undefined key stays in memory but not after a reload, so grouping must never use 'in' or hasOwnProperty on session.
+- Task 2: minor (deferred): the VirtualizedList act() flake now also shows under savedScreen.test; later dispatches list it.
+- Ruling T2-1 (review Minor 1, carried to Task 3): addScan falls back to now for an invalid at, so a bad <ms> parse can never make save() throw for every later change. Task 3 adds the guard, with a test — Task 3 builds at from file names (P-F2) — cost if wrong: none.
+- Ruling T2-2 (review Minor 5, carried to Task 3): scansWritten() becomes Promise<boolean>: true once recent.json holds every change so far, false after a failed write. The queue keeps the photo on false, so a full phone never loses both the scan and the photo; P-F2's dedupe by at still prevents a double read — Review Focus 1 — cost if wrong: one more boolean.
+- Ruling T2-3 (review Minor 3, folded into Important 1's fix): one shared helper decides "the scanner's folder" (digits only) for both deleteScan and moveToSaved — the same dot-segment blind spot — cost if wrong: none.
+- Task 2: fix round 1 dispatched (resumed a2ea86f346c88d646; FIX_BASE 515d06f): Important 1, with T2-3.
+- Task 2: fix round 1 implemented 4967dee (scannerFolder exported, digits only and directly in Paths.document/scans, used by deleteScan and moveToSaved; 76 suites / 719 tests clean; 3 mutations caught). Concern for T14/T15: save a scan on the device and confirm its folder lands in files/saved/<id>.
+- Task 2: fix round 1/5 (2 addressed, 0 open — Important 1 dot segments; T2-3 one shared folder rule; commits 515d06f..4967dee). Re-review a6076da2642386727 (opus): ADDRESSED, no new breakage. It confirmed from source, running expo-file-system's own path code, that the exact-root check matches the scanner's real folders on Android. Still to check on the device in T14/T15.
+- Task 2: minor (deferred, for T13): lib/saved.ts:28-29's comment still says the scanner keeps its newest 20.
+- Task 2: complete (commits 54258f9..4967dee, review clean)
+- Task 3: dispatched next (BASE 4967dee), carrying P-F1, P-F2, T2-1, T2-2 and Task 2's deleteScan note.
+- Task 3: dispatched (BASE 4967dee, implementer ac4210577d3ee5f34, opus; task-3-brief.md + P-F1, P-F2, T2-1, T2-2, deleteScan's throws).
+
+## PAUSED (2026-11-24, at the user's word: "stop all sessions running")
+- Stopped: the Task 3 implementer (ac4210577d3ee5f34), killed at its RED step, after writing tests and before any implementation. The sign-in session (local_10285db9…) was already idle, waiting for the user's answer. The mockup server was already down. No emulator or Metro is running.
+- Left in the working tree, uncommitted, on camera-first at 4967dee: Task 3's RED tests. These are __tests__/captureQueue.test.ts (new), plus edits to __tests__/rootLayout.test.tsx, __tests__/scanFlow.test.ts and __tests__/scans.test.ts. Nothing was reverted.
+- To resume:
+  - Resume ac4210577d3ee5f34 with SendMessage: "you were stopped at RED; your tests are uncommitted in the tree; continue Task 3 from RED". If it can't be resumed, dispatch a fresh Task 3 implementer with task-3-brief.md, the rulings P-F1, P-F2, T2-1 and T2-2 (see the Task 3 dispatch line above), and a note that the RED tests exist uncommitted, to keep or redo.
+  - Then follow the normal loop: review, Task 4 (its brief is extracted), and so on.

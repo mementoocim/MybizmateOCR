@@ -1,0 +1,243 @@
+# Review package: a57b683..54258f9
+
+## Commits
+54258f9 fix(scanner): the camera can be re-armed for a Retake
+
+## Files changed
+ __tests__/camera.test.tsx                                  |  5 +++--
+ .../src/main/java/expo/modules/scanner/AutoCapture.kt      |  8 +++++++-
+ .../main/java/expo/modules/scanner/ScannerCameraView.kt    |  9 +++++++++
+ .../src/main/java/expo/modules/scanner/ScannerModule.kt    |  1 +
+ .../src/test/java/expo/modules/scanner/AutoCaptureTest.kt  | 14 ++++++++++++++
+ modules/scanner/src/ScannerCameraView.tsx                  |  9 +++++++--
+ 6 files changed, 41 insertions(+), 5 deletions(-)
+
+## Diff
+diff --git a/__tests__/camera.test.tsx b/__tests__/camera.test.tsx
+index ee27853..6ea5ca5 100644
+--- a/__tests__/camera.test.tsx
++++ b/__tests__/camera.test.tsx
+@@ -18,40 +18,41 @@ import { typeStylesOf } from '../test-utils/typeStyles';
+ // auto-captured photo gets one confirm haptic (§5.5), then the reading card (§9.4).
+ 
+ let mockFocused = true;
+ let mockParams: Record<string, string> = {};
+ let mockTeam = false;
+ const mockRouter = { push: jest.fn(), replace: jest.fn() };
+ /** The screen's own navigation: Close goes back with it (lib/navigation's useGoBackOrHome). */
+ const mockNavigation = { canGoBack: jest.fn(() => true), goBack: jest.fn() };
+ const mockScanPhoto = jest.fn();
+ const mockTakePhoto = jest.fn(async () => {});
++const mockRearm = jest.fn(async () => {});
+ const mockGetPermission = jest.fn();
+ const mockRequestPermission = jest.fn();
+ const mockLibrary = jest.fn();
+ const mockDeleted: string[] = [];
+ 
+ jest.mock('expo-router', () => ({
+   useNavigation: () => mockNavigation,
+   useRouter: () => mockRouter,
+   useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, []),
+   useIsFocused: () => mockFocused,
+   useLocalSearchParams: () => mockParams,
+ }));
+-// The native camera stands in as a plain view carrying its props; its ref carries takePhoto.
++// The native camera stands in as a plain view carrying its props; its ref carries takePhoto and rearm.
+ jest.mock('../modules/scanner', () => {
+   const React = require('react');
+   const { View } = require('react-native');
+   return {
+     scanPhoto: (uri: string, options: object) => mockScanPhoto(uri, options),
+     ScannerCameraView: React.forwardRef(function MockCamera(props: object, ref: unknown) {
+-      React.useImperativeHandle(ref, () => ({ takePhoto: mockTakePhoto }));
++      React.useImperativeHandle(ref, () => ({ takePhoto: mockTakePhoto, rearm: mockRearm }));
+       return React.createElement(View, { testID: 'camera', ...props });
+     }),
+   };
+ });
+ jest.mock('expo-image-picker', () => ({
+   getCameraPermissionsAsync: () => mockGetPermission(),
+   requestCameraPermissionsAsync: () => mockRequestPermission(),
+   launchCameraAsync: jest.fn(async () => ({ canceled: true })),
+   launchImageLibraryAsync: () => mockLibrary(),
+ }));
+diff --git a/modules/scanner/android/src/main/java/expo/modules/scanner/AutoCapture.kt b/modules/scanner/android/src/main/java/expo/modules/scanner/AutoCapture.kt
+index 8b199ef..305ea39 100644
+--- a/modules/scanner/android/src/main/java/expo/modules/scanner/AutoCapture.kt
++++ b/modules/scanner/android/src/main/java/expo/modules/scanner/AutoCapture.kt
+@@ -21,21 +21,21 @@ internal enum class CameraStatus { LOOKING, HOLDING, BLURRY, FOUND, CAPTURE, TAK
+ 
+ /** What one frame means: the status to show, how settled the outline is (0..1), and whether to take the photo now. */
+ internal data class Step(val status: CameraStatus, val held: Float, val capture: Boolean)
+ 
+ /**
+  * When the camera takes the photo by itself: a port of the test app's CameraActivity.onDetection (:460-506). The
+  * outline settles once it has held still (every corner within shift x the frame's width of where it settled, same
+  * form) for holdMs and at least minFrames frames. It then takes the photo on a sharp frame, or anyway sharpWaitMs
+  * later (the scan then flags a blurry photo). After a photo it waits for photoTaken() or reset(). Once a photo has gone
+  * to TypeScript (photoTaken), the camera keeps shooting: Auto takes the next sheet only after no outline has shown for
+- * clearMs, so it never takes the same sheet twice while the person swaps it.
++ * clearMs, so it never takes the same sheet twice while the person swaps it. A Retake ends that wait (rearm).
+  */
+ internal class AutoCapture(
+   private val shift: Double = 0.03,
+   private val holdMs: Long = 800,
+   private val minFrames: Int = 3,
+   private val sharpWaitMs: Long = 2000,
+   private val clearMs: Long = 500,
+ ) {
+   private var anchor: FloatArray? = null
+   private var form: String? = null
+@@ -88,20 +88,26 @@ internal class AutoCapture(
+     }
+     return Step(if (settled) CameraStatus.BLURRY else CameraStatus.HOLDING, held, false)
+   }
+ 
+   /** The photo went to TypeScript: Auto takes no other until no outline has shown for clearMs. */
+   fun photoTaken() {
+     reset()
+     waiting = true
+   }
+ 
++  /** A Retake: the wait ends and the hold starts over, so Auto takes the sheet in view after its hold. */
++  fun rearm() {
++    reset()
++    waiting = false
++  }
++
+   /** The hold starts over; a photo's wait stays, so a stop and start never retakes the sheet in view. */
+   fun reset() {
+     anchor = null
+     form = null
+     steady = 0
+     since = 0L
+     taken = false
+     clearSince = null  // the time the camera was off isn't time without the sheet
+   }
+ }
+diff --git a/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerCameraView.kt b/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerCameraView.kt
+index ca5babe..94db565 100644
+--- a/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerCameraView.kt
++++ b/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerCameraView.kt
+@@ -309,20 +309,29 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
+           }
+ 
+           override fun onError(e: ImageCaptureException) {
+             failed(if (e.imageCaptureError == ImageCapture.ERROR_FILE_IO) "keep" else "capture", e.message)
+           }
+         },
+       )
+     }
+   }
+ 
++  /**
++   * For a Retake: Auto stops waiting for the last photo's sheet to leave the frame, and takes the sheet in view after
++   * its hold. A stop and start keeps that wait; this ends it. On the main thread, as every view function runs.
++   */
++  fun rearm() {
++    synchronized(auto) { auto.rearm() }
++    lastStatus = null  // the next status is sent, whatever it is
++  }
++
+   /** Hands the photo to TypeScript, then looks again: the camera stays bound, and Auto waits for the sheet to leave. */
+   private fun sendPhoto(file: File) {
+     onPhoto(mapOf("uri" to Uri.fromFile(file).toString()))
+     synchronized(auto) { auto.photoTaken() }
+     capturing = false
+     lastStatus = null
+   }
+ 
+   private fun failed(code: String, message: String?) {
+     onCameraError(mapOf("code" to code, "message" to (message ?: "")))
+diff --git a/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerModule.kt b/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerModule.kt
+index b31a1f9..e0f1748 100644
+--- a/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerModule.kt
++++ b/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerModule.kt
+@@ -122,20 +122,21 @@ class ScannerModule : Module() {
+ 
+     // The scanner camera (ScannerCameraView.kt): the first view, the module's default (requireNativeView('Scanner')).
+     View(ScannerCameraView::class) {
+       Events("onReady", "onStatus", "onPhoto", "onCameraError")
+       Prop("active") { view: ScannerCameraView, active: Boolean -> view.setActive(active) }
+       Prop("auto") { view: ScannerCameraView, auto: Boolean -> view.setAuto(auto) }
+       Prop("torch") { view: ScannerCameraView, torch: Boolean -> view.setTorch(torch) }
+       Prop("testImage") { view: ScannerCameraView, uri: String? -> view.setTestImage(uri) }
+       OnViewDidUpdateProps { view: ScannerCameraView -> view.applyProps() }
+       AsyncFunction("takePhoto") { view: ScannerCameraView -> view.takePhoto() }
++      AsyncFunction("rearm") { view: ScannerCameraView -> view.rearm() }
+       OnViewDestroys { view: ScannerCameraView -> view.release() }
+     }
+ 
+     // The keyboard's height in a sheet's own window (ImeInsetsView.kt): a second view, which TypeScript finds by this
+     // name (requireNativeView('Scanner', 'ImeInsetsView')) whatever R8 calls the class.
+     View(ImeInsetsView::class) {
+       Name("ImeInsetsView")
+       Events("onImeChange")
+     }
+ 
+diff --git a/modules/scanner/android/src/test/java/expo/modules/scanner/AutoCaptureTest.kt b/modules/scanner/android/src/test/java/expo/modules/scanner/AutoCaptureTest.kt
+index be64f52..87b0eb2 100644
+--- a/modules/scanner/android/src/test/java/expo/modules/scanner/AutoCaptureTest.kt
++++ b/modules/scanner/android/src/test/java/expo/modules/scanner/AutoCaptureTest.kt
+@@ -187,11 +187,25 @@ class AutoCaptureTest {
+   fun `a stop keeps the wait, so the sheet still in view isn't taken again`() {
+     val a = tookAPhoto()
+     a.reset()
+     assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 900, auto = true).status)
+     // nor is the time the camera was stopped counted as time without the sheet
+     a.onFrame(null, width, 1000, auto = true)
+     a.reset()
+     a.onFrame(null, width, 1500, auto = true)
+     assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 1600, auto = true).status)
+   }
++
++  @Test
++  fun `rearm clears the wait, so the sheet in view is taken after its hold`() {
++    val a = tookAPhoto()
++    a.rearm()  // a Retake: the sheet just taken is the one to take again
++    var t = 1000L
++    while (t < 1800) {
++      val step = a.onFrame(sales(), width, t, auto = true)
++      assertEquals(CameraStatus.HOLDING, step.status)
++      assertFalse(step.capture)
++      t += 100
++    }
++    assertTrue(a.onFrame(sales(), width, 1800, auto = true).capture)  // 800 ms and 3 frames, as for the first
++  }
+ }
+diff --git a/modules/scanner/src/ScannerCameraView.tsx b/modules/scanner/src/ScannerCameraView.tsx
+index fddb4a7..120a63d 100644
+--- a/modules/scanner/src/ScannerCameraView.tsx
++++ b/modules/scanner/src/ScannerCameraView.tsx
+@@ -15,24 +15,29 @@ export type ScannerCameraProps = ViewProps & {
+   active: boolean; // false stops the camera (while a photo is read, or the screen isn't shown)
+   auto: boolean; // take the photo by itself once the outline holds still
+   torch: boolean;
+   testImage?: string | null; // development builds only: a file:// photo stands in for the camera
+   onReady?: (e: { nativeEvent: { hasTorch: boolean } }) => void;
+   onStatus?: (e: { nativeEvent: { status: CameraStatus; form: FormName | null } }) => void;
+   onPhoto?: (e: { nativeEvent: { uri: string } }) => void;
+   onCameraError?: (e: { nativeEvent: { code: CameraErrorCode; message: string } }) => void;
+ };
+ 
+-export type ScannerCameraRef = { takePhoto(): Promise<void> };
++/**
++ * takePhoto: takes the photo now. rearm: for a Retake, Auto stops waiting for the last photo's sheet to leave the
++ * frame, and takes the sheet in view after its hold (a stop and start keeps that wait).
++ */
++export type ScannerCameraRef = { takePhoto(): Promise<void>; rearm(): Promise<void> };
+ 
+-// The native view's ref carries its AsyncFunctions (takePhoto).
++// The native view's ref carries its AsyncFunctions (takePhoto, rearm).
+ const NativeCamera = requireNativeView<ScannerCameraProps>('Scanner') as unknown as ComponentType<
+   ScannerCameraProps & { ref?: Ref<ScannerCameraRef> }
+ >;
+ 
+ export const ScannerCameraView = forwardRef<ScannerCameraRef, ScannerCameraProps>(function ScannerCameraView(props, ref) {
+   const native = useRef<ScannerCameraRef>(null);
+   useImperativeHandle(ref, () => ({
+     takePhoto: () => native.current?.takePhoto() ?? Promise.resolve(),
++    rearm: () => native.current?.rearm() ?? Promise.resolve(),
+   }));
+   return <NativeCamera {...props} ref={native} />;
+ });

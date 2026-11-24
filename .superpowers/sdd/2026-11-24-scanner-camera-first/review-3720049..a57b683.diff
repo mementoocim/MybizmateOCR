@@ -1,0 +1,812 @@
+# Review package: 3720049..a57b683
+
+## Commits
+a57b683 feat(scanner): the camera keeps shooting: it re-arms after each photo, waits for the sheet to leave, keeps 100 scans, and counts its checks in debug builds
+
+## Files changed
+ __tests__/camera.test.tsx                          |  2 +
+ __tests__/scans.test.ts                            | 24 ++++++--
+ lib/cameraCopy.ts                                  |  1 +
+ lib/scans.ts                                       |  9 +--
+ .../main/java/expo/modules/scanner/AutoCapture.kt  | 28 ++++++++-
+ .../main/java/expo/modules/scanner/CheckRate.kt    | 29 +++++++++
+ .../java/expo/modules/scanner/ScannerCameraView.kt | 30 +++++++++-
+ .../java/expo/modules/scanner/ScannerModule.kt     | 26 +++++++--
+ .../java/expo/modules/scanner/AutoCaptureTest.kt   | 68 ++++++++++++++++++++++
+ .../java/expo/modules/scanner/CheckRateTest.kt     | 30 ++++++++++
+ modules/scanner/src/ScannerCameraView.tsx          |  5 +-
+ 11 files changed, 231 insertions(+), 21 deletions(-)
+
+## Diff
+diff --git a/__tests__/camera.test.tsx b/__tests__/camera.test.tsx
+index 62eb1ee..ee27853 100644
+--- a/__tests__/camera.test.tsx
++++ b/__tests__/camera.test.tsx
+@@ -142,20 +142,22 @@ type Instance = ReturnType<typeof screen.getByRole>;
+ const kids = (el: Instance) => el.children.filter((child): child is Instance => typeof child !== 'string');
+ const CAMERA_APP = "Use the phone's camera app instead";
+ 
+ test('status copy', async () => {
+   expect(statusText('starting', null)).toBe('Starting the camera…');
+   expect(statusText('looking', null)).toBe('Looking for the form…');
+   expect(statusText('holding', 'service_invoice')).toBe('Service Invoice · hold still');
+   expect(statusText('blurry', 'sales_invoice')).toBe('MyBizMate Sales Invoice · blurry, hold still');
+   expect(statusText('found', 'sales_invoice')).toBe('MyBizMate Sales Invoice found · tap the button');
+   expect(statusText('capturing', 'service_invoice')).toBe('Taking the photo…');
++  expect(statusText('taken', 'sales_invoice')).toBe('Taken · put in the next one');
++  expect(statusText('taken', null)).toBe('Taken · put in the next one');
+ 
+   await open();
+   expect(screen.getByText('Starting the camera…')).toBeTruthy();
+   await send('status', { status: 'holding', form: 'service_invoice' });
+   const words = screen.getByText('Service Invoice · hold still');
+   // white words on the pill, which wraps rather than running off the preview
+   expect(words).toHaveStyle({ ...type.body, color: colors.cameraText });
+   expect(words.props.numberOfLines).toBeUndefined();
+   expect(screen.getByTestId('status-pill')).toHaveStyle({
+     backgroundColor: colors.pill,
+diff --git a/__tests__/scans.test.ts b/__tests__/scans.test.ts
+index 705b925..b0139c8 100644
+--- a/__tests__/scans.test.ts
++++ b/__tests__/scans.test.ts
+@@ -22,31 +22,43 @@ const UNTOUCHED = {
+ 
+ function result(dir: string): ScanResult {
+   return parseScanResult(coreJson('inv_0007', dir));
+ }
+ 
+ beforeEach(() => {
+   memoryFs.reset();
+   jest.resetModules();
+ });
+ 
+-test('keeps the newest 20, newest first', () => {
++test('keeps the newest 100, newest first', async () => {
+   const { addScan, getScan, recentScans } = require('../lib/scans');
+-  const ids = Array.from({ length: 21 }, (_, i) =>
++  const ids = Array.from({ length: 101 }, (_, i) =>
+     addScan({ label: `Scan ${i + 1}`, source: 'gallery', result: result(`/s/${i + 1}`) }),
+   );
++  await flush(); // the 101 queued saves of recent.json land now, not in the next test's files
+   const recent = recentScans();
+-  expect(recent).toHaveLength(20);
+-  expect(recent[0].label).toBe('Scan 21');
+-  expect(recent[19].label).toBe('Scan 2');
++  expect(recent).toHaveLength(100);
++  expect(recent[0].label).toBe('Scan 101');
++  expect(recent[99].label).toBe('Scan 2');
+   expect(getScan(ids[0])).toBeUndefined();
+-  expect(getScan(ids[20])?.label).toBe('Scan 21');
++  expect(getScan(ids[100])?.label).toBe('Scan 101');
++});
++
++test('the scanner keeps as many scan folders as the app keeps scans', () => {
++  const { KEEP } = require('../lib/scans');
++  // jest runs from the repo's root
++  const kotlin: string = require('fs').readFileSync(
++    'modules/scanner/android/src/main/java/expo/modules/scanner/ScannerModule.kt',
++    'utf8',
++  );
++  const m = kotlin.match(/const val KEEP_SCANS = ([0-9]+)/);
++  expect(Number(m?.[1])).toBe(KEEP);
+ });
+ 
+ test('edits, checked boxes, terms, kind and party are kept, and come back after a restart', async () => {
+   const first = require('../lib/scans');
+   const listener = jest.fn();
+   first.subscribeRecent(listener);
+   const id = first.addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a') });
+   expect(first.getScan(id)).toMatchObject(UNTOUCHED);
+   first.setEdit(id, 'date', ' 10/21/2026 ');
+   first.confirmBox(id, 'invoice_no');
+diff --git a/lib/cameraCopy.ts b/lib/cameraCopy.ts
+index e33a458..c94d278 100644
+--- a/lib/cameraCopy.ts
++++ b/lib/cameraCopy.ts
+@@ -6,20 +6,21 @@ import { FORMS } from './forms';
+ const WITH_FORM = {
+   holding: ' · hold still',
+   blurry: ' · blurry, hold still',
+   found: ' found · tap the button',
+ } as const;
+ 
+ /** The pill under the picture: what the camera is doing, with the form it sees. */
+ export function statusText(status: CameraStatus | 'starting', form: FormName | null): string {
+   if (status === 'starting') return 'Starting the camera…';
+   if (status === 'capturing') return 'Taking the photo…';
++  if (status === 'taken') return 'Taken · put in the next one';
+   if (status === 'looking' || !form) return 'Looking for the form…';
+   return FORMS[form].title + WITH_FORM[status];
+ }
+ 
+ /** The panels' titles, and the body of the one for a permission refused for good (§9.3). */
+ export const CAMERA_TEXT = {
+   allowTitle: 'Allow the camera',
+   offTitle: 'Camera access is off',
+   offBody: "Turn on the camera for MyBizMate Scan in the phone's settings.",
+   startTitle: "The camera couldn't start", // its raw message shows on its own line, in team builds only
+diff --git a/lib/scans.ts b/lib/scans.ts
+index 88b3349..31f5a95 100644
+--- a/lib/scans.ts
++++ b/lib/scans.ts
+@@ -1,22 +1,22 @@
+ import { Directory } from 'expo-file-system';
+ 
+ import type { BoxRead, ScanResult } from '../modules/scanner';
+ import type { Terms } from './checks/finalize';
+ import { readJson, writeJson } from './jsonFile';
+ import type { TaxType } from './settings';
+ import { APP_VERSION, modelVersion } from './versions';
+ 
+-// Recent scans: the newest 20, kept on the phone so they survive closing the app, with what the person did to each:
++// Recent scans: the newest 100, kept on the phone so they survive closing the app, with what the person did to each:
+ // the boxes they fixed (kept apart from the readings) or checked, the terms they picked, sale or purchase (a BIR 2307
+ // is always a 2307), the customer or supplier they chose, and whether they saved it (in annotation mode, with its
+-// source tag). Each scan's files live in its own folder (the scanner keeps the newest 20 folders too); the list is a
++// source tag). Each scan's files live in its own folder (the scanner keeps the newest 100 folders too); the list is a
+ // JSON file in the app's documents. A saved scan opened from Saved is kept here too while the app runs.
+ 
+ /** How the scan came in. Not the result's own source, which is what the scanner read: a photo or a PDF. */
+ export type ScanSource = 'camera' | 'camera_app' | 'gallery' | 'sample' | 'pdf';
+ /** What an invoice is saved as: a row of MyBizMate's Sales import or of its Purchases import. */
+ export type InvoiceKind = 'sale' | 'purchase';
+ /** What a scan is saved as: an invoice's kind, or a BIR 2307 (rows of MyBizMate's 2307-CWT import). */
+ export type Kind = InvoiceKind | '2307';
+ /** The person's pick: a party from the lists, a supplier's name typed in, or the various (walk-in) suppliers. */
+ export type PartyChoice = { listId: string } | { name: string } | { various: true };
+@@ -72,21 +72,22 @@ export function isTextPdf(r: Pick<ScanResult, 'source' | 'picture'>): boolean {
+ export function withPdfFields(r: KeptResult): ScanResult {
+   return {
+     ...r,
+     source: r.source ?? 'photo',
+     pageCount: r.pageCount ?? null,
+     picture: r.picture ?? null,
+     reads: r.reads.map((b) => ({ ...b, fromText: b.fromText ?? false })),
+   };
+ }
+ 
+-const KEEP = 20;
++/** The scans recent.json keeps, newest first; ScannerModule's KEEP_SCANS is the same number. */
++export const KEEP = 100;
+ const FILE = 'recent.json';
+ let recent: readonly StoredScan[] = []; // replaced, never changed in place: screens subscribe to it
+ const opened = new Map<string, StoredScan>(); // saved scans opened from Saved
+ let counter = 0;
+ const listeners = new Set<() => void>();
+ 
+ function changed(): void {
+   listeners.forEach((listener) => listener());
+ }
+ 
+@@ -201,21 +202,21 @@ export function cacheScan(scan: StoredScan): void {
+ /** Forgets a scan (a saved invoice the person deleted): from the recent scans and the opened ones. */
+ export function forgetScan(id: string): void {
+   if (recent.some((s) => s.id === id)) {
+     recent = recent.filter((s) => s.id !== id);
+     void save();
+   }
+   opened.delete(id);
+   changed();
+ }
+ 
+-/** Newest first, 20 at most; the same list until it changes. */
++/** Newest first, KEEP at most; the same list until it changes. */
+ export function recentScans(): readonly StoredScan[] {
+   return recent;
+ }
+ 
+ /**
+  * At start: the saved list, without scans whose folder is gone. Older entries get the new fields' starting values,
+  * and a 2307 kept as a sale (before a 2307 could be saved) is a 2307.
+  */
+ export async function loadRecent(): Promise<void> {
+   try {
+diff --git a/modules/scanner/android/src/main/java/expo/modules/scanner/AutoCapture.kt b/modules/scanner/android/src/main/java/expo/modules/scanner/AutoCapture.kt
+index 936469b..8b199ef 100644
+--- a/modules/scanner/android/src/main/java/expo/modules/scanner/AutoCapture.kt
++++ b/modules/scanner/android/src/main/java/expo/modules/scanner/AutoCapture.kt
+@@ -9,45 +9,61 @@ internal class Detection(val form: String, val outline: FloatArray, val sharpnes
+     get() = sharpness >= sharpMin
+ }
+ 
+ /** The forms NativeScanner.detectFrame gives by number, in its order (scanner_jni.cpp). */
+ private val FRAME_FORMS = listOf("sales_invoice", "service_invoice", "bir_2307")
+ 
+ /** NativeScanner.detectFrame's result, [form, the outline's tl, tr, br, bl as x, y, sharpness, sharpMin], as a Detection. */
+ internal fun detectionOf(f: FloatArray) =
+   Detection(FRAME_FORMS[f[0].toInt()], f.copyOfRange(1, 9), f[9].toDouble(), f[10].toDouble())
+ 
+-internal enum class CameraStatus { LOOKING, HOLDING, BLURRY, FOUND, CAPTURE }
++/** TAKEN: a photo went out, and Auto waits for that sheet to leave the frame (TypeScript's "taken"). */
++internal enum class CameraStatus { LOOKING, HOLDING, BLURRY, FOUND, CAPTURE, TAKEN }
+ 
+ /** What one frame means: the status to show, how settled the outline is (0..1), and whether to take the photo now. */
+ internal data class Step(val status: CameraStatus, val held: Float, val capture: Boolean)
+ 
+ /**
+  * When the camera takes the photo by itself: a port of the test app's CameraActivity.onDetection (:460-506). The
+  * outline settles once it has held still (every corner within shift x the frame's width of where it settled, same
+  * form) for holdMs and at least minFrames frames. It then takes the photo on a sharp frame, or anyway sharpWaitMs
+- * later (the scan then flags a blurry photo). After a photo it waits for reset().
++ * later (the scan then flags a blurry photo). After a photo it waits for photoTaken() or reset(). Once a photo has gone
++ * to TypeScript (photoTaken), the camera keeps shooting: Auto takes the next sheet only after no outline has shown for
++ * clearMs, so it never takes the same sheet twice while the person swaps it.
+  */
+ internal class AutoCapture(
+   private val shift: Double = 0.03,
+   private val holdMs: Long = 800,
+   private val minFrames: Int = 3,
+   private val sharpWaitMs: Long = 2000,
++  private val clearMs: Long = 500,
+ ) {
+   private var anchor: FloatArray? = null
+   private var form: String? = null
+   private var steady = 0
+   private var since = 0L
+   private var taken = false
++  private var waiting = false
++  private var clearSince: Long? = null  // while waiting: when this stretch with no outline began
+ 
+   fun onFrame(d: Detection?, frameWidth: Int, nowMs: Long, auto: Boolean): Step {
+     if (taken) return Step(CameraStatus.CAPTURE, 1f, false)
++    if (waiting) {  // a photo went out: the sheet must leave the frame first
++      if (d != null) {
++        clearSince = null
++        return Step(if (auto) CameraStatus.TAKEN else CameraStatus.FOUND, 0f, false)
++      }
++      val gone = clearSince ?: nowMs.also { clearSince = it }
++      if (nowMs - gone < clearMs) return Step(CameraStatus.LOOKING, 0f, false)
++      waiting = false  // gone long enough: look as at the start
++      clearSince = null
++    }
+     if (d == null) {
+       anchor = null
+       form = null
+       steady = 0
+       return Step(CameraStatus.LOOKING, 0f, false)
+     }
+     val a = anchor
+     var still = a != null && d.form == form
+     if (still) {
+       for (k in 0 until 4) {
+@@ -66,18 +82,26 @@ internal class AutoCapture(
+     val held = min(1f, (nowMs - since) / holdMs.toFloat())
+     val settled = held >= 1f && steady >= minFrames
+     if (!auto) return Step(CameraStatus.FOUND, held, false)
+     if (settled && (d.sharp || nowMs - since >= holdMs + sharpWaitMs)) {
+       taken = true
+       return Step(CameraStatus.CAPTURE, held, true)
+     }
+     return Step(if (settled) CameraStatus.BLURRY else CameraStatus.HOLDING, held, false)
+   }
+ 
++  /** The photo went to TypeScript: Auto takes no other until no outline has shown for clearMs. */
++  fun photoTaken() {
++    reset()
++    waiting = true
++  }
++
++  /** The hold starts over; a photo's wait stays, so a stop and start never retakes the sheet in view. */
+   fun reset() {
+     anchor = null
+     form = null
+     steady = 0
+     since = 0L
+     taken = false
++    clearSince = null  // the time the camera was off isn't time without the sheet
+   }
+ }
+diff --git a/modules/scanner/android/src/main/java/expo/modules/scanner/CheckRate.kt b/modules/scanner/android/src/main/java/expo/modules/scanner/CheckRate.kt
+new file mode 100644
+index 0000000..700619e
+--- /dev/null
++++ b/modules/scanner/android/src/main/java/expo/modules/scanner/CheckRate.kt
+@@ -0,0 +1,29 @@
++package expo.modules.scanner
++
++/** One window of the camera's form checks: how many there were, how long it lasted, and whether a read ran in it. */
++internal data class CheckWindow(val checks: Int, val elapsedMs: Long, val reading: Boolean)
++
++/**
++ * The camera's form checks, counted per window of at least windowMs, for debug builds: the camera-first design's §5
++ * compares the rate while a photo or PDF is read with the rate while none is. Figures only, never what a check found. A
++ * window ends at the first check windowMs or more after its start, so a stall shows as one long window.
++ */
++internal class CheckRate(private val windowMs: Long = 1000) {
++  private var start: Long? = null  // the window's first check; null before any check
++  private var checks = 0
++  private var readRan = false
++
++  /** Counts a check. Once a window has passed, returns it, and this check starts the next one; otherwise null. */
++  fun onCheck(nowMs: Long, reading: Boolean): CheckWindow? {
++    val began = start
++    val window = if (began != null && nowMs - began >= windowMs) CheckWindow(checks, nowMs - began, readRan) else null
++    if (began == null || window != null) {
++      start = nowMs
++      checks = 0
++      readRan = false
++    }
++    checks++
++    readRan = readRan || reading
++    return window
++  }
++}
+diff --git a/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerCameraView.kt b/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerCameraView.kt
+index ae29188..ca5babe 100644
+--- a/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerCameraView.kt
++++ b/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerCameraView.kt
+@@ -5,20 +5,21 @@ import android.content.pm.ApplicationInfo
+ import android.graphics.Bitmap
+ import android.graphics.BitmapFactory
+ import android.graphics.Canvas
+ import android.graphics.Color
+ import android.graphics.Paint
+ import android.graphics.Rect
+ import android.net.Uri
+ import android.os.Handler
+ import android.os.Looper
+ import android.os.SystemClock
++import android.util.Log
+ import android.util.Size
+ import android.view.View
+ import android.widget.FrameLayout
+ import android.widget.ImageView
+ import androidx.camera.core.Camera
+ import androidx.camera.core.CameraSelector
+ import androidx.camera.core.ImageAnalysis
+ import androidx.camera.core.ImageCapture
+ import androidx.camera.core.ImageCaptureException
+ import androidx.camera.core.ImageProxy
+@@ -35,23 +36,25 @@ import expo.modules.kotlin.viewevent.EventDispatcher
+ import expo.modules.kotlin.views.ExpoView
+ import java.io.File
+ import java.nio.ByteBuffer
+ import java.util.concurrent.Executors
+ import java.util.concurrent.atomic.AtomicBoolean
+ 
+ /**
+  * The scanner camera: the back camera's preview fitted in a 3:4 box on black, the sheet's live outline over it, and
+  * the photo, taken by itself (AutoCapture) or by takePhoto(). A port of the test app's CameraActivity.java with
+  * CameraX instead of Camera2. TypeScript gets onReady, onStatus (only when it changes), onPhoto and onCameraError.
++ * After each photo the camera stays bound and looks again; Auto takes the next sheet once the last has left the frame.
+  *
+  * In debuggable builds, testImage (a file:// photo) stands in for the camera, checked every 250 ms after 400 ms, the
+- * way the test app's camera:asset: mode works; capturing copies it.
++ * way the test app's camera:asset: mode works; capturing copies it. Debuggable builds also log the form checks of each
++ * second (CheckRate) to logcat as MbsCheckRate, figures only.
+  */
+ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
+   override val shouldUseAndroidLayout = true
+ 
+   private val onReady by EventDispatcher()
+   private val onStatus by EventDispatcher<Map<String, Any?>>()  // form: null when no form is in view
+   private val onPhoto by EventDispatcher()
+   private val onCameraError by EventDispatcher()
+ 
+   private val box = FrameLayout(context)  // the 3:4 picture
+@@ -61,20 +64,21 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
+   }
+   private val still = ImageView(context).apply {
+     scaleType = ImageView.ScaleType.FIT_CENTER
+     visibility = View.GONE
+   }
+   private val overlay = ScanOverlayView(context)
+   private val analysis = Executors.newSingleThreadExecutor { Thread(it, "scanner-camera").apply { isDaemon = true } }
+   private val main = Handler(Looper.getMainLooper())
+   private val debuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+   private val auto = AutoCapture()
++  private val rate = CheckRate()  // used on the analysis thread only
+ 
+   // props (applied together in applyProps, after each update)
+   private var active = false
+   @Volatile private var autoMode = true
+   private var torch = false
+   private var testImage: String? = null
+ 
+   // the running camera, or the test image standing in for it
+   private var provider: ProcessCameraProvider? = null
+   private var camera: Camera? = null
+@@ -229,28 +233,39 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
+   /** One camera frame: the Y plane, checked by the core, then AutoCapture. */
+   private fun analyze(image: ImageProxy) {
+     try {
+       if (capturing || !running.get()) return
+       val plane = image.planes[0]
+       val rotation = image.imageInfo.rotationDegrees
+       val upright = rotation % 180 == 0
+       val fw = if (upright) image.width else image.height
+       val fh = if (upright) image.height else image.width
+       val found = scannerModule()?.detectFrame(plane.buffer, image.width, image.height, plane.rowStride, rotation)
++      countCheck()
+       onDetection(found?.let(::detectionOf), fw, fh)
+     } catch (e: Exception) {
+       // a frame that couldn't be checked is skipped, like a frame dropped while another was checked
+     } finally {
+       image.close()
+     }
+   }
+ 
++  /**
++   * Debug builds: counts one form check (on the analysis thread), and logs each window's checks, its length in ms and
++   * whether a photo or PDF read ran in it. Figures only.
++   */
++  private fun countCheck() {
++    if (!debuggable) return
++    rate.onCheck(SystemClock.uptimeMillis(), scannerModule()?.reading() == true)
++      ?.let { (checks, elapsedMs, reading) -> Log.d("MbsCheckRate", "checks=$checks ms=$elapsedMs reading=$reading") }
++  }
++
+   private fun onDetection(d: Detection?, fw: Int, fh: Int) {
+     val step = synchronized(auto) { auto.onFrame(d, fw, SystemClock.uptimeMillis(), autoMode) }
+     main.post {
+       if (!running.get()) return@post
+       overlay.show(d?.outline, fw, fh, step.held)
+       setStatus(step.status, d?.form)
+       if (step.capture) takePhoto()
+     }
+   }
+ 
+@@ -267,47 +282,55 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
+     main.post {
+       if (capturing || !running.get()) return@post
+       capturing = true
+       setStatus(CameraStatus.CAPTURE, lastStatus?.second)
+       val dir = File(context.cacheDir, CAPTURE_DIR).apply { mkdirs() }
+       val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
+       val source = testSource
+       if (source != null) {
+         try {
+           source.copyTo(file, overwrite = true)
+-          onPhoto(mapOf("uri" to Uri.fromFile(file).toString()))
++          sendPhoto(file)
+         } catch (e: Exception) {
+           failed("keep", e.message)
+         }
+         return@post
+       }
+       val use = capture ?: return@post failed("capture", "the camera isn't ready")
+       use.takePicture(
+         ImageCapture.OutputFileOptions.Builder(file).build(),
+         ContextCompat.getMainExecutor(context),
+         object : ImageCapture.OnImageSavedCallback {
+           override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+             if (!running.get()) {  // the camera stopped (the screen was left) while the photo was saved: nobody reads it
+               file.delete()
+               return
+             }
+-            onPhoto(mapOf("uri" to Uri.fromFile(file).toString()))  // EXIF holds the turn; the core applies it
++            sendPhoto(file)  // EXIF holds the turn; the core applies it
+           }
+ 
+           override fun onError(e: ImageCaptureException) {
+             failed(if (e.imageCaptureError == ImageCapture.ERROR_FILE_IO) "keep" else "capture", e.message)
+           }
+         },
+       )
+     }
+   }
+ 
++  /** Hands the photo to TypeScript, then looks again: the camera stays bound, and Auto waits for the sheet to leave. */
++  private fun sendPhoto(file: File) {
++    onPhoto(mapOf("uri" to Uri.fromFile(file).toString()))
++    synchronized(auto) { auto.photoTaken() }
++    capturing = false
++    lastStatus = null
++  }
++
+   private fun failed(code: String, message: String?) {
+     onCameraError(mapOf("code" to code, "message" to (message ?: "")))
+     synchronized(auto) { auto.reset() }
+     capturing = false
+     lastStatus = null
+   }
+ 
+   private fun emitError(code: String, message: String) {
+     main.post { onCameraError(mapOf("code" to code, "message" to message)) }
+   }
+@@ -332,20 +355,21 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
+     val frame = greyFrame(bitmap)
+     testFrame = frame
+     onReady(mapOf("hasTorch" to false))
+     main.postDelayed(object : Runnable {
+       override fun run() {
+         if (!running.get() || testFrame !== frame) return
+         analysis.execute {
+           if (capturing || !running.get()) return@execute
+           try {
+             val found = scannerModule()?.detectFrame(frame, TEST_W, TEST_H, TEST_W, 0)
++            countCheck()
+             onDetection(found?.let(::detectionOf), TEST_W, TEST_H)
+           } catch (e: Exception) {
+             // skipped, like a camera frame
+           }
+         }
+         main.postDelayed(this, 250)
+       }
+     }, 400)
+   }
+ 
+diff --git a/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerModule.kt b/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerModule.kt
+index d3a85f5..b31a1f9 100644
+--- a/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerModule.kt
++++ b/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerModule.kt
+@@ -15,20 +15,21 @@ import expo.modules.kotlin.exception.CodedException
+ import expo.modules.kotlin.functions.Coroutine
+ import expo.modules.kotlin.modules.Module
+ import expo.modules.kotlin.modules.ModuleDefinition
+ import expo.modules.kotlin.records.Field
+ import expo.modules.kotlin.records.Record
+ import java.io.File
+ import java.io.FileOutputStream
+ import java.io.IOException
+ import java.nio.ByteBuffer
+ import java.util.concurrent.Executors
++import java.util.concurrent.atomic.AtomicInteger
+ import kotlinx.coroutines.asCoroutineDispatcher
+ import kotlinx.coroutines.withContext
+ 
+ internal class UnreadablePhotoException :
+   CodedException("ERR_UNREADABLE_IMAGE", "This file isn't a photo the scanner can open.", null)
+ 
+ internal class SaveNeedsAndroid10Exception :
+   CodedException("ERR_SAVE_NEEDS_ANDROID_10", "Saving needs Android 10 or newer.", null)
+ 
+ internal class SaveFailedException(cause: Throwable?) :
+@@ -74,20 +75,23 @@ class ScannerModule : Module() {
+         String(bytes("field_map.json"), Charsets.UTF_8),
+         bytes("form_small.png"),
+         String(bytes("service_invoice.json"), Charsets.UTF_8),
+         String(bytes("bir_2307.json"), Charsets.UTF_8),
+         4,
+       )
+     },
+     destroy = { NativeScanner.destroy(it) },
+   )
+ 
++  /** Photo and PDF reads in flight (scan, readPdf). */
++  private val readsInFlight = AtomicInteger()
++
+   override fun definition() = ModuleDefinition {
+     Name("Scanner")
+ 
+     // Camera photos left from before (the app was closed during a read): none can be in use yet.
+     OnCreate { appContext.reactContext?.let { clearCaptures(it.cacheDir) } }
+ 
+     Function("coreInfo") { NativeScanner.coreInfo() }
+ 
+     AsyncFunction("preload") Coroutine { ->
+       withContext(scanThread) { scanner.use { } }
+@@ -139,21 +143,34 @@ class ScannerModule : Module() {
+     OnDestroy {
+       scanner.close()
+       scanThread.close()
+     }
+   }
+ 
+   /** The camera view's check of one frame (see NativeScanner.detectFrame), on the camera's own thread. */
+   internal fun detectFrame(y: ByteBuffer, width: Int, height: Int, rowStride: Int, rotation: Int): FloatArray? =
+     scanner.use { NativeScanner.detectFrame(it, y, width, height, rowStride, rotation) }
+ 
+-  private fun scan(uri: String, options: ScanOptions): String = scanner.use { handle ->
++  /** A photo or PDF read is under way: the camera's debug counter (CheckRate) notes it with its checks. */
++  internal fun reading(): Boolean = readsInFlight.get() > 0
++
++  /** scanner.use for a photo or PDF read, counted in readsInFlight from its start to its end, even when it fails. */
++  private fun <T> useForRead(block: (Long) -> T): T {
++    readsInFlight.incrementAndGet()
++    try {
++      return scanner.use(block)
++    } finally {
++      readsInFlight.decrementAndGet()
++    }
++  }
++
++  private fun scan(uri: String, options: ScanOptions): String = useForRead { handle ->
+     val work = File(context.cacheDir, "scan-work").apply {
+       deleteRecursively()
+       mkdirs()
+     }
+     val scans = File(context.filesDir, "scans")
+     val outDir = if (options.keepFiles) File(scans, System.currentTimeMillis().toString()).apply { mkdirs() } else null
+     val out = outDir?.absolutePath ?: ""
+     try {
+       // a photo to delete goes even when it can't be read: nobody would read it again
+       val json = readThenDelete(options.deletePhoto, delete = { runCatching { deletePhoto(uri) } }) {
+@@ -231,21 +248,21 @@ class ScannerModule : Module() {
+     bitmap.recycle()
+     return png
+   }
+ 
+   /**
+    * Reads page 1 of a PDF as scan() reads a photo, keeping its files: a content:// file (the person's own, from the
+    * system's file picker) through a work copy, deleted afterwards; a file:// in place. The person's file is never
+    * changed or deleted. Every failure rejects with a code (PdfInput.CODES); a file its app says is over 20 MB is
+    * refused before any of it is copied. Once it has been read, or refused, the picker's lasting access to it is given up.
+    */
+-  private fun readPdf(uri: String): String = scanner.use { handle ->
++  private fun readPdf(uri: String): String = useForRead { handle ->
+     val work = File(context.cacheDir, "scan-work").apply {
+       deleteRecursively()
+       mkdirs()
+     }
+     val scans = File(context.filesDir, "scans")
+     val outDir = File(scans, System.currentTimeMillis().toString())  // the core makes it once the PDF is accepted
+     try {
+       val json = withPdfFile(uri, work) { path -> NativeScanner.scanPdf(handle, path, outDir.absolutePath) }
+       keepNewest(scans, KEEP_SCANS)
+       json
+@@ -365,23 +382,24 @@ class ScannerModule : Module() {
+   }
+ 
+   /** The app's peak memory so far (VmHWM, kB): the speed test's "Peak memory". */
+   private fun peakKb(): Long = try {
+     File("/proc/self/status").readLines().firstOrNull { it.startsWith("VmHWM:") }
+       ?.trim()?.split(Regex("\\s+"))?.getOrNull(1)?.toLong() ?: 0L
+   } catch (e: Exception) {
+     0L
+   }
+ 
+-  /** Recent scans live in the app's files: keep the newest few folders (Recent scans shows 20), delete the rest. */
++  /** Recent scans live in the app's files: keep the newest folders, one for each scan the app keeps; delete the rest. */
+   private fun keepNewest(dir: File, keep: Int) {
+     dir.listFiles()
+       ?.filter { it.isDirectory }
+       ?.sortedByDescending { it.name.toLongOrNull() ?: 0L }
+       ?.drop(keep)
+       ?.forEach { it.deleteRecursively() }
+   }
+ 
+   private companion object {
+-    const val KEEP_SCANS = 20
++    /** Sessions keep 100 unsaved scans, and lib/scans.ts's KEEP is the same. */
++    const val KEEP_SCANS = 100
+   }
+ }
+diff --git a/modules/scanner/android/src/test/java/expo/modules/scanner/AutoCaptureTest.kt b/modules/scanner/android/src/test/java/expo/modules/scanner/AutoCaptureTest.kt
+index f6d3183..be64f52 100644
+--- a/modules/scanner/android/src/test/java/expo/modules/scanner/AutoCaptureTest.kt
++++ b/modules/scanner/android/src/test/java/expo/modules/scanner/AutoCaptureTest.kt
+@@ -119,11 +119,79 @@ class AutoCaptureTest {
+     a.onFrame(sales(), width, 0, auto = true)
+     a.onFrame(sales(), width, 400, auto = true)
+     assertTrue(a.onFrame(sales(), width, 800, auto = true).capture)
+     assertFalse(a.onFrame(sales(), width, 900, auto = true).capture)
+     assertFalse(a.onFrame(sales(), width, 5000, auto = true).capture)
+     a.reset()
+     val fresh = a.onFrame(sales(), width, 6000, auto = true)
+     assertEquals(CameraStatus.HOLDING, fresh.status)
+     assertEquals(0f, fresh.held)
+   }
++
++  /** Auto took a photo at 800 (frames at 0, 400 and 800), and it went to TypeScript. */
++  private fun tookAPhoto(): AutoCapture {
++    val a = AutoCapture()
++    a.onFrame(sales(), width, 0, auto = true)
++    a.onFrame(sales(), width, 400, auto = true)
++    assertTrue(a.onFrame(sales(), width, 800, auto = true).capture)
++    a.photoTaken()
++    return a
++  }
++
++  @Test
++  fun `after a photo, the same sheet in view is never taken again`() {
++    val a = tookAPhoto()
++    var t = 900L
++    while (t <= 10000) {
++      val step = a.onFrame(sales(), width, t, auto = true)
++      assertEquals(CameraStatus.TAKEN, step.status)
++      assertFalse(step.capture)
++      t += 100
++    }
++  }
++
++  @Test
++  fun `no outline for 500 ms re-arms it, and the next sheet is taken after its hold`() {
++    val a = tookAPhoto()
++    assertEquals(CameraStatus.LOOKING, a.onFrame(null, width, 1000, auto = true).status)
++    assertEquals(CameraStatus.LOOKING, a.onFrame(null, width, 1499, auto = true).status)
++    assertEquals(CameraStatus.LOOKING, a.onFrame(null, width, 1500, auto = true).status)  // gone 500 ms: re-armed
++    val next = a.onFrame(sales(), width, 1600, auto = true)
++    assertEquals(CameraStatus.HOLDING, next.status)
++    assertEquals(0f, next.held)
++    assertFalse(a.onFrame(sales(), width, 2000, auto = true).capture)
++    assertTrue(a.onFrame(sales(), width, 2400, auto = true).capture)  // 800 ms and 3 frames, as for the first
++  }
++
++  @Test
++  fun `an outline back within 500 ms starts the wait over`() {
++    val a = tookAPhoto()
++    a.onFrame(null, width, 1000, auto = true)
++    assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 1400, auto = true).status)
++    a.onFrame(null, width, 1500, auto = true)
++    assertEquals(CameraStatus.LOOKING, a.onFrame(null, width, 1999, auto = true).status)
++    assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 2000, auto = true).status)  // still waiting
++  }
++
++  @Test
++  fun `manual mode shows the form found while Auto waits`() {
++    val a = AutoCapture()
++    assertEquals(CameraStatus.FOUND, a.onFrame(sales(), width, 0, auto = false).status)
++    a.photoTaken()  // the shutter's photo
++    val step = a.onFrame(sales(), width, 100, auto = false)
++    assertEquals(CameraStatus.FOUND, step.status)
++    assertFalse(step.capture)
++    assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 200, auto = true).status)  // Auto still waits for it
++  }
++
++  @Test
++  fun `a stop keeps the wait, so the sheet still in view isn't taken again`() {
++    val a = tookAPhoto()
++    a.reset()
++    assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 900, auto = true).status)
++    // nor is the time the camera was stopped counted as time without the sheet
++    a.onFrame(null, width, 1000, auto = true)
++    a.reset()
++    a.onFrame(null, width, 1500, auto = true)
++    assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 1600, auto = true).status)
++  }
+ }
+diff --git a/modules/scanner/android/src/test/java/expo/modules/scanner/CheckRateTest.kt b/modules/scanner/android/src/test/java/expo/modules/scanner/CheckRateTest.kt
+new file mode 100644
+index 0000000..2eeba87
+--- /dev/null
++++ b/modules/scanner/android/src/test/java/expo/modules/scanner/CheckRateTest.kt
+@@ -0,0 +1,30 @@
++package expo.modules.scanner
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Test
++
++class CheckRateTest {
++  @Test
++  fun `counts each second's checks, and whether a read ran in it`() {
++    val rate = CheckRate()
++    for (t in 0L until 1000L step 100L) assertNull(rate.onCheck(t, reading = false))
++    assertEquals(CheckWindow(10, 1000, false), rate.onCheck(1000, reading = false))
++    for (t in 1100L until 2000L step 100L) assertNull(rate.onCheck(t, reading = t == 1500L))
++    assertEquals(CheckWindow(10, 1000, true), rate.onCheck(2000, reading = false))
++  }
++
++  @Test
++  fun `nothing is reported before a second has passed`() {
++    val rate = CheckRate()
++    for (t in 0L until 1000L) assertNull(rate.onCheck(t, reading = false))
++  }
++
++  @Test
++  fun `a stall is one window as long as the stall`() {
++    val rate = CheckRate()
++    rate.onCheck(0, reading = true)
++    rate.onCheck(100, reading = false)
++    assertEquals(CheckWindow(2, 3500, true), rate.onCheck(3500, reading = false))
++  }
++}
+diff --git a/modules/scanner/src/ScannerCameraView.tsx b/modules/scanner/src/ScannerCameraView.tsx
+index 25bc9c7..fddb4a7 100644
+--- a/modules/scanner/src/ScannerCameraView.tsx
++++ b/modules/scanner/src/ScannerCameraView.tsx
+@@ -1,20 +1,21 @@
+ import { requireNativeView } from 'expo';
+ import { type ComponentType, type Ref, forwardRef, useImperativeHandle, useRef } from 'react';
+ import type { ViewProps } from 'react-native';
+ 
+ import type { FormName } from './types';
+ 
+ // The scanner camera (ScannerCameraView.kt): the back camera in a 3:4 box with the sheet's live outline, taking the
+-// photo by itself (auto) or on takePhoto(). Status events come only when the status or the form changes.
++// photo by itself (auto) or on takePhoto(). Status events come only when the status or the form changes. After each
++// photo it keeps shooting: 'taken' while Auto waits for that sheet to leave the frame before it takes the next one.
+ 
+-export type CameraStatus = 'looking' | 'holding' | 'blurry' | 'found' | 'capturing';
++export type CameraStatus = 'looking' | 'holding' | 'blurry' | 'found' | 'capturing' | 'taken';
+ export type CameraErrorCode = 'no_camera' | 'start' | 'capture' | 'keep';
+ 
+ export type ScannerCameraProps = ViewProps & {
+   active: boolean; // false stops the camera (while a photo is read, or the screen isn't shown)
+   auto: boolean; // take the photo by itself once the outline holds still
+   torch: boolean;
+   testImage?: string | null; // development builds only: a file:// photo stands in for the camera
+   onReady?: (e: { nativeEvent: { hasTorch: boolean } }) => void;
+   onStatus?: (e: { nativeEvent: { status: CameraStatus; form: FormName | null } }) => void;
+   onPhoto?: (e: { nativeEvent: { uri: string } }) => void;

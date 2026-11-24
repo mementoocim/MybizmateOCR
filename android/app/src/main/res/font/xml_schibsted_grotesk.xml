@@ -1,0 +1,5 @@
+<font-family xmlns:app="http://schemas.android.com/apk/res-auto">
+  <font app:font="@font/schibsted_grotesk_regular" app:fontStyle="normal" app:fontWeight="400" app:fontVariationSettings="'wght' 400"/>
+  <font app:font="@font/schibsted_grotesk_semi_bold" app:fontStyle="normal" app:fontWeight="600" app:fontVariationSettings="'wght' 600"/>
+  <font app:font="@font/schibsted_grotesk_extra_bold" app:fontStyle="normal" app:fontWeight="800" app:fontVariationSettings="'wght' 800"/>
+</font-family>

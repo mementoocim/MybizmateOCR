@@ -1,0 +1,208 @@
+# Review package: 515d06f..4967dee
+
+## Commits
+4967dee fix(app): a scan's folder is only ever the scanner's own numbered folder
+
+## Files changed
+ __tests__/saved.test.ts | 15 +++++++++++++++
+ __tests__/scans.test.ts | 27 +++++++++++++++++++++++++++
+ lib/saved.ts            |  6 +++---
+ lib/scans.ts            | 23 ++++++++++++++---------
+ 4 files changed, 59 insertions(+), 12 deletions(-)
+
+## Diff
+diff --git a/__tests__/saved.test.ts b/__tests__/saved.test.ts
+index 615c4ca..99d53ee 100644
+--- a/__tests__/saved.test.ts
++++ b/__tests__/saved.test.ts
+@@ -60,20 +60,35 @@ test("saving moves the scan's folder out of scans/ and rewrites its files' URIs"
+   const folder = `file:///docs/saved/${id}`;
+   for (const uri of [r.scanDir, r.pageUri, r.originalUri, ...r.reads.map((b) => b.cropUri)]) {
+     expect(uri!.startsWith(folder)).toBe(true);
+   }
+   expect(memoryFs.files.has(r.pageUri!)).toBe(true);
+   expect([...memoryFs.files.keys()].some((k) => k.startsWith(`${SCAN_DIR}/`))).toBe(false);
+   expect(memoryFs.files.has(`${folder}/scan.json`)).toBe(true);
+   expect(m.scans.getScan(id)!.saved).toMatchObject({ details: DETAILS });
+ });
+ 
++test("a scan whose folder isn't one of the scanner's numbered folders is saved where it is: nothing moves (ruling T2-3)", async () => {
++  const m = load();
++  const { Directory } = require('expo-file-system'); // the one lib/saved uses until the next reset
++  const move = jest.spyOn(Directory.prototype, 'move');
++  // on the phone, a "." or ".." (or "%2e%2e") in a folder's URI resolves to files/scans/ itself, or the files above it
++  for (const dir of ['..', '.', '%2e%2e'].map((name) => `file:///docs/scans/${name}`)) {
++    const id = cameraScan(m, dir);
++    await m.saved.saveScan(id, DETAILS); // as a scan that kept no files is
++    expect(m.scans.getScan(id)!.result.scanDir).toBe(dir);
++    expect(m.saved.savedSummary(id)).toBeDefined();
++  }
++  expect(move).not.toHaveBeenCalled();
++  jest.restoreAllMocks();
++});
++
+ test('the summary', async () => {
+   const m = load();
+   await m.lists.importPartiesCsv(PARTIES, 'customer');
+   const id = cameraScan(m);
+   await m.saved.saveScan(id, DETAILS);
+   const summary = m.saved.savedList()[0];
+   expect(summary).toMatchObject({
+     id,
+     kind: 'sale',
+     label: 'Camera photo',
+diff --git a/__tests__/scans.test.ts b/__tests__/scans.test.ts
+index aaaad62..5984fdd 100644
+--- a/__tests__/scans.test.ts
++++ b/__tests__/scans.test.ts
+@@ -325,10 +325,37 @@ test('deleting an unsaved scan forgets it and its folder; a saved one is refused
+   // a saved one is refused: its folder is under saved/ now, and Saved's own delete is its way out
+   updateScan(kept, { saved: { savedAt: '2026-11-24T01:41:00.000Z', details: { account: '1205' } } });
+   expect(() => deleteScan(kept)).toThrow('saved');
+   expect(getScan(kept)).toBeDefined();
+   expect(filesIn(KEPT)).toEqual(keptFiles);
+ 
+   deleteScan('missing'); // no such scan: nothing to do
+   await scansWritten();
+   expect(recentIds()).toEqual([kept]);
+ });
++
++test("only the scanner's own numbered folder is ever deleted, never one a dot segment resolves above it (ruling T2-3)", async () => {
++  const { addScan, deleteScan, getScan, scansWritten } = require('../lib/scans');
++  const { Directory } = require('expo-file-system'); // the one lib/scans uses until the next reset
++  // On the phone, expo-file-system resolves ".", ".." and "%2e%2e" in a folder's URI: files/scans/ itself, or the
++  // app's whole files folder, which exist. This file system doesn't, so each folder exists here.
++  jest.spyOn(Directory.prototype, 'exists', 'get').mockReturnValue(true);
++  const del = jest.spyOn(Directory.prototype, 'delete');
++  const dirs = [
++    ...['..', '.', '%2e%2e', '%2E.', '1/2'].map((name) => `file:///docs/scans/${name}`),
++    'file:///s/scans/1795000000004', // numbered, but not in the app's files/scans/
++  ];
++  for (const dir of dirs) {
++    const id = addScan({ label: 'Camera photo', source: 'camera', result: result(dir) });
++    deleteScan(id);
++    expect(getScan(id)).toBeUndefined(); // forgotten all the same
++  }
++  expect(del).not.toHaveBeenCalled();
++
++  // the scanner's own folder, named by its time in ms, is
++  const id = addScan({ label: 'Camera photo', source: 'camera', result: result('file:///docs/scans/1795000000003') });
++  deleteScan(id);
++  expect(del).toHaveBeenCalledTimes(1);
++  expect(del.mock.contexts[0]).toMatchObject({ uri: 'file:///docs/scans/1795000000003/' });
++  await scansWritten();
++  jest.restoreAllMocks();
++});
+diff --git a/lib/saved.ts b/lib/saved.ts
+index 83be56b..83ac0c7 100644
+--- a/lib/saved.ts
++++ b/lib/saved.ts
+@@ -8,20 +8,21 @@ import { lists } from './lists';
+ import { isInvoice, saleOf, type SaleView } from './sale';
+ import {
+   cacheScan,
+   forgetScan,
+   getScan,
+   type InvoiceDetails,
+   type InvoiceKind,
+   type KeptResult,
+   type Kind,
+   type SaveDetails,
++  scannerFolder,
+   type SourceTag,
+   type StoredScan,
+   updateScan,
+   withPdfFields,
+ } from './scans';
+ import { annotationOn, type Settings, settings, updateSettings } from './settings';
+ import { cleanTag } from './training/codes';
+ 
+ // The saved scans, which Saved lists: the scans the person saved as a sale, a purchase or a 2307, each as import rows
+ // (an invoice's one row, a 2307's one per payment). A saved scan's folder moves from the scanner's scans/ (which keeps
+@@ -143,23 +144,22 @@ function fnv1a(text: string): string {
+ export function marksOf(scan: Pick<StoredScan, 'edits' | 'confirmed'>): string {
+   const edits = Object.keys(scan.edits)
+     .sort()
+     .map((box) => [box, scan.edits[box]]);
+   return fnv1a(JSON.stringify([edits, [...(scan.confirmed ?? [])].sort()]));
+ }
+ 
+ /** Moves a scan's folder out of the scanner's scans/ to saved/<id>/, and points every file of its result there. */
+ async function moveToSaved(scan: StoredScan): Promise<ScanResult> {
+   const r = scan.result;
+-  if (!r.scanDir) return r;
+-  const from = trimSlash(r.scanDir);
+-  if (!/\/scans\/[^/]+$/.test(from)) return r; // already saved (or not a folder the scanner cleans up)
++  const from = scannerFolder(r);
++  if (from === null) return r; // already saved, kept no files, or not a folder the scanner made (lib/scans)
+   const root = new Directory(Paths.document, 'saved');
+   if (!root.exists) root.create({ intermediates: true });
+   const folder = new Directory(from);
+   await folder.move(folderOf(scan.id));
+   const to = trimSlash(folder.uri);
+   const moved = (uri: string | null) => (uri !== null && uri.startsWith(`${from}/`) ? to + uri.slice(from.length) : uri);
+   return {
+     ...r,
+     scanDir: to,
+     pageUri: moved(r.pageUri),
+diff --git a/lib/scans.ts b/lib/scans.ts
+index 16cd691..cd0f7f9 100644
+--- a/lib/scans.ts
++++ b/lib/scans.ts
+@@ -217,42 +217,47 @@ export function cacheScan(scan: StoredScan): void {
+ export function forgetScan(id: string): void {
+   if (recent.some((s) => s.id === id)) {
+     recent = recent.filter((s) => s.id !== id);
+     save();
+   }
+   opened.delete(id);
+   changed();
+ }
+ 
+ /**
+- * The folder the scanner wrote a scan's files to, files/scans/<ms>/ (ScannerModule's scan and readPdf, which keep only
+- * the newest KEEP), as the result's scanDir gives it; null when it kept no files, or when they're anywhere else.
++ * The scan's folder of files, as the result's scanDir gives it with no trailing slash, when it's one the scanner made:
++ * files/scans/<ms>, named by the time in ms (ScannerModule's scan and readPdf, which keep only the newest KEEP). Null
++ * when it kept no files, or for any other folder: saved/<id>, or a name that isn't all digits. A name such as "." or
++ * ".." (or "%2e%2e") would resolve to files/scans/ itself or the folder above it (ruling T2-3). deleteScan deletes only
++ * this folder, and saveScan moves only this one (lib/saved).
+  */
+-function scannerFolder(r: ScanResult): Directory | null {
+-  if (!r.scanDir) return null;
+-  const scans = new Directory(Paths.document, 'scans').uri.replace(/\/+$/, '');
+-  const dir = r.scanDir.replace(/\/+$/, '');
+-  const name = dir.startsWith(`${scans}/`) ? dir.slice(scans.length + 1) : '';
+-  return name !== '' && !name.includes('/') ? new Directory(dir) : null;
++export function scannerFolder(r: Pick<ScanResult, 'scanDir'>): string | null {
++  const dir = (r.scanDir ?? '').replace(/\/+$/, '');
++  if (!/\/scans\/\d+$/.test(dir)) return null;
++  const root = new Directory(Paths.document, 'scans').uri.replace(/\/+$/, '');
++  return dir.slice(0, dir.lastIndexOf('/')) === root ? dir : null;
+ }
+ 
+ /**
+  * Deletes an unsaved scan: its folder of files in the scanner's files/scans/, then the scan, from the recent scans. A
+  * folder that can't be deleted throws, and the scan stays. A saved scan throws 'saved': its folder has moved to saved/,
+  * and deleteSaved (lib/saved) is its way out.
+  */
+ export function deleteScan(id: string): void {
+   const scan = getScan(id);
+   if (!scan) return;
+   if (scan.saved) throw new Error('saved');
+   const folder = scannerFolder(scan.result);
+-  if (folder?.exists) folder.delete();
++  if (folder !== null) {
++    const dir = new Directory(folder);
++    if (dir.exists) dir.delete();
++  }
+   forgetScan(id);
+ }
+ 
+ /** Newest first, KEEP at most; the same list until it changes. */
+ export function recentScans(): readonly StoredScan[] {
+   return recent;
+ }
+ 
+ /**
+  * At start: the saved list, without scans whose folder is gone. Older entries get the new fields' starting values,

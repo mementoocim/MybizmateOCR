@@ -1,0 +1,42 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath('com.android.tools.build:gradle')
+    classpath('com.facebook.react:react-native-gradle-plugin')
+    def kotlinVersion = findProperty('android.kotlinVersion')
+    classpath(kotlinVersion ? "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion" : 'org.jetbrains.kotlin:kotlin-gradle-plugin')
+  }
+}
+
+allprojects {
+  repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://www.jitpack.io' }
+  }
+}
+
+// mybizmate-ocr: short native build paths on Windows (plugins/with-windows-native-paths.js)
+if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+  def cxxRoot = new File(System.getenv('LOCALAPPDATA') ?: System.getProperty('user.home'), 'mbs-cxx')
+  subprojects { sub ->
+    ['com.android.library', 'com.android.application'].each { id ->
+      sub.plugins.withId(id) {
+        try {
+          sub.android.externalNativeBuild.cmake.buildStagingDirectory = new File(cxxRoot, sub.name)
+          sub.android.defaultConfig.externalNativeBuild.cmake.arguments('-DCMAKE_OBJECT_PATH_MAX=250')
+        } catch (Exception e) {
+          logger.warn("mybizmate-ocr: kept the default native build folder for ${sub.name}: ${e.message}")
+        }
+      }
+    }
+  }
+}
+
+apply plugin: "expo-root-project"
+apply plugin: "com.facebook.react.rootproject"
