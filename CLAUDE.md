@@ -16,7 +16,7 @@ Claude Code reads this file at the start of every session in this repo. It carri
 
 ## Working agreements with the user (binding)
 
-**Language:** the user writes Taglish. Reply in Taglish, keeping technical terms in English. Written deliverables (docs, plans, READMEs, commits) are in English.
+**Language:** reply in English (the user's word, 2026-11-24). The user may write in Taglish. Written deliverables (docs, plans, READMEs, commits) are in English too.
 
 **Git:**
 - The user is the only developer and owns the repo. Merge into `master` and push **only at the user's word**, with **no pull requests**.
