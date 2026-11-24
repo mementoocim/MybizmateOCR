@@ -129,6 +129,7 @@ class ScannerModule : Module() {
       Prop("testImage") { view: ScannerCameraView, uri: String? -> view.setTestImage(uri) }
       OnViewDidUpdateProps { view: ScannerCameraView -> view.applyProps() }
       AsyncFunction("takePhoto") { view: ScannerCameraView -> view.takePhoto() }
+      AsyncFunction("rearm") { view: ScannerCameraView -> view.rearm() }
       OnViewDestroys { view: ScannerCameraView -> view.release() }
     }
 

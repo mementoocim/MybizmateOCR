@@ -194,4 +194,18 @@ class AutoCaptureTest {
     a.onFrame(null, width, 1500, auto = true)
     assertEquals(CameraStatus.TAKEN, a.onFrame(sales(), width, 1600, auto = true).status)
   }
+
+  @Test
+  fun `rearm clears the wait, so the sheet in view is taken after its hold`() {
+    val a = tookAPhoto()
+    a.rearm()  // a Retake: the sheet just taken is the one to take again
+    var t = 1000L
+    while (t < 1800) {
+      val step = a.onFrame(sales(), width, t, auto = true)
+      assertEquals(CameraStatus.HOLDING, step.status)
+      assertFalse(step.capture)
+      t += 100
+    }
+    assertTrue(a.onFrame(sales(), width, 1800, auto = true).capture)  // 800 ms and 3 frames, as for the first
+  }
 }

@@ -28,7 +28,7 @@ internal data class Step(val status: CameraStatus, val held: Float, val capture:
  * form) for holdMs and at least minFrames frames. It then takes the photo on a sharp frame, or anyway sharpWaitMs
  * later (the scan then flags a blurry photo). After a photo it waits for photoTaken() or reset(). Once a photo has gone
  * to TypeScript (photoTaken), the camera keeps shooting: Auto takes the next sheet only after no outline has shown for
- * clearMs, so it never takes the same sheet twice while the person swaps it.
+ * clearMs, so it never takes the same sheet twice while the person swaps it. A Retake ends that wait (rearm).
  */
 internal class AutoCapture(
   private val shift: Double = 0.03,
@@ -93,6 +93,12 @@ internal class AutoCapture(
   fun photoTaken() {
     reset()
     waiting = true
+  }
+
+  /** A Retake: the wait ends and the hold starts over, so Auto takes the sheet in view after its hold. */
+  fun rearm() {
+    reset()
+    waiting = false
   }
 
   /** The hold starts over; a photo's wait stays, so a stop and start never retakes the sheet in view. */

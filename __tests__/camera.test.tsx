@@ -25,6 +25,7 @@ const mockRouter = { push: jest.fn(), replace: jest.fn() };
 const mockNavigation = { canGoBack: jest.fn(() => true), goBack: jest.fn() };
 const mockScanPhoto = jest.fn();
 const mockTakePhoto = jest.fn(async () => {});
+const mockRearm = jest.fn(async () => {});
 const mockGetPermission = jest.fn();
 const mockRequestPermission = jest.fn();
 const mockLibrary = jest.fn();
@@ -37,14 +38,14 @@ jest.mock('expo-router', () => ({
   useIsFocused: () => mockFocused,
   useLocalSearchParams: () => mockParams,
 }));
-// The native camera stands in as a plain view carrying its props; its ref carries takePhoto.
+// The native camera stands in as a plain view carrying its props; its ref carries takePhoto and rearm.
 jest.mock('../modules/scanner', () => {
   const React = require('react');
   const { View } = require('react-native');
   return {
     scanPhoto: (uri: string, options: object) => mockScanPhoto(uri, options),
     ScannerCameraView: React.forwardRef(function MockCamera(props: object, ref: unknown) {
-      React.useImperativeHandle(ref, () => ({ takePhoto: mockTakePhoto }));
+      React.useImperativeHandle(ref, () => ({ takePhoto: mockTakePhoto, rearm: mockRearm }));
       return React.createElement(View, { testID: 'camera', ...props });
     }),
   };

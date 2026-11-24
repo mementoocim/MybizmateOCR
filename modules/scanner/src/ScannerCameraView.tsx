@@ -22,9 +22,13 @@ export type ScannerCameraProps = ViewProps & {
   onCameraError?: (e: { nativeEvent: { code: CameraErrorCode; message: string } }) => void;
 };
 
-export type ScannerCameraRef = { takePhoto(): Promise<void> };
+/**
+ * takePhoto: takes the photo now. rearm: for a Retake, Auto stops waiting for the last photo's sheet to leave the
+ * frame, and takes the sheet in view after its hold (a stop and start keeps that wait).
+ */
+export type ScannerCameraRef = { takePhoto(): Promise<void>; rearm(): Promise<void> };
 
-// The native view's ref carries its AsyncFunctions (takePhoto).
+// The native view's ref carries its AsyncFunctions (takePhoto, rearm).
 const NativeCamera = requireNativeView<ScannerCameraProps>('Scanner') as unknown as ComponentType<
   ScannerCameraProps & { ref?: Ref<ScannerCameraRef> }
 >;
@@ -33,6 +37,7 @@ export const ScannerCameraView = forwardRef<ScannerCameraRef, ScannerCameraProps
   const native = useRef<ScannerCameraRef>(null);
   useImperativeHandle(ref, () => ({
     takePhoto: () => native.current?.takePhoto() ?? Promise.resolve(),
+    rearm: () => native.current?.rearm() ?? Promise.resolve(),
   }));
   return <NativeCamera {...props} ref={native} />;
 });

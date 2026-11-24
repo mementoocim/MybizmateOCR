@@ -316,6 +316,15 @@ class ScannerCameraView(context: Context, appContext: AppContext) : ExpoView(con
     }
   }
 
+  /**
+   * For a Retake: Auto stops waiting for the last photo's sheet to leave the frame, and takes the sheet in view after
+   * its hold. A stop and start keeps that wait; this ends it. On the main thread, as every view function runs.
+   */
+  fun rearm() {
+    synchronized(auto) { auto.rearm() }
+    lastStatus = null  // the next status is sent, whatever it is
+  }
+
   /** Hands the photo to TypeScript, then looks again: the camera stays bound, and Auto waits for the sheet to leave. */
   private fun sendPhoto(file: File) {
     onPhoto(mapOf("uri" to Uri.fromFile(file).toString()))
