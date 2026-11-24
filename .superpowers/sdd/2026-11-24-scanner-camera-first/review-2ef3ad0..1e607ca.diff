@@ -1,0 +1,113 @@
+diff --git a/__tests__/sessions.test.ts b/__tests__/sessions.test.ts
+index 7ecdb472..a888dc7c 100644
+--- a/__tests__/sessions.test.ts
++++ b/__tests__/sessions.test.ts
+@@ -318,6 +318,20 @@ test('badges: at most two, from N to check, N retake, All saved and Exported', (
+       ]),
+     ),
+   ).toEqual({ ...NONE, ready: 1, retake: 1, exported: 1 });
++
++  // samples count nowhere (call 9, ruling T4-1): a sample's session has no badges and no card line
++  const passing = scanOf('inv_0007', { source: 'sample', label: 'Sample 0007', at: at(24, 9, 4) });
++  const blankSample = scanOf('blank_page', { source: 'sample', label: 'Sample 0000', at: at(24, 9, 5) });
++  const sampleStatuses = statuses([
++    [passing, 'ready'],
++    [blankSample, 'retake'],
++  ]);
++  for (const sample of [passing, blankSample]) {
++    const own = sessionsOf(membersOf([sample], []))[0];
++    expect(tallyOf(own, sampleStatuses)).toEqual(NONE);
++    expect(sessionBadges(tallyOf(own, sampleStatuses))).toEqual([]);
++    expect(cardLine(tallyOf(own, sampleStatuses), 0)).toBe('');
++  }
+ });
+ 
+ test("the card's line: 1 ready · 1 to check · 1 to retake, failed reads among the retakes; All saved.", () => {
+@@ -327,6 +341,7 @@ test("the card's line: 1 ready · 1 to check · 1 to retake, failed reads among
+   expect(cardLine({ ...NONE, saved: 2 }, 0)).toBe('All saved.');
+   expect(cardLine({ ...NONE, saved: 1, exported: 1 }, 0)).toBe('All saved.');
+   expect(cardLine({ ...NONE, saved: 1 }, 1)).toBe('1 to retake'); // a failed read is left too
++  expect(cardLine(NONE, 0)).toBe(''); // nothing at all: no line
+ });
+ 
+ test('the next to check: the first unsaved scan whose form was found, past a retake and the one open', () => {
+@@ -454,6 +469,21 @@ test("a scan's fields for search: its party, its number and its TIN", async () =
+     number: '0007655',
+     tin: '111222333',
+   });
++  // a purchase: its customer_tin box is the buyer's, the person's own business, so only the chosen supplier's TIN
++  // counts (ruling T4-2); with none chosen, its name is its label, not "Not chosen yet"
++  const supplierLists: Lists = {
++    ...lists(),
++    parties: [party({ id: 's1', type: 'supplier', registeredName: 'Some Supplier', tin: '999888777' })],
++  };
++  const bought = scanOf('inv_0007', { change: { kind: 'purchase', party: { listId: 's1' } } });
++  expect(scanFields(member(bought), supplierLists, settings())).toEqual({
++    name: 'Some Supplier',
++    number: '0007655',
++    tin: '999888777',
++  });
++  const unchosen = scanOf('inv_0007', { change: { kind: 'purchase' } });
++  expect(saleOf(unchosen, lists(), settings()).party.shown).toBe('Not chosen yet');
++  expect(scanFields(member(unchosen), lists(), settings())).toEqual({ name: 'Camera photo', number: '0007655', tin: '' });
+   const cert = scanOf('bir2307_text_0', { source: 'pdf', label: 'PDF: bir2307_text_0.pdf' });
+   expect(scanFields(member(cert), lists(), settings())).toEqual({
+     name: 'Reyes Sari-Sari Store',
+diff --git a/lib/sessions.ts b/lib/sessions.ts
+index 327ac30c..961505ca 100644
+--- a/lib/sessions.ts
++++ b/lib/sessions.ts
+@@ -96,10 +96,17 @@ export function statusOf(m: Member, state: ScanState | null): Status {
+   }
+ }
+ 
+-/** What's in a session, by status. A member with no status (none computed yet) counts nowhere. */
++/** Samples are made up: they count nowhere (call 9). */
++const isSample = (m: Member) => m.scan?.source === 'sample';
++
++/**
++ * What's in a session, by status. A sample counts nowhere (call 9, ruling T4-1): it can never be saved, so its badge
++ * would never go. Nor does a member with no status (none computed yet).
++ */
+ export function tallyOf(s: Session, statuses: ReadonlyMap<string, Status>): Tally {
+   const t: Tally = { ready: 0, toCheck: 0, retake: 0, saved: 0, exported: 0 };
+   for (const m of s.members) {
++    if (isSample(m)) continue;
+     const status = statuses.get(m.id);
+     if (status === 'ready') t.ready++;
+     else if (status === 'to_check') t.toCheck++;
+@@ -195,9 +202,6 @@ export function nextToCheck(s: Session, statuses: ReadonlyMap<string, Status>, e
+   return s.members.find((m) => m.id !== except && toCheck(statuses.get(m.id)))?.id ?? null;
+ }
+ 
+-/** Samples are made up: they count nowhere (call 9). */
+-const isSample = (m: Member) => m.scan?.source === 'sample';
+-
+ /** Home's counts (§6.5, call 9): the unsaved scans whose form was found, and the ones to retake; no samples. */
+ export function homeCounts(
+   sessions: readonly Session[],
+@@ -284,8 +288,8 @@ export function trayOf(
+ }
+ 
+ /**
+- * What Sessions' search looks in (matchesScan): the party shown, else the label; the invoice's number; and the TIN, an
+- * invoice's box, else its list party's, or a 2307's payor's. A summary alone has its party and its row's number, and
++ * What Sessions' search looks in (matchesScan): the party shown, else the label; the invoice's number; and the TIN: a
++ * sale's box, else its list party's; a purchase's chosen supplier's; a 2307's payor's. A summary alone has its party and its row's number, and
+  * no TIN: the stored formats don't keep one (call 12).
+  */
+ export function scanFields(m: Member, theLists: Lists, theSettings: Settings): { name: string; number: string; tin: string } {
+@@ -293,10 +297,12 @@ export function scanFields(m: Member, theLists: Lists, theSettings: Settings): {
+   if (scan && isInvoice(scan)) {
+     const sale = saleOf(scan, theLists, theSettings);
+     const named = sale.party.status !== 'missing' && sale.party.shown !== '';
++    const listTin = sale.party.listParty?.tin ?? '';
+     return {
+       name: named ? sale.party.shown : labelOf(m),
+       number: sale.final.invoice_no,
+-      tin: (boxValue(scan, 'customer_tin') ?? '').trim() || (sale.party.listParty?.tin ?? ''),
++      // a purchase's customer_tin box is the buyer's, the person's own business: only its supplier's (ruling T4-2)
++      tin: scan.kind === 'purchase' ? listTin : (boxValue(scan, 'customer_tin') ?? '').trim() || listTin,
+     };
+   }
+   if (scan && is2307(scan)) {

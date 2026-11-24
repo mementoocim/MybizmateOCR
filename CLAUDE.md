@@ -113,7 +113,8 @@ Never `git add -A` without that list.
 - Task 1 is done and reviewed: the camera keeps shooting, `rearm()`, 100 scans, and the debug counter.
 - Task 2 is done and reviewed: the session store, and the scanner-folder rule.
 - Task 3 is done and reviewed: the capture queue (`lib/captureQueue.ts`), the pickers and the read-failure words.
-- **Task 4 is next**, on the branch `camera-first`. Its brief is `task-4-brief.md` beside the ledger.
+- Task 4 is done and reviewed: sessions from the scans (`lib/sessions.ts`) and search by scan.
+- **Task 5 is next**, on the branch `camera-first`. Its brief isn't extracted yet: take it from the plan's Task 5 section. It downloads Lucide's four icons at 1.77.0 (already OK'd).
 
 **The user's answers for this plan:**
 - execution is subagent-driven, with a fresh implementer and a reviewer per task;
