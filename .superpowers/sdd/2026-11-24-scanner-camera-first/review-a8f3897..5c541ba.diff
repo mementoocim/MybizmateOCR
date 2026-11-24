@@ -1,0 +1,1616 @@
+diff --git a/__tests__/captureQueue.test.ts b/__tests__/captureQueue.test.ts
+new file mode 100644
+index 00000000..62385ade
+--- /dev/null
++++ b/__tests__/captureQueue.test.ts
+@@ -0,0 +1,639 @@
++import type { ScanResult } from '../modules/scanner';
++import { parseScanResult } from '../modules/scanner/src/parse';
++import { coreJson } from '../test-utils/coreJson';
++import { memoryFs } from '../test-utils/memoryFs';
++import { pinToday } from '../test-utils/today';
++
++// lib/captureQueue (spec §6.3, the plan's calls 4, 5 and 21): a session's photos wait in files/queue/<session id>/,
++// and its PDFs in memory, until they're read, one at a time and in the order taken, through the camera's read path.
++// Each read keeps its scan in its session, as of when it was taken; a read that fails is the session's failed read, in
++// plain words, with no dialog. A photo is deleted only once recent.json holds its scan, or once its read has failed,
++// and what a closed app left in files/queue is read at the next start, once (Review Focus 1, rulings P-F2 and T2-2).
++// The scanner's reads are deferred promises here: each test settles them in turn.
++
++let mockTeam = false;
++type Read = { uri: string; resolve: (r: ScanResult) => void; reject: (e: unknown) => void };
++const reads: Read[] = []; // the reads under way, oldest first
++const mockScanPhoto = jest.fn();
++const mockReadPdf = jest.fn();
++const mockRelease = jest.fn();
++
++jest.mock('../lib/build', () => ({
++  get TEAM_BUILD() {
++    return mockTeam;
++  },
++}));
++jest.mock('../modules/scanner', () => ({
++  scanPhoto: (uri: string, options: object) => mockScanPhoto(uri, options),
++  readPdf: (uri: string) => mockReadPdf(uri),
++  releaseAccess: (uri: string) => mockRelease(uri),
++  displayName: jest.fn(),
++}));
++jest.mock('expo-image-picker', () => ({})); // no picker opens here (lib/pickers: home.test, pdfFlow.test)
++jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
++
++const T = new Date(2026, 10, 24, 9, 41); // the first photo, at 9:41 AM
++const at = (seconds: number) => new Date(T.getTime() + seconds * 1000);
++const A = '1795000000000-ab12'; // lib/session's newSessionId
++const B = '1795000600000-cd34';
++const QUEUE = 'file:///docs/queue';
++const RECENT = 'file:///docs/recent.json';
++const SESSION_FILE = 'file:///docs/session.json';
++const UNREADABLE = "It isn't a photo the scanner can open.";
++const STOPPED = 'The scanner stopped while reading it.';
++const PASSWORD = 'That PDF has a password. Save a copy without one, then import it.';
++const LINK = 'content://com.android.providers.downloads.documents/document/msf%3A'; // Android's picker: the person's file
++
++const flush = () => new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
++
++type Modules = {
++  queue: typeof import('../lib/captureQueue');
++  scans: typeof import('../lib/scans');
++  session: typeof import('../lib/session');
++  jsonFile: typeof import('../lib/jsonFile');
++  fs: typeof import('expo-file-system'); // the memory file system lib/ uses, until the next reset
++};
++const load = (): Modules => ({
++  queue: require('../lib/captureQueue'),
++  scans: require('../lib/scans'),
++  session: require('../lib/session'),
++  jsonFile: require('../lib/jsonFile'),
++  fs: require('expo-file-system'),
++});
++let m: Modules;
++
++/** A photo the camera (or a picker) handed over, in the app's cache. */
++function photo(name: string): string {
++  const uri = `file:///cache/camera/${name}`;
++  memoryFs.files.set(uri, 'jpeg');
++  return uri;
++}
++
++/** What files/queue holds, each file by its place: <session>/<name>. */
++const queued = () =>
++  [...memoryFs.files.keys()]
++    .filter((k) => k.startsWith(`${QUEUE}/`))
++    .map((k) => k.slice(QUEUE.length + 1))
++    .sort();
++
++let folders = 0;
++/** The scanner's result for a fixture, its files in a numbered folder of its own under files/scans/, as the core writes them. */
++function result(stem = 'inv_0007'): ScanResult {
++  const r = parseScanResult(coreJson(stem, `file:///docs/scans/${1795000000000 + ++folders}`));
++  for (const uri of [r.pageUri, r.originalUri, ...r.reads.map((b) => b.cropUri)]) if (uri) memoryFs.files.set(uri, 'image');
++  return r;
++}
++const filesIn = (dir: string) => [...memoryFs.files.keys()].filter((k) => k.startsWith(`${dir}/`));
++
++/** The oldest read under way ends with this result, or fails with this error; then everything it set off settles. */
++async function read(r: ScanResult): Promise<void> {
++  expect(reads.length).toBeGreaterThan(0);
++  reads.shift()!.resolve(r);
++  await flush();
++}
++async function fail(e: unknown): Promise<void> {
++  expect(reads.length).toBeGreaterThan(0);
++  reads.shift()!.reject(e);
++  await flush();
++}
++
++const readUris = () => mockScanPhoto.mock.calls.map(([uri]) => uri);
++
++beforeAll(() => pinToday(T));
++afterAll(() => jest.useRealTimers());
++
++beforeEach(async () => {
++  await flush(); // the last test's writes land before its files go
++  memoryFs.reset();
++  jest.resetModules();
++  jest.clearAllMocks();
++  jest.setSystemTime(T);
++  reads.length = 0;
++  mockTeam = false;
++  const deferred = (uri: string) => new Promise<ScanResult>((resolve, reject) => reads.push({ uri, resolve, reject }));
++  mockScanPhoto.mockImplementation((uri: string) => deferred(uri));
++  mockReadPdf.mockImplementation((uri: string) => deferred(uri));
++  mockRelease.mockImplementation(async () => undefined);
++  m = load();
++});
++
++afterEach(() => jest.restoreAllMocks());
++
++test("a photo moves into files/queue/<session>/ before it's read, named by its time, its place and its source", async () => {
++  const { queue } = m;
++  const name = queue.queuedName(T, 3, 'gallery', true, 'png');
++  expect(name).toBe(`${T.getTime()}-3-gallery-test.png`);
++  expect(queue.parseQueuedName(name)).toEqual({ at: T, seq: 3, source: 'gallery', testImage: true });
++  expect(queue.parseQueuedName(queue.queuedName(at(1), 12, 'camera_app', false, 'jpg'))).toEqual({
++    at: at(1),
++    seq: 12,
++    source: 'camera_app',
++    testImage: false,
++  });
++  expect(queue.parseQueuedName(`${T.getTime()}-1-camera.jpeg`)).toEqual({ at: T, seq: 1, source: 'camera', testImage: false });
++  // a name the queue didn't give
++  for (const other of [
++    'IMG_0001.jpg',
++    `${T.getTime()}-1-scanner.jpg`, // not a source a photo comes from
++    `${T.getTime()}-x-camera.jpg`,
++    `${T.getTime()}-1-camera`, // no extension
++    `${T.getTime()}-1-camera-test-test.jpg`,
++    `9${'9'.repeat(20)}-1-camera.jpg`, // no time a Date can hold
++  ]) {
++    expect(queue.parseQueuedName(other)).toBeNull();
++  }
++
++  // the gallery picker's copy, in the app's cache, keeps its extension
++  const from = photo('picked.png');
++  let there = false;
++  mockScanPhoto.mockImplementationOnce((uri: string) => {
++    there = memoryFs.files.has(uri) && !memoryFs.files.has(from); // moved before the read starts
++    return new Promise(() => {});
++  });
++  await m.queue.queuePhoto(from, { session: A, source: 'gallery', testImage: true }, T);
++  await flush();
++  const uri = `${QUEUE}/${A}/${T.getTime()}-1-gallery-test.png`;
++  expect(queued()).toEqual([`${A}/${T.getTime()}-1-gallery-test.png`]);
++  expect(memoryFs.files.has(from)).toBe(false);
++  expect(mockScanPhoto.mock.calls).toEqual([[uri, { deletePhoto: false }]]);
++  expect(there).toBe(true);
++  expect(queue.captures()).toEqual([
++    {
++      key: expect.any(String),
++      session: A,
++      at: T,
++      kind: 'photo',
++      uri,
++      source: 'gallery',
++      testImage: true,
++      name: null,
++      replaces: null,
++      reading: true,
++    },
++  ]);
++});
++
++test("one at a time, in the order taken, through the camera's read path", async () => {
++  const { queue, fs } = m;
++  // The first photo's move is slow, and the second one's isn't. Both were taken in the same ms: the first one is still
++  // read first, since its place in the order was taken at once.
++  const move = fs.File.prototype.move;
++  let landFirst = () => {};
++  jest.spyOn(fs.File.prototype, 'move').mockImplementationOnce(function (
++    this: InstanceType<typeof fs.File>,
++    ...args: Parameters<typeof move>
++  ) {
++    return new Promise<void>((resolve, reject) => {
++      landFirst = () => void move.apply(this, args).then(resolve, reject);
++    });
++  });
++  const listener = jest.fn();
++  queue.subscribeQueue(listener);
++  void queue.queuePhoto(photo('capture_1.jpg'), { session: A, source: 'camera' }, T);
++  void queue.queuePhoto(photo('capture_2.jpg'), { session: A, source: 'camera' }, T);
++  // both are waiting at once, in the order taken
++  expect(queue.captures().map((c) => c.uri)).toEqual(['file:///cache/camera/capture_1.jpg', 'file:///cache/camera/capture_2.jpg']);
++  expect(listener).toHaveBeenCalled();
++  const before = queue.captures();
++  await flush();
++  expect(queue.captures()).not.toBe(before); // replaced, never changed in place: the tray subscribes to it
++  expect(mockScanPhoto).not.toHaveBeenCalled(); // the first one isn't in files/queue yet
++
++  landFirst();
++  await flush();
++  const first = `${QUEUE}/${A}/${T.getTime()}-1-camera.jpg`;
++  const second = `${QUEUE}/${A}/${T.getTime()}-2-camera.jpg`;
++  expect(mockScanPhoto.mock.calls).toEqual([[first, { deletePhoto: false }]]);
++  expect(queue.captures().map((c) => [c.uri, c.reading])).toEqual([
++    [first, true],
++    [second, false],
++  ]);
++  await flush();
++  expect(mockScanPhoto).toHaveBeenCalledTimes(1); // the next waits until this one settles
++
++  await read(result());
++  expect(mockScanPhoto.mock.calls).toEqual([
++    [first, { deletePhoto: false }],
++    [second, { deletePhoto: false }],
++  ]);
++  await read(result());
++  expect(queue.captures()).toEqual([]);
++  expect(m.scans.recentScans().map((s) => s.at)).toEqual([T, T]);
++});
++
++test('a read keeps its scan in its session, then deletes the photo once recent.json has it', async () => {
++  const { queue, scans, jsonFile } = m;
++  // recent.json's write is held until the test lets it land
++  const write = jsonFile.writeJson;
++  let land = () => {};
++  jest.spyOn(jsonFile, 'writeJson').mockImplementation((path, value) =>
++    path === 'recent.json'
++      ? new Promise<void>((resolve, reject) => {
++          land = () => void write(path, value).then(resolve, reject);
++        })
++      : write(path, value),
++  );
++  await queue.queuePhoto(photo('capture_1.jpg'), { session: 'S', source: 'camera', testImage: true }, T);
++  const file = `S/${T.getTime()}-1-camera-test.jpg`;
++  jest.setSystemTime(at(4)); // read 4 s after it was taken
++
++  await read(result());
++  expect(scans.recentScans()).toHaveLength(1);
++  expect(scans.recentScans()[0]).toMatchObject({ session: 'S', label: 'Camera photo', source: 'camera', testImage: true });
++  expect(scans.recentScans()[0].at).toEqual(T); // as of when it was taken (ruling P-F2)
++  expect(queue.captures()).toEqual([]);
++  expect(queued()).toEqual([file]); // recent.json doesn't hold the scan yet
++
++  land();
++  await flush();
++  const kept = JSON.parse(memoryFs.files.get(RECENT) as string);
++  expect(kept).toMatchObject([{ session: 'S', at: T.toISOString(), testImage: true }]);
++  expect(queued()).toEqual([]);
++});
++
++test('a form not found is a scan like any other', async () => {
++  const { queue, scans, session } = m;
++  const { session: id } = session.takeCapture(T);
++  await queue.queuePhoto(photo('capture_1.jpg'), { session: id, source: 'camera' }, T);
++  await read(result('blank_page'));
++  expect(scans.recentScans()).toHaveLength(1);
++  expect(scans.recentScans()[0]).toMatchObject({ session: id, label: 'Camera photo', result: { aligned: false } });
++  expect(session.currentSession()?.failed).toEqual([]); // not a failed read: it has a scan, with its Retake
++  expect(queued()).toEqual([]);
++});
++
++test("a read that fails is the session's failed read, in plain words, and the photo goes", async () => {
++  const { queue, scans, session } = m;
++  const alert = jest.spyOn(require('react-native').Alert, 'alert'); // react-native as lib/ would load it now
++  const { session: id } = session.takeCapture(T);
++  await queue.queuePhoto(photo('capture_1.jpg'), { session: id, source: 'camera' }, T);
++  await queue.queuePhoto(photo('capture_2.jpg'), { session: id, source: 'camera' }, at(1));
++  await queue.queuePhoto(photo('capture_3.jpg'), { session: id, source: 'camera' }, at(2));
++  const names = [1, 2, 3].map((n) => `${id}/${at(n - 1).getTime()}-${n}-camera.jpg`);
++  expect(queued()).toEqual(names);
++
++  jest.setSystemTime(at(5));
++  await fail(Object.assign(new Error('decode failed: not an image'), { code: 'ERR_UNREADABLE_IMAGE' }));
++  expect(session.currentSession()?.failed).toEqual([{ at: at(5).toISOString(), reason: UNREADABLE }]);
++  expect(queued()).toEqual(names.slice(1)); // it went; the next ones go on
++
++  // the scanner's own failure: its words are never kept
++  jest.setSystemTime(at(9));
++  await fail(new Error('boom'));
++  expect(session.currentSession()?.failed).toEqual([
++    { at: at(5).toISOString(), reason: UNREADABLE },
++    { at: at(9).toISOString(), reason: STOPPED },
++  ]);
++  expect(queued()).toEqual(names.slice(2));
++
++  await read(result());
++  expect(scans.recentScans().map((s) => s.session)).toEqual([id]); // a failed read keeps no scan
++  await flush();
++  expect(queued()).toEqual([]);
++  expect(memoryFs.files.get(SESSION_FILE)).not.toMatch(/boom|decode/);
++  expect(JSON.parse(memoryFs.files.get(SESSION_FILE) as string).failed).toHaveLength(2);
++  expect(alert).not.toHaveBeenCalled();
++});
++
++test('Retake: the new scan replaces the unsaved one once it reads; a failed read keeps it; a saved one is never replaced', async () => {
++  const { queue, scans, session, fs } = m;
++  /** A Retake of that scan from its Scan screen, then the camera's next photo. */
++  async function retake(scanId: string, seconds: number, name: string) {
++    session.retakeIn(A, scanId, at(seconds));
++    const { session: id, replaces } = session.takeCapture(at(seconds));
++    expect({ id, replaces }).toEqual({ id: A, replaces: scanId });
++    await queue.queuePhoto(photo(name), { session: id, source: 'camera', replaces }, at(seconds));
++    expect(queue.captures()[0].replaces).toBe(scanId);
++  }
++
++  const first = scans.addScan({ label: 'Camera photo', source: 'camera', result: result('blank_page'), session: A });
++  const firstDir = scans.getScan(first)!.result.scanDir!;
++  await retake(first, 1, 'capture_1.jpg');
++  expect(scans.getScan(first)).toBeDefined(); // kept while the new one is read
++  await read(result());
++  expect(scans.getScan(first)).toBeUndefined();
++  expect(filesIn(firstDir)).toEqual([]);
++  const second = scans.recentScans()[0].id;
++  expect(scans.recentScans().map((s) => s.id)).toEqual([second]);
++
++  // a read that fails keeps it
++  await retake(second, 2, 'capture_2.jpg');
++  await fail(new Error('boom'));
++  expect(scans.recentScans().map((s) => s.id)).toEqual([second]);
++
++  // a saved one is never replaced
++  scans.updateScan(second, { saved: { savedAt: at(3).toISOString(), details: { account: '1205' } } });
++  await retake(second, 3, 'capture_3.jpg');
++  await read(result());
++  const third = scans.recentScans()[0].id;
++  expect(scans.recentScans().map((s) => s.id)).toEqual([third, second]);
++  expect(scans.getScan(second)?.saved).not.toBeNull();
++
++  // one whose folder can't be deleted stays; the new scan is kept, and the queue goes on
++  jest.spyOn(fs.Directory.prototype, 'delete').mockImplementationOnce(() => {
++    throw new Error('busy');
++  });
++  await retake(third, 4, 'capture_4.jpg');
++  await queue.queuePhoto(photo('capture_5.jpg'), { session: A, source: 'camera' }, at(5));
++  await read(result());
++  const fourth = scans.recentScans()[0].id;
++  expect(scans.recentScans().map((s) => s.id)).toEqual([fourth, third, second]);
++  await read(result());
++  expect(scans.recentScans()).toHaveLength(4);
++  await flush();
++  expect(queued()).toEqual([]);
++});
++
++test("a PDF waits in memory, is read through readPdf, then the picker's access is given up", async () => {
++  const { queue, scans, session } = m;
++  const { session: id } = session.takeCapture(T);
++  queue.queuePdf({ uri: `${LINK}54`, name: 'a.pdf' }, { session: id }, T);
++  expect(queue.captures()).toEqual([
++    {
++      key: expect.any(String),
++      session: id,
++      at: T,
++      kind: 'pdf',
++      uri: `${LINK}54`,
++      source: 'pdf',
++      testImage: false,
++      name: 'a.pdf',
++      replaces: null,
++      reading: true,
++    },
++  ]);
++  expect(queued()).toEqual([]); // the person's own file: nothing of it is copied into files/queue
++  expect(mockReadPdf.mock.calls).toEqual([[`${LINK}54`]]);
++  expect(mockRelease).not.toHaveBeenCalled(); // not before its read
++  await read(result('sales_text_0'));
++  expect(scans.recentScans()[0]).toMatchObject({ label: 'PDF: a.pdf', source: 'pdf', session: id });
++  expect(scans.recentScans()[0].at).toEqual(T);
++  expect(mockRelease.mock.calls).toEqual([[`${LINK}54`]]);
++
++  // refused: the session's failed read, in the PDF's own words, and its access is given up all the same
++  queue.queuePdf({ uri: `${LINK}55`, name: 'locked.pdf' }, { session: id }, at(1));
++  await fail(Object.assign(new Error('refused: pdf_password'), { code: 'pdf_password' }));
++  expect(session.currentSession()?.failed).toEqual([{ at: T.toISOString(), reason: PASSWORD }]);
++  expect(mockRelease.mock.calls).toEqual([[`${LINK}54`], [`${LINK}55`]]);
++
++  // iOS's picker gives a copy in the app's temporary folder (a file://): it's deleted instead. With no name, "PDF".
++  const copy = 'file:///tmp/Inbox/b.pdf';
++  memoryFs.files.set(copy, '%PDF-1.7');
++  queue.queuePdf({ uri: copy, name: null }, { session: id }, at(2));
++  expect(memoryFs.files.has(copy)).toBe(true);
++  await read(result('sales_text_0'));
++  expect(memoryFs.files.has(copy)).toBe(false);
++  expect(scans.recentScans()[0].label).toBe('PDF');
++  expect(mockRelease).toHaveBeenCalledTimes(2);
++});
++
++test("at start, what's left in files/queue is read into its sessions, oldest first; a second resume adds nothing", async () => {
++  // What a closed app left in two sessions' folders: photos taken but not read, one in the camera's test hook.
++  const left = [
++    `${A}/${at(2).getTime()}-2-camera.jpg`,
++    `${B}/${at(1).getTime()}-1-gallery-test.png`,
++    `${A}/${at(3).getTime()}-3-camera_app.jpg`,
++  ];
++  for (const file of left) memoryFs.files.set(`${QUEUE}/${file}`, 'jpeg');
++  const { queue, scans } = m; // a new start
++  await scans.loadRecent();
++  await queue.resumeQueue();
++  await queue.resumeQueue();
++  expect(queue.captures().map((c) => [c.session, c.source, c.testImage, c.at])).toEqual([
++    [B, 'gallery', true, at(1)],
++    [A, 'camera', false, at(2)],
++    [A, 'camera_app', false, at(3)],
++  ]);
++  expect(mockScanPhoto).toHaveBeenCalledTimes(1);
++
++  await read(result());
++  await queue.resumeQueue(); // while they're read, too
++  await read(result());
++  await read(result());
++  expect(readUris()).toEqual([`${QUEUE}/${left[1]}`, `${QUEUE}/${left[0]}`, `${QUEUE}/${left[2]}`]);
++  expect(scans.recentScans().map((s) => [s.session, s.label, s.testImage, s.at])).toEqual([
++    [A, 'Camera photo', false, at(3)],
++    [A, 'Camera photo', false, at(2)],
++    [B, 'Photo from gallery', true, at(1)],
++  ]);
++  await flush();
++  expect(queued()).toEqual([]);
++  await queue.resumeQueue(); // nothing left
++  expect(mockScanPhoto).toHaveBeenCalledTimes(3);
++});
++
++test("a name the queue didn't give is a camera photo, read after the others; an empty folder goes", async () => {
++  memoryFs.files.set(`${QUEUE}/${A}/IMG_0001.jpg`, 'jpeg');
++  memoryFs.files.set(`${QUEUE}/${A}/${at(30).getTime()}-4-gallery.jpg`, 'jpeg'); // taken after "now", by the phone's clock
++  memoryFs.dirs.add(`${QUEUE}/${B}`); // a session's folder with nothing left in it
++  const { queue, scans } = m;
++  await scans.loadRecent();
++  await queue.resumeQueue();
++  expect(memoryFs.dirs.has(`${QUEUE}/${B}`)).toBe(false);
++  expect(queue.captures().map((c) => [c.session, c.source, c.testImage])).toEqual([
++    [A, 'gallery', false],
++    [A, 'camera', false],
++  ]);
++  await read(result());
++  await read(result());
++  expect(readUris()).toEqual([`${QUEUE}/${A}/${at(30).getTime()}-4-gallery.jpg`, `${QUEUE}/${A}/IMG_0001.jpg`]);
++  expect(scans.recentScans().map((s) => [s.session, s.label, s.source])).toEqual([
++    [A, 'Camera photo', 'camera'],
++    [A, 'Photo from gallery', 'gallery'],
++  ]);
++  await flush();
++  expect(queued()).toEqual([]);
++});
++
++test("a queued photo whose scan recent.json holds already isn't read again, and goes (ruling P-F2)", async () => {
++  // The app was killed after recent.json held the scan and before its photo was deleted. Another photo of that session
++  // wasn't read yet, and one in another session was taken in the same ms.
++  const id = m.scans.addScan({ label: 'Camera photo', source: 'camera', result: result(), session: A, at: at(1) });
++  await flush();
++  const done = `${A}/${at(1).getTime()}-1-camera.jpg`;
++  const waiting = `${A}/${at(2).getTime()}-2-camera.jpg`;
++  const elsewhere = `${B}/${at(1).getTime()}-1-camera.jpg`;
++  for (const file of [done, waiting, elsewhere]) memoryFs.files.set(`${QUEUE}/${file}`, 'jpeg');
++
++  jest.resetModules(); // the next start
++  jest.setSystemTime(at(60));
++  const next = load();
++  await next.scans.loadRecent();
++  await next.queue.resumeQueue();
++  expect(queued()).toEqual([waiting, elsewhere].sort());
++  expect(next.queue.captures().map((c) => c.uri)).toEqual([`${QUEUE}/${elsewhere}`, `${QUEUE}/${waiting}`]);
++  await read(result());
++  await read(result());
++  expect(readUris()).toEqual([`${QUEUE}/${elsewhere}`, `${QUEUE}/${waiting}`]);
++  expect(next.scans.recentScans().map((s) => [s.session, s.at])).toEqual([
++    [A, at(2)],
++    [B, at(1)],
++    [A, at(1)],
++  ]);
++  expect(next.scans.recentScans()[2].id).toBe(id);
++  await flush();
++  expect(queued()).toEqual([]);
++});
++
++test('a photo whose scan recent.json failed to hold stays queued, and the next start reads it (ruling T2-2)', async () => {
++  const write = m.jsonFile.writeJson;
++  jest.spyOn(m.jsonFile, 'writeJson').mockImplementation((path, value) =>
++    path === 'recent.json' ? Promise.reject(new Error('No space left on device')) : write(path, value),
++  );
++  await m.queue.queuePhoto(photo('capture_1.jpg'), { session: A, source: 'camera' }, T);
++  await read(result());
++  expect(m.scans.recentScans()).toHaveLength(1); // the scan shows all the same
++  expect(await m.scans.scansWritten()).toBe(false);
++  const file = `${A}/${T.getTime()}-1-camera.jpg`;
++  expect(queued()).toEqual([file]);
++
++  // the start run again in the same JS context (a font-size change) neither reads it again nor deletes it
++  await m.queue.resumeQueue();
++  expect(mockScanPhoto).toHaveBeenCalledTimes(1);
++  expect(queued()).toEqual([file]);
++
++  // the next start: none is lost
++  jest.restoreAllMocks();
++  jest.resetModules();
++  jest.setSystemTime(at(60));
++  const next = load();
++  await next.scans.loadRecent();
++  expect(next.scans.recentScans()).toEqual([]);
++  await next.queue.resumeQueue();
++  await read(result());
++  expect(next.scans.recentScans().map((s) => [s.session, s.at])).toEqual([[A, T]]);
++  await flush();
++  expect(queued()).toEqual([]);
++});
++
++test('a photo kept back goes once a later write holds its scan; a resume meanwhile neither reads nor deletes one', async () => {
++  // recent.json can't be written for the first scan (a full phone), then the second one's write is held
++  const write = m.jsonFile.writeJson;
++  let full = true;
++  let land = () => {};
++  jest.spyOn(m.jsonFile, 'writeJson').mockImplementation((path, value) => {
++    if (path !== 'recent.json') return write(path, value);
++    if (full) return Promise.reject(new Error('No space left on device'));
++    return new Promise<void>((resolve, reject) => {
++      land = () => void write(path, value).then(resolve, reject);
++    });
++  });
++  await m.queue.queuePhoto(photo('capture_1.jpg'), { session: A, source: 'camera' }, T);
++  await read(result());
++  const first = `${A}/${T.getTime()}-1-camera.jpg`;
++  expect(queued()).toEqual([first]);
++
++  full = false;
++  await m.queue.queuePhoto(photo('capture_2.jpg'), { session: A, source: 'camera' }, at(1));
++  await read(result());
++  const second = `${A}/${at(1).getTime()}-2-camera.jpg`;
++  expect(queued()).toEqual([first, second]); // recent.json doesn't hold the second scan yet
++  // the start run again in the same JS context: the scans are in memory, but recent.json doesn't hold them yet
++  await m.queue.resumeQueue();
++  expect(mockScanPhoto).toHaveBeenCalledTimes(2);
++  expect(queued()).toEqual([first, second]);
++
++  land(); // it holds every scan so far, the first one's too
++  await flush();
++  expect(JSON.parse(memoryFs.files.get(RECENT) as string).map((s: { at: string }) => s.at)).toEqual([
++    at(1).toISOString(),
++    T.toISOString(),
++  ]);
++  expect(queued()).toEqual([]);
++});
++
++test("a photo that can't be moved is read where it is", async () => {
++  const { queue, scans, fs } = m;
++  jest.spyOn(fs.File.prototype, 'move').mockRejectedValueOnce(new Error('No space left on device'));
++  const from = photo('capture_1.jpg');
++  await queue.queuePhoto(from, { session: A, source: 'camera' }, T);
++  await flush();
++  expect(mockScanPhoto.mock.calls).toEqual([[from, { deletePhoto: false }]]);
++  expect(queue.captures().map((c) => c.uri)).toEqual([from]);
++  await read(result());
++  expect(scans.recentScans()[0]).toMatchObject({ session: A, label: 'Camera photo' });
++  expect(memoryFs.files.has(from)).toBe(false); // deleted once recent.json holds its scan, as a queued one is
++  expect(queued()).toEqual([]);
++});
++
++test('whenRead waits for its own session only', async () => {
++  const { queue } = m;
++  await expect(queue.whenRead(A)).resolves.toBeUndefined(); // nothing waits
++  await queue.queuePhoto(photo('capture_1.jpg'), { session: A, source: 'camera' }, T);
++  await queue.queuePhoto(photo('capture_2.jpg'), { session: B, source: 'camera' }, at(1));
++  queue.queuePdf({ uri: `${LINK}56`, name: 'c.pdf' }, { session: A }, at(2));
++  expect([queue.pendingIn(A), queue.pendingIn(B), queue.pendingIn('other')]).toEqual([2, 1, 0]);
++  const done: string[] = [];
++  void queue.whenRead(A).then(() => done.push(A));
++  void queue.whenRead(B).then(() => done.push(B));
++
++  await read(result()); // A's photo
++  expect(done).toEqual([]);
++  expect(queue.pendingIn(A)).toBe(1);
++  await read(result()); // B's
++  expect(done).toEqual([B]);
++  await fail(new Error('boom')); // A's PDF: a read that fails is done too
++  expect(done).toEqual([B, A]);
++  expect(queue.pendingIn(A)).toBe(0);
++});
++
++test('held, no new read starts until it lets go (approach 2)', async () => {
++  const { queue, scans } = m;
++  expect(queue.READ_WHILE_SHOOTING).toBe(true); // approach 1, until Task 14's measurement says otherwise
++  queue.holdReads(true);
++  await queue.queuePhoto(photo('capture_1.jpg'), { session: A, source: 'camera' }, T);
++  await queue.queuePhoto(photo('capture_2.jpg'), { session: A, source: 'camera' }, at(1));
++  queue.queuePdf({ uri: `${LINK}57`, name: 'd.pdf' }, { session: A }, at(2));
++  await flush();
++  expect(mockScanPhoto).not.toHaveBeenCalled();
++  expect(mockReadPdf).not.toHaveBeenCalled();
++  expect(queue.pendingIn(A)).toBe(3);
++
++  queue.holdReads(false);
++  await flush();
++  expect(mockScanPhoto).toHaveBeenCalledTimes(1);
++  // held while one is read: it finishes, and the next waits
++  queue.holdReads(true);
++  await read(result());
++  expect(scans.recentScans()).toHaveLength(1);
++  await flush();
++  expect(mockScanPhoto).toHaveBeenCalledTimes(1);
++  expect(queue.captures().map((c) => c.reading)).toEqual([false, false]);
++
++  queue.holdReads(false);
++  await flush();
++  expect(mockScanPhoto).toHaveBeenCalledTimes(2);
++  await read(result());
++  expect(mockReadPdf).toHaveBeenCalledTimes(1);
++  await read(result('sales_text_0'));
++  expect(scans.recentScans()).toHaveLength(3);
++});
++
++test("failedReadReason never holds the scanner's own message, in a team build too", async () => {
++  const { failedReadReason, photoFailed, pdfFailed } = require('../lib/readFailures') as typeof import('../lib/readFailures');
++  const own = 'open failed: ENOENT (No such file or directory)';
++  const failure = (code?: string) => Object.assign(new Error(own), code ? { code } : {});
++  for (const team of [false, true]) {
++    mockTeam = team;
++    expect(failedReadReason('photo', failure('ERR_UNREADABLE_IMAGE'))).toBe(UNREADABLE);
++    expect(failedReadReason('photo', failure('ERR_UNEXPECTED'))).toBe(STOPPED);
++    expect(failedReadReason('photo', failure())).toBe(STOPPED);
++    expect(failedReadReason('photo', null)).toBe(STOPPED);
++    expect(failedReadReason('pdf', failure('pdf_password'))).toBe(PASSWORD);
++    expect(failedReadReason('pdf', failure('pdf_too_big'))).toBe('That PDF is over 20 MB. Choose a smaller file.');
++    expect(failedReadReason('pdf', failure('pdf_new_refusal'))).toBe("Couldn't read that PDF.");
++    expect(failedReadReason('pdf', failure('ERR_UNEXPECTED'))).toBe(STOPPED);
++    expect(failedReadReason('pdf', 'closed')).toBe(STOPPED);
++  }
++  // a dialog's words do carry it in a team build (today's, for the pickers' reads); a failed read's never do
++  expect(photoFailed(failure())).toContain(own);
++  expect(pdfFailed(failure('ERR_UNEXPECTED'))).toContain(own);
++
++  // through the queue, in a team build
++  const { session: id } = m.session.takeCapture(T);
++  await m.queue.queuePhoto(photo('capture_1.jpg'), { session: id, source: 'camera' }, T);
++  await fail(failure('ERR_UNEXPECTED'));
++  expect(m.session.currentSession()?.failed).toEqual([{ at: T.toISOString(), reason: STOPPED }]);
++  await flush();
++  expect(memoryFs.files.get(SESSION_FILE)).not.toContain('ENOENT');
++});
+diff --git a/__tests__/navigation.test.tsx b/__tests__/navigation.test.tsx
+index 66047166..58f36b42 100644
+--- a/__tests__/navigation.test.tsx
++++ b/__tests__/navigation.test.tsx
+@@ -18,6 +18,7 @@ import { toast } from '../lib/toast';
+ 
+ jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(async () => {}) }));
+ jest.mock('../components/BrandSplash', () => ({ BrandSplash: () => null })); // the scanner's start (splash.test)
++jest.mock('../lib/captureQueue', () => ({ resumeQueue: async () => {} })); // its reads (captureQueue.test)
+ 
+ function Where({ name }: { name: string }) {
+   return <Text>{`${name}: ${useIsFocused() ? 'on top' : 'under'}`}</Text>;
+diff --git a/__tests__/rootLayout.test.tsx b/__tests__/rootLayout.test.tsx
+index 6fcfa85a..f554f754 100644
+--- a/__tests__/rootLayout.test.tsx
++++ b/__tests__/rootLayout.test.tsx
+@@ -2,15 +2,27 @@ import { router } from 'expo-router';
+ import { act, renderRouter, screen } from 'expo-router/testing-library';
+ import { type StyleProp, StyleSheet, Text, type ViewStyle } from 'react-native';
+ 
++import { setStarted, useStarted } from '../lib/startup';
+ import { colors } from '../lib/theme';
+ 
+ // The root layout (app/_layout): one native Stack, anchored on Home (ruling T24-1). A link opened cold
+ // (mybizmatescan://camera?test=…, mybizmatescan://speed, or any other route) has Home under it, so the screen's Back,
+ // or the camera's Close, has somewhere to go. No screen shows the Stack's own header, since each draws its Header, and
+-// each sits on paper, the camera on black. The app's routes stand in as their names: their own tests cover them.
++// each sits on paper, the camera on black. The app's routes stand in as their names: their own tests cover them. Once
++// its splash has gone, the app is started (the camera may start) and the queue reads what a closed app left.
++
++const mockResume = jest.fn(async () => {});
++let mockEndSplash: () => void = () => {};
+ 
+ jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(async () => {}) }));
+-jest.mock('../components/BrandSplash', () => ({ BrandSplash: () => null })); // the scanner's start (splash.test)
++// the scanner's start (splash.test): it ends when a test says so, calling onReady as the real one does once it's ready
++jest.mock('../components/BrandSplash', () => ({
++  BrandSplash: ({ onReady }: { onReady: () => void }) => {
++    mockEndSplash = onReady;
++    return null;
++  },
++}));
++jest.mock('../lib/captureQueue', () => ({ resumeQueue: () => mockResume() })); // its reads (captureQueue.test)
+ 
+ const named = (name: string) =>
+   function Route() {
+@@ -89,3 +101,19 @@ test("no screen shows the Stack's own header; each sits on paper, the camera on
+   await act(() => router.push('/later'));
+   expect(stackScreen('A screen added later')).toMatchObject({ header: { hidden: true }, background: colors.paper });
+ });
++
++test('once the splash has gone, the app is started and the queue resumes', async () => {
++  function Started() {
++    return <Text>{useStarted() ? 'Started' : 'Not started'}</Text>;
++  }
++  // as the root before this one left it: a new font size or display size mounts the root anew in the same JS context
++  setStarted(true);
++  mockResume.mockClear();
++  await renderRouter({ ...ROUTES, index: Started }, { initialUrl: '/' });
++  expect(screen.getByText('Not started')).toBeOnTheScreen(); // its splash is up: nothing starts behind it
++  expect(mockResume).not.toHaveBeenCalled();
++
++  await act(async () => mockEndSplash());
++  expect(screen.getByText('Started')).toBeOnTheScreen();
++  expect(mockResume).toHaveBeenCalledTimes(1);
++});
+diff --git a/__tests__/scanFlow.test.ts b/__tests__/scanFlow.test.ts
+index 086a96c3..9a80eb02 100644
+--- a/__tests__/scanFlow.test.ts
++++ b/__tests__/scanFlow.test.ts
+@@ -1,4 +1,4 @@
+-import { failureDialog } from '../lib/scanFlow';
++import { failureDialog } from '../lib/readFailures';
+ 
+ // Ruling T16-1: a failure that stops a capture shows in a dialog with today's words, split in two. The reason is the
+ // title, and what to do is the message, since Android stops a dialog's title at two lines with an ellipsis. Ruling
+diff --git a/__tests__/scans.test.ts b/__tests__/scans.test.ts
+index 5984fdda..53cb57b6 100644
+--- a/__tests__/scans.test.ts
++++ b/__tests__/scans.test.ts
+@@ -263,24 +263,63 @@ test("a queued photo's scan keeps the time the photo was taken, not the time it
+ 
+ test('scansWritten waits until recent.json holds the scan just added', async () => {
+   const { addScan, scansWritten, updateScan } = require('../lib/scans');
+-  await scansWritten(); // nothing written yet
++  await expect(scansWritten()).resolves.toBe(true); // nothing to write yet
+   const a = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a'), session: SESSION });
+   const b = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/b'), session: SESSION });
+   expect(recentIds()).toEqual([]); // still being written
+-  await scansWritten();
++  await expect(scansWritten()).resolves.toBe(true);
+   expect(recentIds()).toEqual([b, a]);
+ 
+-  // a write that fails: it resolves all the same, and the next change is written
++  // a write that fails: it says so (ruling T2-2), so the queue keeps the photo; the next change is written
+   const { File } = require('expo-file-system'); // the one lib/jsonFile uses until the next reset
+   jest.spyOn(File.prototype, 'write').mockRejectedValueOnce(new Error('No space left on device'));
+   const c = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/c'), session: SESSION });
+-  await expect(scansWritten()).resolves.toBeUndefined();
++  await expect(scansWritten()).resolves.toBe(false);
+   expect(recentIds()).toEqual([b, a]);
+   updateScan(c, { kind: 'purchase' });
+-  await scansWritten();
++  await expect(scansWritten()).resolves.toBe(true); // the latest write holds every change so far, c's too
+   expect(recentIds()).toEqual([c, b, a]);
+ });
+ 
++test('a scan given a time that is no time is kept as of now; recent.json is still written (ruling T2-1)', async () => {
++  const { addScan, getScan, scansWritten, updateScan } = require('../lib/scans');
++  const before = Date.now();
++  const bad = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a'), session: SESSION, at: new Date(NaN) });
++  const { at } = getScan(bad);
++  expect(at.getTime()).toBeGreaterThanOrEqual(before);
++  expect(at.getTime()).toBeLessThanOrEqual(Date.now());
++  await expect(scansWritten()).resolves.toBe(true);
++  // and every later change is written too
++  const next = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/b'), session: SESSION });
++  updateScan(bad, { kind: 'purchase' });
++  await expect(scansWritten()).resolves.toBe(true);
++  expect(recentIds()).toEqual([next, bad]);
++  expect(JSON.parse(memoryFs.files.get(RECENT) as string)[1].at).toBe(at.toISOString());
++});
++
++test('recent.json is read once: a start run again keeps the scans in memory, which can be ahead of it (ruling P-F1)', async () => {
++  // recent.json as the last run left it
++  const old = { id: 'old-5', label: 'Camera photo', source: 'camera', at: '2026-11-20T01:00:00.000Z', result: result('/s/old') };
++  memoryFs.files.set(RECENT, JSON.stringify([old]));
++  memoryFs.dirs.add('file:///s/old');
++  const s = require('../lib/scans');
++  await s.loadRecent(); // the start
++  const id = s.addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a'), session: SESSION }); // the queue's
++  expect(recentIds()).toEqual(['old-5']); // its write is still under way
++  // a font-size or display-size change runs the start again, in the same JS context (the plan's call 24)
++  await s.loadRecent();
++  expect(s.recentScans().map((scan: { id: string }) => scan.id)).toEqual([id, 'old-5']);
++  await expect(s.scansWritten()).resolves.toBe(true);
++  expect(recentIds()).toEqual([id, 'old-5']);
++
++  // the next start reads it
++  memoryFs.dirs.add('file:///s/a');
++  jest.resetModules();
++  const next = require('../lib/scans');
++  await next.loadRecent();
++  expect(next.recentScans().map((scan: { id: string }) => scan.id)).toEqual([id, 'old-5']);
++});
++
+ test('deleting an unsaved scan forgets it and its folder; a saved one is refused', async () => {
+   const { addScan, deleteScan, getScan, recentScans, scansWritten, subscribeRecent, updateScan } = require('../lib/scans');
+   /** A scan whose files are in the folder given, as the core writes them. */
+diff --git a/app/_layout.tsx b/app/_layout.tsx
+index 1eff6d19..862bfe70 100644
+--- a/app/_layout.tsx
++++ b/app/_layout.tsx
+@@ -6,7 +6,9 @@ import { View } from 'react-native';
+ 
+ import { BrandSplash } from '../components/BrandSplash';
+ import { SnackbarHost } from '../components/Snackbar';
++import { resumeQueue } from '../lib/captureQueue';
+ import { currentSnack, dismissSnack } from '../lib/snackbar';
++import { setStarted } from '../lib/startup';
+ import { colors } from '../lib/theme';
+ 
+ // The phone's own splash stays up until the brand splash has drawn; that one stays until the scanner is ready.
+@@ -21,11 +23,18 @@ export const unstable_settings = { anchor: 'index' };
+ 
+ export default function RootLayout() {
+   const [ready, setReady] = useState(false);
+-  const onReady = useCallback(() => setReady(true), []);
++  // Once the splash has gone, the app has started: the camera may start, and the queue reads what a closed app left in
++  // files/queue (lib/captureQueue), now that the recent scans are loaded.
++  const onReady = useCallback(() => {
++    setReady(true);
++    setStarted(true);
++    void resumeQueue();
++  }, []);
+   // A new font size, display size or language restarts Android's activity in the same JS context, and this root mounts
+-  // anew (ruling T26-4). A message from before it goes: its action (a save's View) is bound to the old root's router,
+-  // so it would do nothing (the final review's Minor 6).
++  // anew (ruling T26-4), its splash up again: until it goes, the app hasn't started. A message from before it goes: its
++  // action (a save's View) is bound to the old root's router, so it would do nothing (the final review's Minor 6).
+   useEffect(() => {
++    setStarted(false);
+     const before = currentSnack();
+     if (before) dismissSnack(before.id);
+   }, []);
+diff --git a/lib/captureQueue.ts b/lib/captureQueue.ts
+new file mode 100644
+index 00000000..c4718490
+--- /dev/null
++++ b/lib/captureQueue.ts
+@@ -0,0 +1,325 @@
++import { Directory, File, Paths } from 'expo-file-system';
++
++import { readPdf, scanPhoto, type ScanResult } from '../modules/scanner';
++import { letGoOfPdf, type PickedPdf } from './pickers';
++import { failedReadReason } from './readFailures';
++import { addScan, deleteScan, recentScans, type ScanSource, scansWritten } from './scans';
++import { addFailedRead, touchSession } from './session';
++
++// The capture queue (spec §6.3, the plan's calls 4, 5 and 21): what the camera tab took, waiting to be read. A photo
++// (the camera's, the camera app's or a gallery pick) moves out of the app's cache, which the scanner clears at every
++// start, into files/queue/<session id>/, named by when it was taken, its place in the order and its source
++// (queuedName), so a closed app loses none: the next start reads them (resumeQueue). A PDF is the person's own file:
++// it waits in memory, and nothing of it is copied here.
++//
++// Reads go one at a time, in the order taken, through the camera's read path (scanPhoto, readPdf). Each is kept as a
++// scan in its session, as of when it was taken (ruling P-F2); a Retake's new scan replaces the unsaved one it was taken
++// for. A read that throws is the session's failed read, in plain words only (lib/readFailures), with no dialog and
++// nothing logged. A photo is deleted once recent.json holds its scan, or once its read has failed; when recent.json
++// can't be written, it stays for the next start (ruling T2-2), and a scan recent.json already holds is never read twice
++// (ruling P-F2). Review Focus 1.
++
++/**
++ * Approach 1 (spec §5): the queue reads while the camera shoots. false is approach 2: the camera holds the reads
++ * (holdReads) while it's live. Task 14 sets it from the measurement.
++ */
++export const READ_WHILE_SHOOTING: boolean = true;
++
++type PhotoSource = 'camera' | 'gallery' | 'camera_app';
++
++export type Capture = {
++  key: string;
++  session: string;
++  at: Date; // when it was taken
++  kind: 'photo' | 'pdf';
++  uri: string; // a photo's file in files/queue/<session>/ (or where it was, if it couldn't move); a PDF's picked uri
++  source: ScanSource;
++  testImage: boolean;
++  name: string | null; // a PDF's file name, as its app gives it
++  replaces: string | null; // Retake: the unsaved scan its scan replaces
++  reading: boolean;
++};
++
++/** A capture, with its place in the reading order and whether its photo has landed where it's read from. */
++type Entry = { capture: Capture; order: readonly [at: number, seq: number]; ready: boolean };
++
++let entries: Entry[] = []; // in the reading order
++let list: readonly Capture[] = []; // replaced, never changed in place: the tray subscribes to it
++let seq = 0; // the order captures were queued in
++let keys = 0;
++let held = false;
++let busy = false; // a read is under way
++const listeners = new Set<() => void>();
++const waiters: { session: string; resolve: () => void }[] = [];
++const settling = new Set<string>(); // photos read, waiting for recent.json to hold their scans
++const keptBack = new Set<string>(); // photos whose scans recent.json couldn't hold: the next start has them (T2-2)
++
++const QUEUE = 'queue';
++const SOURCES: readonly PhotoSource[] = ['camera', 'gallery', 'camera_app'];
++/** A session id as a folder's name (lib/session's newSessionId): nothing that could reach another folder. */
++const FOLDER_NAME = /^[A-Za-z0-9_-]+$/;
++const NAME = /^(\d+)-(\d+)-(camera|gallery|camera_app)(-test)?\.([A-Za-z0-9]+)$/;
++
++/** A queued photo's name: `<ms>-<seq>-<source>[-test].<ext>`, so a start knows each one's time, place and kind. */
++export function queuedName(at: Date, n: number, source: PhotoSource, testImage: boolean, ext: string): string {
++  return `${at.getTime()}-${n}-${source}${testImage ? '-test' : ''}.${ext}`;
++}
++
++/** What a queued photo's name says; null for a name the queue didn't give. */
++export function parseQueuedName(
++  name: string,
++): { at: Date; seq: number; source: PhotoSource; testImage: boolean } | null {
++  const match = NAME.exec(name);
++  if (!match) return null;
++  const at = new Date(Number(match[1]));
++  if (Number.isNaN(at.getTime())) return null;
++  const source = SOURCES.find((s) => s === match[3]);
++  if (!source) return null;
++  return { at, seq: Number(match[2]), source, testImage: match[4] !== undefined };
++}
++
++function changed(): void {
++  list = entries.map((e) => e.capture);
++  listeners.forEach((listener) => listener());
++  for (const waiter of [...waiters]) {
++    if (pendingIn(waiter.session) > 0) continue;
++    waiters.splice(waiters.indexOf(waiter), 1);
++    waiter.resolve();
++  }
++}
++
++/** Waiting and reading, oldest first. */
++export function captures(): readonly Capture[] {
++  return list;
++}
++
++/** For useSyncExternalStore: called after each change to the captures. */
++export function subscribeQueue(listener: () => void): () => void {
++  listeners.add(listener);
++  return () => {
++    listeners.delete(listener);
++  };
++}
++
++/** How many of the session's captures wait or are being read. */
++export function pendingIn(session: string): number {
++  return entries.filter((e) => e.capture.session === session).length;
++}
++
++/** Resolves once none of the session's captures waits or is being read (Done waits for it). */
++export function whenRead(session: string): Promise<void> {
++  if (pendingIn(session) === 0) return Promise.resolve();
++  return new Promise((resolve) => waiters.push({ session, resolve }));
++}
++
++/** Held, no new read starts; one under way finishes (approach 2). Let go, the next one starts. */
++export function holdReads(hold: boolean): void {
++  held = hold;
++  if (!hold) next();
++}
++
++const before = (a: Entry['order'], b: Entry['order']) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
++
++/** Puts a capture in its place in the reading order: after every one taken before it, or at the same time. */
++function add(capture: Omit<Capture, 'key' | 'reading'>, order: Entry['order'], ready: boolean): Entry {
++  const entry: Entry = { capture: { ...capture, key: `c${++keys}`, reading: false }, order, ready };
++  const at = entries.findIndex((e) => !e.capture.reading && before(order, e.order));
++  entries = at < 0 ? [...entries, entry] : [...entries.slice(0, at), entry, ...entries.slice(at)];
++  return entry;
++}
++
++function update(entry: Entry, change: Partial<Capture>): void {
++  entry.capture = { ...entry.capture, ...change };
++  changed();
++}
++
++function remove(entry: Entry): void {
++  entries = entries.filter((e) => e !== entry);
++  changed();
++}
++
++function deleteFile(uri: string): void {
++  try {
++    const file = new File(uri);
++    if (file.exists) file.delete();
++  } catch {
++    // already gone, or the next start has it
++  }
++}
++
++const extensionOf = (uri: string): string => /\.([A-Za-z0-9]+)$/.exec(uri.replace(/[?#].*$/, ''))?.[1] ?? 'jpg';
++
++/** Moves a photo into files/queue/<session>/ under the name given; its new uri, or null when it couldn't move. */
++async function moveIn(from: string, session: string, name: string): Promise<string | null> {
++  try {
++    if (!FOLDER_NAME.test(session)) return null;
++    const folder = new Directory(Paths.document, QUEUE, session);
++    if (!folder.exists) folder.create({ intermediates: true });
++    const to = new File(folder, name);
++    await new File(from).move(to);
++    return to.uri;
++  } catch {
++    return null; // it's read where it is
++  }
++}
++
++/**
++ * A photo taken (the camera's capture, or a picker's copy, in the app's cache): it waits in the session's queue, in the
++ * order of the calls. It resolves once the photo has moved into files/queue, or couldn't, and is read where it is.
++ */
++export async function queuePhoto(
++  from: string,
++  p: { session: string; source: PhotoSource; testImage?: boolean; replaces?: string | null },
++  at: Date,
++): Promise<void> {
++  const n = ++seq; // its place, at once: the reading order is the call order
++  const testImage = p.testImage ?? false;
++  const replaces = p.replaces ?? null;
++  const entry = add(
++    { session: p.session, at, kind: 'photo', uri: from, source: p.source, testImage, name: null, replaces },
++    [at.getTime(), n],
++    false,
++  );
++  changed();
++  const moved = await moveIn(from, p.session, queuedName(at, n, p.source, testImage, extensionOf(from)));
++  entry.ready = true;
++  if (moved !== null) update(entry, { uri: moved });
++  next();
++}
++
++/** A PDF picked: it waits in memory, as the person's own file, and its access is given up once it has been read. */
++export function queuePdf(pdf: PickedPdf, p: { session: string; replaces?: string | null }, at: Date): void {
++  const replaces = p.replaces ?? null;
++  add(
++    { session: p.session, at, kind: 'pdf', uri: pdf.uri, source: 'pdf', testImage: false, name: pdf.name, replaces },
++    [at.getTime(), ++seq],
++    true,
++  );
++  changed();
++  next();
++}
++
++/** Today's labels. */
++function labelOf(c: Capture): string {
++  if (c.kind === 'pdf') return c.name ? `PDF: ${c.name}` : 'PDF';
++  return c.source === 'gallery' ? 'Photo from gallery' : 'Camera photo';
++}
++
++/** The next read, unless one is under way or reads are held. The oldest waits until its photo has landed. */
++function next(): void {
++  if (busy || held) return;
++  const entry = entries[0];
++  if (!entry || !entry.ready) return;
++  busy = true;
++  update(entry, { reading: true });
++  void read(entry);
++}
++
++async function read(entry: Entry): Promise<void> {
++  const c = entry.capture;
++  try {
++    let result: ScanResult;
++    try {
++      result = c.kind === 'photo' ? await scanPhoto(c.uri, { deletePhoto: false }) : await readPdf(c.uri);
++    } catch (e: unknown) {
++      remove(entry);
++      addFailedRead(c.session, failedReadReason(c.kind, e), new Date());
++      if (c.kind === 'photo') deleteFile(c.uri); // a failed read keeps no scan, and a Retake's old one stays
++      return;
++    } finally {
++      if (c.kind === 'pdf') letGoOfPdf(c.uri);
++    }
++    // a form not found is a scan like any other: it has its Retake
++    addScan({ label: labelOf(c), source: c.source, result, testImage: c.testImage, session: c.session, at: c.at });
++    remove(entry); // in the same tick: the tray never shows it twice
++    touchSession(c.session, new Date());
++    if (c.replaces !== null) {
++      try {
++        deleteScan(c.replaces);
++      } catch {
++        // saved (it's never replaced), or its folder couldn't go: it stays, and so does the new one
++      }
++    }
++    if (c.kind === 'photo') void letGo(c.uri);
++  } finally {
++    busy = false;
++    next();
++  }
++}
++
++/**
++ * A read photo goes once recent.json holds its scan. When it can't be written, the photo stays for the next start,
++ * which reads it again (ruling T2-2); a later write that lands holds that scan too, so the photo goes then.
++ */
++async function letGo(uri: string): Promise<void> {
++  settling.add(uri);
++  const written = await scansWritten();
++  settling.delete(uri);
++  if (!written) {
++    keptBack.add(uri);
++    return;
++  }
++  deleteFile(uri);
++  for (const kept of [...keptBack]) {
++    keptBack.delete(kept);
++    deleteFile(kept);
++  }
++}
++
++/** A photo of this session whose scan is kept already: the app was killed before the photo went (ruling P-F2). */
++const alreadyRead = (session: string, at: Date) =>
++  recentScans().some((s) => s.session === session && s.source !== 'pdf' && s.at.getTime() === at.getTime());
++
++/**
++ * At start, once the recent scans are loaded: what's left in files/queue, read into its sessions, oldest first. A name
++ * the queue didn't give is a camera photo, read after the others. A photo already queued, or read and waiting to go, is
++ * skipped, so it's idempotent; one whose scan is kept already goes (ruling P-F2). An empty folder goes.
++ */
++export async function resumeQueue(): Promise<void> {
++  const known = new Set([...entries.map((e) => e.capture.uri), ...settling, ...keptBack]);
++  const found: { session: string; uri: string; name: string; parsed: ReturnType<typeof parseQueuedName> }[] = [];
++  try {
++    const root = new Directory(Paths.document, QUEUE);
++    if (!root.exists) return;
++    for (const folder of root.list()) {
++      if (!(folder instanceof Directory)) continue;
++      const files = folder.list();
++      if (files.length === 0) {
++        folder.delete();
++        continue;
++      }
++      for (const file of files) {
++        if (!(file instanceof File) || known.has(file.uri)) continue;
++        const parsed = parseQueuedName(file.name);
++        if (parsed && alreadyRead(folder.name, parsed.at)) deleteFile(file.uri);
++        else found.push({ session: folder.name, uri: file.uri, name: file.name, parsed });
++      }
++    }
++  } catch {
++    // what it found so far is read; the rest waits for the next start
++  }
++  if (found.length === 0) return;
++  const orderOf = (f: (typeof found)[number]) => (f.parsed ? f.parsed.at.getTime() : Infinity);
++  const seqOf = (f: (typeof found)[number]) => f.parsed?.seq ?? 0;
++  found.sort((a, b) => orderOf(a) - orderOf(b) || seqOf(a) - seqOf(b) || (a.name < b.name ? -1 : 1));
++  const now = new Date();
++  found.forEach((f, i) => {
++    if (f.parsed) seq = Math.max(seq, f.parsed.seq); // a photo taken now never takes a name that's there
++    add(
++      {
++        session: f.session,
++        at: f.parsed?.at ?? now,
++        kind: 'photo',
++        uri: f.uri,
++        source: f.parsed?.source ?? 'camera',
++        testImage: f.parsed?.testImage ?? false,
++        name: null,
++        replaces: null,
++      },
++      f.parsed ? [f.parsed.at.getTime(), f.parsed.seq] : [Infinity, i],
++      true,
++    );
++  });
++  changed();
++  next();
++}
+diff --git a/lib/pickers.ts b/lib/pickers.ts
+new file mode 100644
+index 00000000..6a19c45c
+--- /dev/null
++++ b/lib/pickers.ts
+@@ -0,0 +1,74 @@
++import { File } from 'expo-file-system';
++import * as ImagePicker from 'expo-image-picker';
++
++import { displayName, releaseAccess } from '../modules/scanner';
++
++// The phone's pickers, apart from reading what they give: the gallery, the phone's camera app and the file picker
++// (a PDF). lib/scanFlow reads what they give straight away; the camera tab hands it to the queue (lib/captureQueue).
++
++/**
++ * A photo from the gallery: the picker's copy in the app's cache (the person's photo is never touched), or null when
++ * the person cancelled. Throws when the picker fails.
++ */
++export async function pickPhoto(): Promise<string | null> {
++  const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
++  return picked.canceled ? null : picked.assets[0].uri;
++}
++
++/**
++ * A photo from the phone's camera app, in the app's cache; null when the person cancelled; 'no_permission' when the
++ * camera permission wasn't given. Throws when the camera app fails.
++ */
++export async function cameraAppPhoto(): Promise<string | null | 'no_permission'> {
++  const permission = await ImagePicker.requestCameraPermissionsAsync();
++  if (!permission.granted) return 'no_permission';
++  const taken = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
++  return taken.canceled ? null : taken.assets[0].uri;
++}
++
++const PDF_TYPE = 'application/pdf';
++
++/** A PDF by its name (as its app gives it; there may be none) or by the type the phone gives it. */
++function isPdf(name: string | null, type: string | null): boolean {
++  const mime = (type ?? '').split(';')[0].trim().toLowerCase();
++  return (name ?? '').toLowerCase().endsWith('.pdf') || mime === PDF_TYPE;
++}
++
++/** A PDF the file picker gave: its uri, and its name as its app gives it (there may be none). */
++export type PickedPdf = { uri: string; name: string | null };
++
++/**
++ * A PDF from the system's file picker; null when the person cancelled; 'not_pdf' for another kind of file, whose
++ * access has been given up already (letGoOfPdf). Android's picker hands over the person's own file: a content:// link,
++ * which the scanner reads through a copy of its own and never changes. iOS's picker opens a copy in the app's temporary
++ * folder (a file://). Throws when the picker fails.
++ */
++export async function pickPdf(): Promise<PickedPdf | 'not_pdf' | null> {
++  const picked = await File.pickFileAsync({ mimeTypes: [PDF_TYPE] });
++  if (picked.canceled) return null;
++  const file = picked.result;
++  // the name its app gives: a link's own last segment can be an id (Android's Downloads: …/document/msf%3A54)
++  const name = await displayName(file.uri).catch(() => null);
++  if (!isPdf(name, file.type)) {
++    letGoOfPdf(file.uri);
++    return 'not_pdf';
++  }
++  return { uri: file.uri, name };
++}
++
++/**
++ * After a picked PDF's read: iOS's copy (a file://) is deleted, and Android's lasting access to the person's file (a
++ * content://) is given up (readPdf does it too, once it has read it). It's no part of the read: nothing waits for it,
++ * and its failure changes nothing.
++ */
++export function letGoOfPdf(uri: string): void {
++  if (uri.startsWith('file://')) {
++    try {
++      new File(uri).delete();
++    } catch {
++      // already gone
++    }
++  } else {
++    void releaseAccess(uri).catch(() => undefined);
++  }
++}
+diff --git a/lib/readFailures.ts b/lib/readFailures.ts
+new file mode 100644
+index 00000000..0ef4c074
+--- /dev/null
++++ b/lib/readFailures.ts
+@@ -0,0 +1,82 @@
++import { TEAM_BUILD } from './build';
++
++// Why a read failed, in plain words. A capture read straight away (a sample, a Retake's pick) says it in a dialog with
++// today's words (photoFailed, pdfFailed, failureDialog); a team build adds the scanner's own message under them. A
++// capture read by the queue (lib/captureQueue) has no dialog: its session keeps a failed read, with its reason in plain
++// words only, in every build (failedReadReason; the plan's call 5).
++
++const codeOf = (e: unknown): string => {
++  const code = (e as { code?: unknown } | null)?.code;
++  return typeof code === 'string' ? code : '';
++};
++
++/** What to do when the scanner itself failed, in plain words. */
++const SCANNER_NEXT = { photo: 'Try again, or retake it.', PDF: 'Try importing it again.' } as const;
++
++/**
++ * The scanner's own failure (closed, or its model didn't load), naming what it was reading, then what to do. Its own
++ * message is raw error text: a team build adds it under the words, as the splash and the camera show theirs, and a
++ * client never sees it (design §12 A11; the final review's Minor 3).
++ */
++export function scannerFailed(what: 'photo' | 'PDF', e: unknown): string {
++  const words = `Couldn't read that ${what}: ${SCANNER_NEXT[what]}`;
++  const raw = (e as { message?: string } | null)?.message ?? String(e);
++  return TEAM_BUILD && raw !== '' ? `${words}\n\n${raw}` : words;
++}
++
++/** A photo's failed read, as a dialog says it. */
++export function photoFailed(e: unknown): string {
++  return codeOf(e) === 'ERR_UNREADABLE_IMAGE'
++    ? "Couldn't read that photo: This file isn't a photo the scanner can open."
++    : scannerFailed('photo', e);
++}
++
++// readPdf's refusals (its pdf_* codes), in plain words.
++export const PDF_REFUSED: Record<string, string> = {
++  pdf_too_big: 'That PDF is over 20 MB. Choose a smaller file.',
++  pdf_password: 'That PDF has a password. Save a copy without one, then import it.',
++  pdf_broken: "Couldn't read that PDF.",
++  pdf_unreadable: "Couldn't read that PDF.",
++  pdf_page_too_big: "That PDF's page is too big to read.",
++};
++
++/** A refusal's words; a pdf_* code readPdf adds later reads as unreadable. */
++const refusal = (code: string): string =>
++  Object.prototype.hasOwnProperty.call(PDF_REFUSED, code) ? PDF_REFUSED[code] : PDF_REFUSED.pdf_unreadable;
++
++/** A refused PDF in plain words. Any other failure is the scanner's own, so it isn't put on the PDF. */
++export function pdfFailed(e: unknown): string {
++  const code = codeOf(e);
++  return code.startsWith('pdf_') ? refusal(code) : scannerFailed('PDF', e);
++}
++
++/**
++ * A failure's words as Alert.alert's arguments: the reason as the title, then what to do as the message (ruling
++ * T16-1), since Android stops a dialog's title at two lines with an ellipsis. The words are today's, with plain words
++ * in place of the scanner's own message (scannerFailed), split at the colon after "Couldn't read that photo" (or PDF)
++ * or at the end of the first sentence, whichever comes first. A full stop, "?" or "!" ends a sentence only when a space
++ * and more words follow, so a file's name never splits. Words that don't split are the title alone, with no message,
++ * as one-argument Alert.alert sends them (ruling T16-1a), never a message under an empty title: React Native shows an
++ * empty title on Android as a blank, focusable heading.
++ */
++export function failureDialog(words: string): [title: string, message?: string] {
++  const split = /: |[.?!] (?=\S)/.exec(words);
++  if (!split) return [words];
++  const reasonEnd = split[0] === ': ' ? split.index : split.index + 1; // a sentence keeps its full stop; a colon goes
++  return [words.slice(0, reasonEnd), words.slice(split.index + split[0].length)];
++}
++
++/** The reason a session's failed read gives (lib/session's FailedRead): plain words only, never the scanner's own. */
++export const UNREADABLE_PHOTO = "It isn't a photo the scanner can open.";
++export const SCANNER_STOPPED = 'The scanner stopped while reading it.';
++
++/**
++ * Why the queue's read failed, for its session's failed read: a photo the scanner can't open, a PDF's refusal in its
++ * own words (today's), or the scanner stopped. In every build, the scanner's own message stays out (the plan's call 5).
++ */
++export function failedReadReason(kind: 'photo' | 'pdf', e: unknown): string {
++  const code = codeOf(e);
++  if (kind === 'photo' && code === 'ERR_UNREADABLE_IMAGE') return UNREADABLE_PHOTO;
++  if (kind === 'pdf' && code.startsWith('pdf_')) return refusal(code);
++  return SCANNER_STOPPED;
++}
+diff --git a/lib/scanFlow.ts b/lib/scanFlow.ts
+index b336a25a..1d17ad34 100644
+--- a/lib/scanFlow.ts
++++ b/lib/scanFlow.ts
+@@ -1,88 +1,17 @@
+-import { File } from 'expo-file-system';
+-import * as ImagePicker from 'expo-image-picker';
+ import { useIsFocused, useRouter } from 'expo-router';
+ import { useEffect, useRef, useState } from 'react';
+ import { Alert } from 'react-native';
+ 
+-import { displayName, readPdf, releaseAccess, scanPhoto, type ScanResult } from '../modules/scanner';
+-import { TEAM_BUILD } from './build';
++import { readPdf, scanPhoto, type ScanResult } from '../modules/scanner';
+ import { useGoBackOrHome } from './navigation';
++import { cameraAppPhoto, letGoOfPdf, pickPdf, pickPhoto } from './pickers';
++import { failureDialog, pdfFailed, photoFailed } from './readFailures';
+ import { SAMPLES, sampleUri } from './samples';
+ import { addScan, type ScanSource, type StoredScan } from './scans';
+ 
+ // testImage: a photo from the camera's test hook (development builds), kept marked so it never becomes training data
+ type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean; testImage?: boolean };
+ 
+-const codeOf = (e: unknown) => (e as { code?: string } | null)?.code ?? '';
+-
+-/** What to do when the scanner itself failed, in plain words. */
+-const SCANNER_NEXT = { photo: 'Try again, or retake it.', PDF: 'Try importing it again.' } as const;
+-
+-/**
+- * The scanner's own failure (closed, or its model didn't load), naming what it was reading, then what to do. Its own
+- * message is raw error text: a team build adds it under the words, as the splash and the camera show theirs, and a
+- * client never sees it (design §12 A11; the final review's Minor 3).
+- */
+-function scannerFailed(what: 'photo' | 'PDF', e: unknown): string {
+-  const words = `Couldn't read that ${what}: ${SCANNER_NEXT[what]}`;
+-  const raw = (e as { message?: string } | null)?.message ?? String(e);
+-  return TEAM_BUILD && raw !== '' ? `${words}\n\n${raw}` : words;
+-}
+-
+-function photoFailed(e: unknown): string {
+-  return codeOf(e) === 'ERR_UNREADABLE_IMAGE'
+-    ? "Couldn't read that photo: This file isn't a photo the scanner can open."
+-    : scannerFailed('photo', e);
+-}
+-
+-// readPdf's refusals (its pdf_* codes), in plain words.
+-const PDF_REFUSED: Record<string, string> = {
+-  pdf_too_big: 'That PDF is over 20 MB. Choose a smaller file.',
+-  pdf_password: 'That PDF has a password. Save a copy without one, then import it.',
+-  pdf_broken: "Couldn't read that PDF.",
+-  pdf_unreadable: "Couldn't read that PDF.",
+-  pdf_page_too_big: "That PDF's page is too big to read.",
+-};
+-
+-/** A refused PDF in plain words. Any other failure is the scanner's own, so it isn't put on the PDF. */
+-function pdfFailed(e: unknown): string {
+-  const code = codeOf(e);
+-  return code.startsWith('pdf_') ? (PDF_REFUSED[code] ?? PDF_REFUSED.pdf_unreadable) : scannerFailed('PDF', e);
+-}
+-
+-const PDF_TYPE = 'application/pdf';
+-
+-/** A PDF by its name (as its app gives it; there may be none) or by the type the phone gives it. */
+-function isPdf(name: string | null, type: string | null): boolean {
+-  const mime = (type ?? '').split(';')[0].trim().toLowerCase();
+-  return (name ?? '').toLowerCase().endsWith('.pdf') || mime === PDF_TYPE;
+-}
+-
+-/**
+- * A failure's words as Alert.alert's arguments: the reason as the title, then what to do as the message (ruling
+- * T16-1), since Android stops a dialog's title at two lines with an ellipsis. The words are today's, with plain words
+- * in place of the scanner's own message (scannerFailed), split at the colon after "Couldn't read that photo" (or PDF)
+- * or at the end of the first sentence, whichever comes first. A full stop, "?" or "!" ends a sentence only when a space
+- * and more words follow, so a file's name never splits. Words that don't split are the title alone, with no message,
+- * as one-argument Alert.alert sends them (ruling T16-1a), never a message under an empty title: React Native shows an
+- * empty title on Android as a blank, focusable heading.
+- */
+-export function failureDialog(words: string): [title: string, message?: string] {
+-  const split = /: |[.?!] (?=\S)/.exec(words);
+-  if (!split) return [words];
+-  const reasonEnd = split[0] === ': ' ? split.index : split.index + 1; // a sentence keeps its full stop; a colon goes
+-  return [words.slice(0, reasonEnd), words.slice(split.index + split[0].length)];
+-}
+-
+-/** The picker's own copy of a file, once it has been read. */
+-function deleteCopy(file: File): void {
+-  try {
+-    file.delete();
+-  } catch {
+-    // already gone
+-  }
+-}
+-
+ /**
+  * Getting a photo or a PDF read: from the camera, the phone's camera app, the gallery, a sample or the file picker,
+  * then on to its result. One at a time: while one is being picked or read (busy), another does nothing. While one is
+@@ -189,10 +118,7 @@ export function useScanFlow() {
+ 
+   async function fromGallery(opts: { replace?: boolean } = {}): Promise<void> {
+     await run(
+-      async () => {
+-        const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+-        return picked.canceled ? null : picked.assets[0].uri;
+-      },
++      pickPhoto,
+       'Photo from gallery',
+       'gallery',
+       { ...opts, deletePhoto: true }, // the picker's copy in the app's cache; the person's photo is never deleted
+@@ -203,13 +129,12 @@ export function useScanFlow() {
+   async function fromCameraApp(opts: { replace?: boolean } = {}): Promise<void> {
+     await run(
+       async () => {
+-        const permission = await ImagePicker.requestCameraPermissionsAsync();
+-        if (!permission.granted) {
++        const taken = await cameraAppPhoto();
++        if (taken === 'no_permission') {
+           sayWhy('The camera app needs the camera permission too. Choose a photo from the gallery instead.');
+           return null;
+         }
+-        const taken = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
+-        return taken.canceled ? null : taken.assets[0].uri;
++        return taken;
+       },
+       'Camera photo',
+       'camera_app',
+@@ -224,29 +149,22 @@ export function useScanFlow() {
+   }
+ 
+   /**
+-   * A PDF from the system's file picker, its page 1 read, labelled with the file's name. Android's picker hands over
+-   * the person's own file: a content:// link, which the scanner reads through a copy of its own and never changes; the
+-   * picker's lasting access to it is given up afterwards (readPdf does it too, once it has read it). iOS's picker opens
+-   * a copy in the app's temporary folder (a file://), deleted once it has been read.
++   * A PDF from the system's file picker (lib/pickers), its page 1 read, labelled with the file's name. Once it has been
++   * read, the picker's copy goes, or its access to the person's file is given up (letGoOfPdf).
+    */
+   async function fromPdf(opts: { replace?: boolean } = {}): Promise<void> {
+     await oneAtATime(async () => {
+-      const picked = await File.pickFileAsync({ mimeTypes: [PDF_TYPE] });
+-      if (picked.canceled) return;
+-      const file = picked.result;
++      const picked = await pickPdf();
++      if (picked === null) return;
++      if (picked === 'not_pdf') {
++        sayWhy('Choose a PDF file.');
++        return;
++      }
+       try {
+-        // the name its app gives: a link's own last segment can be an id (Android's Downloads: …/document/msf%3A54)
+-        const name = await displayName(file.uri).catch(() => null);
+-        if (!isPdf(name, file.type)) {
+-          sayWhy('Choose a PDF file.');
+-          return;
+-        }
+-        const scan = { label: name ? `PDF: ${name}` : 'PDF', source: 'pdf' } as const;
+-        await readAndOpen(() => readPdf(file.uri), scan, opts.replace, pdfFailed, 'pdf');
++        const scan = { label: picked.name ? `PDF: ${picked.name}` : 'PDF', source: 'pdf' } as const;
++        await readAndOpen(() => readPdf(picked.uri), scan, opts.replace, pdfFailed, 'pdf');
+       } finally {
+-        // giving up the access is no part of the read: nothing waits for it, and its failure changes nothing
+-        if (file.uri.startsWith('file://')) deleteCopy(file);
+-        else void releaseAccess(file.uri).catch(() => undefined);
++        letGoOfPdf(picked.uri);
+       }
+     });
+   }
+diff --git a/lib/scans.ts b/lib/scans.ts
+index cd0f7f92..01f792e2 100644
+--- a/lib/scans.ts
++++ b/lib/scans.ts
+@@ -87,7 +87,8 @@ let recent: readonly StoredScan[] = []; // replaced, never changed in place: scr
+ const opened = new Map<string, StoredScan>(); // saved scans opened from Saved
+ let counter = 0;
+ const listeners = new Set<() => void>();
+-let written: Promise<void> = Promise.resolve(); // recent.json's latest write, its failure caught: scansWritten
++let written: Promise<boolean> = Promise.resolve(true); // recent.json's latest write: whether it landed (scansWritten)
++let loading: Promise<void> | null = null; // recent.json's one read in this JS context (loadRecent)
+ 
+ function changed(): void {
+   listeners.forEach((listener) => listener());
+@@ -102,16 +103,19 @@ export function subscribeRecent(listener: () => void): () => void {
+ }
+ 
+ function save(): void {
+-  written = writeJson(FILE, recent.map((s) => ({ ...s, at: s.at.toISOString() }))).catch(() => {
+-    // the list is a convenience: a scan still shows when it can't be saved
+-  });
++  // the list is a convenience: a scan still shows when it can't be saved
++  written = writeJson(FILE, recent.map((s) => ({ ...s, at: s.at.toISOString() }))).then(
++    () => true,
++    () => false,
++  );
+ }
+ 
+ /**
+- * Resolves once recent.json holds every change made so far, or its write failed: its writes go one at a time
+- * (lib/jsonFile), so the latest one lands last.
++ * True once recent.json holds every change made so far; false when its latest write failed (ruling T2-2), so the
++ * queue keeps a photo whose scan it may not hold. Its writes go one at a time (lib/jsonFile), so the latest one lands
++ * last, with every change before it.
+  */
+-export function scansWritten(): Promise<void> {
++export function scansWritten(): Promise<boolean> {
+   return written;
+ }
+ 
+@@ -131,9 +135,12 @@ const FRESH = {
+ /** A BIR Form 2307 (its form found) is a 2307; any other scan keeps its kind, a sale until the person says otherwise. */
+ const kindOf = (r: ScanResult, kept: Kind = 'sale'): Kind => (r.aligned && r.form === 'bir_2307' ? '2307' : kept);
+ 
++/** A time that is one: an invalid Date would make recent.json's every later write throw (ruling T2-1). */
++const isTime = (at: Date | undefined): at is Date => at instanceof Date && !Number.isNaN(at.getTime());
++
+ /**
+  * Keeps a scan just read as the newest, with the session it was taken in, if any. It's kept as of now, or as of the time
+- * given: a queued photo's, when it was taken (ruling P-F2).
++ * given: a queued photo's, when it was taken (ruling P-F2). A time that is no time is now (ruling T2-1).
+  */
+ export function addScan(
+   s: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'result' | 'testImage' | 'session'> & { at?: Date },
+@@ -145,7 +152,7 @@ export function addScan(
+     kind: kindOf(s.result),
+     made: { app: APP_VERSION, model: modelVersion() },
+     id: `${Date.now()}-${++counter}`,
+-    at: s.at ?? new Date(),
++    at: isTime(s.at) ? s.at : new Date(),
+   };
+   recent = [scan, ...recent].slice(0, KEEP);
+   changed();
+@@ -261,9 +268,16 @@ export function recentScans(): readonly StoredScan[] {
+ 
+ /**
+  * At start: the saved list, without scans whose folder is gone. Older entries get the new fields' starting values,
+- * and a 2307 kept as a sale (before a 2307 could be saved) is a 2307.
++ * and a 2307 kept as a sale (before a 2307 could be saved) is a 2307. It's read once per JS context (ruling P-F1): a
++ * start run again (a font-size or display-size change, or the splash's Try again) keeps what memory holds, which can
++ * be ahead of the file while the queue writes it.
+  */
+-export async function loadRecent(): Promise<void> {
++export function loadRecent(): Promise<void> {
++  loading ??= readRecent();
++  return loading;
++}
++
++async function readRecent(): Promise<void> {
+   try {
+     const saved = await readJson<(Omit<StoredScan, 'at' | 'result'> & { at: string; result: KeptResult })[]>(FILE);
+     if (!saved) return;
+diff --git a/lib/startup.ts b/lib/startup.ts
+index 0165b811..74166097 100644
+--- a/lib/startup.ts
++++ b/lib/startup.ts
+@@ -1,3 +1,5 @@
++import { useSyncExternalStore } from 'react';
++
+ import { loadInstall } from './install';
+ import { loadLists } from './lists';
+ import { loadSaved } from './saved';
+@@ -14,3 +16,28 @@ export async function loadAppData(): Promise<void> {
+   await Promise.all([loadRecent(), loadLists(), loadSettings(), loadInstall(), loadSession()]);
+   await loadSaved();
+ }
++
++// Whether the app has started: its splash has gone, so the camera may start and ask for its permission, and the queue
++// reads what a closed app left (app/_layout). A new font size, display size or language mounts a new root in the same
++// JS context (ruling T26-4), and its splash shows again: until it goes, the app hasn't started.
++let started = false;
++const startedListeners = new Set<() => void>();
++
++function subscribeStarted(listener: () => void): () => void {
++  startedListeners.add(listener);
++  return () => {
++    startedListeners.delete(listener);
++  };
++}
++
++/** The splash has gone (true), or a new root shows it (false). */
++export function setStarted(next: boolean): void {
++  if (started === next) return;
++  started = next;
++  startedListeners.forEach((listener) => listener());
++}
++
++/** Whether the splash has gone, for the screens: nothing starts behind it. */
++export function useStarted(): boolean {
++  return useSyncExternalStore(subscribeStarted, () => started);
++}

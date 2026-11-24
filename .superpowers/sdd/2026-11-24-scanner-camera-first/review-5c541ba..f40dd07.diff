@@ -1,0 +1,301 @@
+diff --git a/__tests__/captureQueue.test.ts b/__tests__/captureQueue.test.ts
+index 62385ade..46337a08 100644
+--- a/__tests__/captureQueue.test.ts
++++ b/__tests__/captureQueue.test.ts
+@@ -542,6 +542,74 @@ test('a photo kept back goes once a later write holds its scan; a resume meanwhi
+   expect(queued()).toEqual([]);
+ });
+ 
++test('a resume while a photo is still moving neither queues it twice nor takes its folder (ruling T3-2)', async () => {
++  const { queue, fs } = m;
++  // expo-file-system's move is async: the file can be in files/queue before its promise resolves, or not there yet
++  const move = fs.File.prototype.move;
++  const landings: (() => void)[] = [];
++  jest.spyOn(fs.File.prototype, 'move').mockImplementation(function (
++    this: InstanceType<typeof fs.File>,
++    ...args: Parameters<typeof move>
++  ) {
++    const [to] = args;
++    if (!to.uri.startsWith(QUEUE + '/')) return move.apply(this, args); // recent.json's own writes
++    if (to.uri.endsWith('-1-camera.jpg')) {
++      // there at once, its promise later
++      return move.apply(this, args).then(() => new Promise<void>((resolve) => landings.push(resolve)));
++    }
++    return new Promise<void>((resolve, reject) => landings.push(() => void move.apply(this, args).then(resolve, reject)));
++  });
++  void queue.queuePhoto(photo('capture_1.jpg'), { session: A, source: 'camera' }, T);
++  void queue.queuePhoto(photo('capture_2.jpg'), { session: B, source: 'camera' }, at(1));
++  await flush();
++  expect(queued()).toEqual([`${A}/${T.getTime()}-1-camera.jpg`]); // B's folder is made, its photo not there yet
++  expect(memoryFs.dirs.has(`${QUEUE}/${B}`)).toBe(true);
++
++  await queue.resumeQueue(); // a start run again meanwhile
++  expect(queue.captures()).toHaveLength(2);
++  expect(memoryFs.dirs.has(`${QUEUE}/${B}`)).toBe(true); // a folder a photo is moving into stays
++  landings.forEach((land) => land());
++  await flush();
++  expect(queued()).toEqual([`${A}/${T.getTime()}-1-camera.jpg`, `${B}/${at(1).getTime()}-2-camera.jpg`]);
++  await read(result());
++  await read(result());
++  expect(mockScanPhoto).toHaveBeenCalledTimes(2);
++  expect(m.scans.recentScans().map((s) => s.session)).toEqual([B, A]);
++  await flush();
++  expect(queued()).toEqual([]);
++});
++
++test("a scan that can't be kept leaves the queue, and its photo stays for the next start (ruling T3-3)", async () => {
++  const { queue, scans } = m;
++  jest.spyOn(scans, 'addScan').mockImplementationOnce(() => {
++    throw new Error('out of memory');
++  });
++  await queue.queuePhoto(photo('capture_1.jpg'), { session: A, source: 'camera' }, T);
++  await queue.queuePhoto(photo('capture_2.jpg'), { session: A, source: 'camera' }, at(1));
++  await read(result());
++  expect(queue.captures().map((c) => c.at)).toEqual([at(1)]); // it left; the next one is read
++  expect(mockScanPhoto).toHaveBeenCalledTimes(2);
++  await read(result());
++  await flush();
++  expect(mockScanPhoto).toHaveBeenCalledTimes(2); // never read again in a loop
++  expect(scans.recentScans().map((s) => s.at)).toEqual([at(1)]);
++  // the second scan's write landed: it doesn't hold the first one's, so that photo stays
++  const first = `${A}/${T.getTime()}-1-camera.jpg`;
++  expect(queued()).toEqual([first]);
++  await queue.resumeQueue(); // nor is it read again in this JS context
++  expect(mockScanPhoto).toHaveBeenCalledTimes(2);
++
++  jest.restoreAllMocks();
++  jest.resetModules(); // the next start reads it
++  const next = load();
++  await next.scans.loadRecent();
++  await next.queue.resumeQueue();
++  await read(result());
++  expect(next.scans.recentScans().map((s) => s.at)).toEqual([T, at(1)]);
++  await flush();
++  expect(queued()).toEqual([]);
++});
++
+ test("a photo that can't be moved is read where it is", async () => {
+   const { queue, scans, fs } = m;
+   jest.spyOn(fs.File.prototype, 'move').mockRejectedValueOnce(new Error('No space left on device'));
+diff --git a/__tests__/rootLayout.test.tsx b/__tests__/rootLayout.test.tsx
+index f554f754..807f4234 100644
+--- a/__tests__/rootLayout.test.tsx
++++ b/__tests__/rootLayout.test.tsx
+@@ -1,5 +1,6 @@
+ import { router } from 'expo-router';
+ import { act, renderRouter, screen } from 'expo-router/testing-library';
++import { useEffect } from 'react';
+ import { type StyleProp, StyleSheet, Text, type ViewStyle } from 'react-native';
+ 
+ import { setStarted, useStarted } from '../lib/startup';
+@@ -117,3 +118,20 @@ test('once the splash has gone, the app is started and the queue resumes', async
+   expect(screen.getByText('Started')).toBeOnTheScreen();
+   expect(mockResume).toHaveBeenCalledTimes(1);
+ });
++
++test("a root mounted anew is not started for its screens' first effects, nor after (ruling T3-1)", async () => {
++  // React runs a screen's effects before its root's: the camera under the splash must never see true, even once
++  const seen: boolean[] = [];
++  function Camera() {
++    const started = useStarted();
++    useEffect(() => {
++      seen.push(started);
++    }, [started]);
++    return <Text>Camera</Text>;
++  }
++  setStarted(true); // as the root before this one left it
++  await renderRouter({ ...ROUTES, index: Camera }, { initialUrl: '/' });
++  expect(seen).toEqual([false]);
++  await act(async () => mockEndSplash());
++  expect(seen).toEqual([false, true]);
++});
+diff --git a/app/_layout.tsx b/app/_layout.tsx
+index 862bfe70..d0344532 100644
+--- a/app/_layout.tsx
++++ b/app/_layout.tsx
+@@ -8,7 +8,7 @@ import { BrandSplash } from '../components/BrandSplash';
+ import { SnackbarHost } from '../components/Snackbar';
+ import { resumeQueue } from '../lib/captureQueue';
+ import { currentSnack, dismissSnack } from '../lib/snackbar';
+-import { setStarted } from '../lib/startup';
++import { resetStarted, setStarted } from '../lib/startup';
+ import { colors } from '../lib/theme';
+ 
+ // The phone's own splash stays up until the brand splash has drawn; that one stays until the scanner is ready.
+@@ -22,6 +22,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
+ export const unstable_settings = { anchor: 'index' };
+ 
+ export default function RootLayout() {
++  useState(resetStarted); // before its screens render: not started until its splash has gone (ruling T3-1)
+   const [ready, setReady] = useState(false);
+   // Once the splash has gone, the app has started: the camera may start, and the queue reads what a closed app left in
+   // files/queue (lib/captureQueue), now that the recent scans are loaded.
+@@ -31,8 +32,9 @@ export default function RootLayout() {
+     void resumeQueue();
+   }, []);
+   // A new font size, display size or language restarts Android's activity in the same JS context, and this root mounts
+-  // anew (ruling T26-4), its splash up again: until it goes, the app hasn't started. A message from before it goes: its
+-  // action (a save's View) is bound to the old root's router, so it would do nothing (the final review's Minor 6).
++  // anew (ruling T26-4), its splash up again: until it goes, the app hasn't started (reset as it rendered; this tells
++  // the old root's screens too). A message from before it goes: its action (a save's View) is bound to the old root's
++  // router, so it would do nothing (the final review's Minor 6).
+   useEffect(() => {
+     setStarted(false);
+     const before = currentSnack();
+diff --git a/lib/captureQueue.ts b/lib/captureQueue.ts
+index c4718490..ba2acd2c 100644
+--- a/lib/captureQueue.ts
++++ b/lib/captureQueue.ts
+@@ -40,8 +40,11 @@ export type Capture = {
+   reading: boolean;
+ };
+ 
+-/** A capture, with its place in the reading order and whether its photo has landed where it's read from. */
+-type Entry = { capture: Capture; order: readonly [at: number, seq: number]; ready: boolean };
++/**
++ * A capture, with its place in the reading order, whether its photo has landed where it's read from, and where in
++ * files/queue it's moving to: a move is async, so the file can be there before the move resolves (ruling T3-2).
++ */
++type Entry = { capture: Capture; order: readonly [at: number, seq: number]; ready: boolean; target: string | null };
+ 
+ let entries: Entry[] = []; // in the reading order
+ let list: readonly Capture[] = []; // replaced, never changed in place: the tray subscribes to it
+@@ -53,6 +56,7 @@ const listeners = new Set<() => void>();
+ const waiters: { session: string; resolve: () => void }[] = [];
+ const settling = new Set<string>(); // photos read, waiting for recent.json to hold their scans
+ const keptBack = new Set<string>(); // photos whose scans recent.json couldn't hold: the next start has them (T2-2)
++const unkept = new Set<string>(); // photos read whose scans couldn't be kept: only the next start reads them (T3-3)
+ 
+ const QUEUE = 'queue';
+ const SOURCES: readonly PhotoSource[] = ['camera', 'gallery', 'camera_app'];
+@@ -122,7 +126,7 @@ const before = (a: Entry['order'], b: Entry['order']) => a[0] < b[0] || (a[0] ==
+ 
+ /** Puts a capture in its place in the reading order: after every one taken before it, or at the same time. */
+ function add(capture: Omit<Capture, 'key' | 'reading'>, order: Entry['order'], ready: boolean): Entry {
+-  const entry: Entry = { capture: { ...capture, key: `c${++keys}`, reading: false }, order, ready };
++  const entry: Entry = { capture: { ...capture, key: `c${++keys}`, reading: false }, order, ready, target: null };
+   const at = entries.findIndex((e) => !e.capture.reading && before(order, e.order));
+   entries = at < 0 ? [...entries, entry] : [...entries.slice(0, at), entry, ...entries.slice(at)];
+   return entry;
+@@ -149,16 +153,21 @@ function deleteFile(uri: string): void {
+ 
+ const extensionOf = (uri: string): string => /\.([A-Za-z0-9]+)$/.exec(uri.replace(/[?#].*$/, ''))?.[1] ?? 'jpg';
+ 
+-/** Moves a photo into files/queue/<session>/ under the name given; its new uri, or null when it couldn't move. */
+-async function moveIn(from: string, session: string, name: string): Promise<string | null> {
++/**
++ * Moves a photo into files/queue/<session>/ under the name given, its destination on the entry before the move starts;
++ * its new uri, or null when it couldn't move.
++ */
++async function moveIn(entry: Entry, from: string, session: string, name: string): Promise<string | null> {
+   try {
+     if (!FOLDER_NAME.test(session)) return null;
+     const folder = new Directory(Paths.document, QUEUE, session);
+-    if (!folder.exists) folder.create({ intermediates: true });
+     const to = new File(folder, name);
++    entry.target = to.uri;
++    if (!folder.exists) folder.create({ intermediates: true });
+     await new File(from).move(to);
+     return to.uri;
+   } catch {
++    entry.target = null;
+     return null; // it's read where it is
+   }
+ }
+@@ -181,7 +190,7 @@ export async function queuePhoto(
+     false,
+   );
+   changed();
+-  const moved = await moveIn(from, p.session, queuedName(at, n, p.source, testImage, extensionOf(from)));
++  const moved = await moveIn(entry, from, p.session, queuedName(at, n, p.source, testImage, extensionOf(from)));
+   entry.ready = true;
+   if (moved !== null) update(entry, { uri: moved });
+   next();
+@@ -212,7 +221,7 @@ function next(): void {
+   if (!entry || !entry.ready) return;
+   busy = true;
+   update(entry, { reading: true });
+-  void read(entry);
++  void read(entry).catch(() => {}); // it never throws: each step that can is caught where it is
+ }
+ 
+ async function read(entry: Entry): Promise<void> {
+@@ -230,7 +239,14 @@ async function read(entry: Entry): Promise<void> {
+       if (c.kind === 'pdf') letGoOfPdf(c.uri);
+     }
+     // a form not found is a scan like any other: it has its Retake
+-    addScan({ label: labelOf(c), source: c.source, result, testImage: c.testImage, session: c.session, at: c.at });
++    try {
++      addScan({ label: labelOf(c), source: c.source, result, testImage: c.testImage, session: c.session, at: c.at });
++    } catch {
++      // it couldn't be kept: it leaves the queue, and its photo stays for the next start to read (ruling T3-3)
++      remove(entry);
++      if (c.kind === 'photo') unkept.add(c.uri);
++      return;
++    }
+     remove(entry); // in the same tick: the tray never shows it twice
+     touchSession(c.session, new Date());
+     if (c.replaces !== null) {
+@@ -273,10 +289,12 @@ const alreadyRead = (session: string, at: Date) =>
+ /**
+  * At start, once the recent scans are loaded: what's left in files/queue, read into its sessions, oldest first. A name
+  * the queue didn't give is a camera photo, read after the others. A photo already queued, or read and waiting to go, is
+- * skipped, so it's idempotent; one whose scan is kept already goes (ruling P-F2). An empty folder goes.
++ * skipped, so it's idempotent, as is one still moving in (ruling T3-2); one whose scan is kept already goes (ruling
++ * P-F2). An empty folder goes, unless a photo is moving into it.
+  */
+ export async function resumeQueue(): Promise<void> {
+-  const known = new Set([...entries.map((e) => e.capture.uri), ...settling, ...keptBack]);
++  const moving = entries.flatMap((e) => (e.target !== null ? [e.target] : []));
++  const known = new Set([...entries.map((e) => e.capture.uri), ...moving, ...settling, ...keptBack, ...unkept]);
+   const found: { session: string; uri: string; name: string; parsed: ReturnType<typeof parseQueuedName> }[] = [];
+   try {
+     const root = new Directory(Paths.document, QUEUE);
+@@ -285,7 +303,8 @@ export async function resumeQueue(): Promise<void> {
+       if (!(folder instanceof Directory)) continue;
+       const files = folder.list();
+       if (files.length === 0) {
+-        folder.delete();
++        const base = folder.uri.endsWith('/') ? folder.uri : `${folder.uri}/`;
++        if (!moving.some((target) => target.startsWith(base))) folder.delete(); // not one a photo is moving into
+         continue;
+       }
+       for (const file of files) {
+diff --git a/lib/startup.ts b/lib/startup.ts
+index 74166097..c88367a7 100644
+--- a/lib/startup.ts
++++ b/lib/startup.ts
+@@ -21,6 +21,7 @@ export async function loadAppData(): Promise<void> {
+ // reads what a closed app left (app/_layout). A new font size, display size or language mounts a new root in the same
+ // JS context (ruling T26-4), and its splash shows again: until it goes, the app hasn't started.
+ let started = false;
++let unheard = false; // reset by a new root's render: its listeners hear of it at its next setStarted
+ const startedListeners = new Set<() => void>();
+ 
+ function subscribeStarted(listener: () => void): () => void {
+@@ -32,11 +33,24 @@ function subscribeStarted(listener: () => void): () => void {
+ 
+ /** The splash has gone (true), or a new root shows it (false). */
+ export function setStarted(next: boolean): void {
+-  if (started === next) return;
++  if (started === next && !unheard) return;
+   started = next;
++  unheard = false;
+   startedListeners.forEach((listener) => listener());
+ }
+ 
++/**
++ * A new root, as it renders: not started, before any of its screens renders or runs an effect (ruling T3-1). React runs
++ * a screen's effects before its root's, so a reset in the root's effect comes too late. It tells no one, since nothing
++ * may update another component while one renders: the root's effect then runs setStarted(false), which does. Run twice
++ * (StrictMode), it changes nothing more.
++ */
++export function resetStarted(): void {
++  if (!started) return;
++  started = false;
++  unheard = true;
++}
++
+ /** Whether the splash has gone, for the screens: nothing starts behind it. */
+ export function useStarted(): boolean {
+   return useSyncExternalStore(subscribeStarted, () => started);

@@ -112,7 +112,8 @@ Never `git add -A` without that list.
 **Its status:**
 - Task 1 is done and reviewed: the camera keeps shooting, `rearm()`, 100 scans, and the debug counter.
 - Task 2 is done and reviewed: the session store, and the scanner-folder rule.
-- **Task 3 (the capture queue) is next.** Its failing tests (RED) are committed as work in progress on the branch `camera-first`. Continue there, from the ledger's PAUSED section.
+- Task 3 is done and reviewed: the capture queue (`lib/captureQueue.ts`), the pickers and the read-failure words.
+- **Task 4 is next**, on the branch `camera-first`. Its brief is `task-4-brief.md` beside the ledger.
 
 **The user's answers for this plan:**
 - execution is subagent-driven, with a fresh implementer and a reviewer per task;
