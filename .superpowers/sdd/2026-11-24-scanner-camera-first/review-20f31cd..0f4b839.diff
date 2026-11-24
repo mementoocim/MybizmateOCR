@@ -1,0 +1,862 @@
+diff --git a/__tests__/icons.test.tsx b/__tests__/icons.test.tsx
+index 3685d919..285a2eff 100644
+--- a/__tests__/icons.test.tsx
++++ b/__tests__/icons.test.tsx
+@@ -2,16 +2,18 @@ import { render, screen } from '@testing-library/react-native';
+ 
+ import * as icons from '../components/icons';
+ import {
+-  ArrowLeft, Camera, Check, ChevronRight, CircleAlert, CircleCheck, Close, Download, FileText, Flashlight,
+-  FlashlightOff, ImageIcon, ListIcon, Lock, More, Search, SettingsIcon, Share, TriangleAlert,
++  ArrowLeft, Camera, Check, ChevronRight, CircleAlert, CircleCheck, CircleUser, Close, Download, Files, FileText,
++  Flashlight, FlashlightOff, House, ImageIcon, ListIcon, Lock, More, Search, Send, SettingsIcon, Share, TriangleAlert,
+ } from '../components/icons';
+ 
+ // Design B §5.4: Lucide's stroke icons, as on mybizmate.io, in place of today's filled Material paths. In the
+ // design's order: arrow-left, x, list, settings, camera, image, file-text, chevron-right, lock, flashlight,
+-// flashlight-off, share, ellipsis-vertical, search, triangle-alert, circle-check, circle-alert, download, check.
++// flashlight-off, share, ellipsis-vertical, search, triangle-alert, circle-check, circle-alert, download, check; then
++// the bar's (camera first, spec §6.2): house, files, send and circle-user.
+ const GLYPHS = {
+   ArrowLeft, Close, ListIcon, SettingsIcon, Camera, ImageIcon, FileText, ChevronRight, Lock, Flashlight,
+   FlashlightOff, Share, More, Search, TriangleAlert, CircleCheck, CircleAlert, Download, Check,
++  House, Files, Send, CircleUser,
+ };
+ 
+ test('every glyph is a Lucide stroke icon', async () => {
+diff --git a/__tests__/layout.test.tsx b/__tests__/layout.test.tsx
+index 755bdf34..6041825e 100644
+--- a/__tests__/layout.test.tsx
++++ b/__tests__/layout.test.tsx
+@@ -1,4 +1,5 @@
+ import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
++import { BottomTabBarHeightContext } from 'expo-router/js-tabs';
+ import { createRef, type ReactNode, useEffect } from 'react';
+ import {
+   DeviceEventEmitter,
+@@ -17,7 +18,9 @@ import { Button, type ButtonProps } from '../components/Buttons';
+ import { Header } from '../components/Header';
+ import { IconButton } from '../components/IconButton';
+ import { ListIcon, SettingsIcon } from '../components/icons';
+-import { Screen, ScrollIntoViewScope, useEndPadding, useKeyboardHeight, useScrollIntoView } from '../components/Screen';
++import {
++  Screen, ScrollIntoViewScope, useEndPadding, useKeyboardHeight, useScrollIntoView, useTabBarSpace,
++} from '../components/Screen';
+ import { colors, space, touch, type } from '../lib/theme';
+ import { keyboard } from '../test-utils/keyboard';
+ import { standIn } from '../test-utils/scrollStandIn';
+@@ -335,6 +338,51 @@ test('useEndPadding: a screen with its own list pads it the same way', async ()
+   await keyboard(0);
+ });
+ 
++test('in a tab, the end of a scroll clears the bar; with the keyboard up, the keyboard', async () => {
++  // The tabs give their screens the bar's height (components/TabBar reports it, the raised button too): 120 here,
++  // more than the navigation bar's inset. The bar hides while the keyboard is up (ruling P-F5), so then it's the
++  // keyboard over the inset, as outside the tabs.
++  function TabSpace() {
++    return <Text>{`tab bar ${useTabBarSpace()}`}</Text>;
++  }
++  const inTab = (children: ReactNode) => (
++    <BottomTabBarHeightContext.Provider value={120}>{children}</BottomTabBarHeightContext.Provider>
++  );
++  await render(
++    inTab(
++      <Screen header={<Header title="Sessions" />}>
++        <TabSpace />
++      </Screen>,
++    ),
++  );
++  expect(endPadding('screen-scroll')).toMatchObject({ paddingBottom: 120 + space.xl });
++  expect(screen.getByText('tab bar 120')).toBeOnTheScreen();
++  await keyboard(300);
++  expect(endPadding('screen-scroll')).toMatchObject({ paddingBottom: BOTTOM + space.xl + 300 });
++  expect(screen.getByText('tab bar 0')).toBeOnTheScreen();
++  await keyboard(0);
++  expect(endPadding('screen-scroll')).toMatchObject({ paddingBottom: 120 + space.xl });
++
++  // A screen's own bottom bar takes the space as before: the end keeps only its own.
++  await screen.rerender(
++    inTab(
++      <Screen header={<Header title="Scan" />} bottom={<BottomBar buttons={retakeAnd('Save sale')} />}>
++        <Text>Body</Text>
++      </Screen>,
++    ),
++  );
++  expect(endPadding('screen-scroll')).toMatchObject({ paddingBottom: space.xl });
++
++  // Outside the tabs there's no bar: the inset, as before.
++  await screen.rerender(
++    <Screen header={<Header title="Your lists" />}>
++      <TabSpace />
++    </Screen>,
++  );
++  expect(endPadding('screen-scroll')).toMatchObject({ paddingBottom: BOTTOM + space.xl });
++  expect(screen.getByText('tab bar 0')).toBeOnTheScreen();
++});
++
+ test('useScrollIntoView: scrolls a target to 24 dp under the top of the scroll; outside any scope it does nothing', async () => {
+   const scrollRef = createRef<ScrollViewInstance>();
+   await render(
+diff --git a/__tests__/tabBar.test.tsx b/__tests__/tabBar.test.tsx
+new file mode 100644
+index 00000000..762f85d2
+--- /dev/null
++++ b/__tests__/tabBar.test.tsx
+@@ -0,0 +1,340 @@
++import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
++import {
++  BottomTabBarHeightCallbackContext,
++  BottomTabBarHeightContext,
++  type BottomTabBarProps,
++} from 'expo-router/js-tabs';
++import { type ReactNode, useCallback, useState } from 'react';
++import { Text } from 'react-native';
++
++import { Camera, CircleUser, Files, House, Send } from '../components/icons';
++import { useTabBarSpace } from '../components/Screen';
++import { countText, TabBar, type TabName, TABS } from '../components/TabBar';
++import { loadSaved } from '../lib/saved';
++import { currentShutter, setShutter, subscribeShutter } from '../lib/shutter';
++import { bottomClearance } from '../lib/snackbar';
++import { bar, colors, elevation, radius, space, touch } from '../lib/theme';
++import { contrast } from '../test-utils/contrast';
++import { keyboard } from '../test-utils/keyboard';
++import { memoryFs } from '../test-utils/memoryFs';
++import { typeStylesOf } from '../test-utils/typeStyles';
++
++// Spec §6.2 (calls 19 and 20): the floating bar. Five icon tabs in a white bar with 20 dp corners, 12 dp above the
++// navigation bar's inset: Home, Sessions, the raised coral Camera (the shutter, on the camera), Export with its count,
++// and Profile. The props are made up, as the tabs navigator gives them; jest has no layout, so the bar's height is
++// given as Android would report it. This file's insets: 34 dp at the bottom.
++
++let mockFocused = true; // the tabs are the screen on top
++jest.mock('expo-router', () => ({ useIsFocused: () => mockFocused }));
++jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
++
++const BOTTOM = 34;
++const NAMES: readonly TabName[] = ['index', 'sessions', 'camera', 'export', 'profile'];
++const keyOf = (name: TabName) => `${name}-route`;
++
++const emit = jest.fn((_event: object) => ({ defaultPrevented: false }));
++const navigateToTab = jest.fn();
++
++/** The navigator's props with that tab open; options are every tab's (tabBarHideOnKeyboard, say). */
++function propsAt(open: TabName, options: object = {}): BottomTabBarProps {
++  const routes = NAMES.map((name) => ({ key: keyOf(name), name }));
++  return {
++    state: { index: NAMES.indexOf(open), routes },
++    descriptors: Object.fromEntries(routes.map((route) => [route.key, { options }])),
++    emitter: { emit },
++    navigateToTab,
++    insets: { top: 24, bottom: BOTTOM, left: 0, right: 0 },
++  } as unknown as BottomTabBarProps;
++}
++
++/** The tabs as the navigator gives them to its screens: the bar reports its height, and the screens read it. */
++function Tabs({ onHeight, children }: { onHeight: (height: number) => void; children?: ReactNode }) {
++  const [height, setHeight] = useState<number | undefined>(undefined);
++  const reported = useCallback(
++    (h: number) => {
++      onHeight(h);
++      setHeight(h);
++    },
++    [onHeight],
++  );
++  return (
++    <BottomTabBarHeightCallbackContext.Provider value={reported}>
++      <BottomTabBarHeightContext.Provider value={height}>{children}</BottomTabBarHeightContext.Provider>
++    </BottomTabBarHeightCallbackContext.Provider>
++  );
++}
++function TabScreen() {
++  return <Text>{`tab bar ${useTabBarSpace()}`}</Text>;
++}
++
++type Instance = ReturnType<typeof screen.getByRole>;
++const tab = (name: string | RegExp) => screen.getByRole('tab', { name });
++const press = (el: Instance) => act(async () => fireEvent.press(el));
++/** The icons under a node stroked in a color. */
++const iconsIn = (node: Instance, color: string) => node.queryAll((n) => n.props.stroke === color);
++/** Android lays the bar's root out at this height. */
++const layOut = (height: number) =>
++  fireEvent(screen.getByTestId('tab-bar'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 360, height } } });
++
++const camera = {}; // the camera tab, as the shutter knows it
++
++let saves = 0;
++/** A saved sale's summary as saved.json keeps it, exported or not. */
++function summary(exportedAt: string | null = null) {
++  saves += 1;
++  return {
++    id: `saved-${saves}`,
++    label: 'Camera photo',
++    partyName: 'Torres Construction Supply',
++    partyId: null,
++    date: '2026-11-18',
++    listed: true,
++    savedAt: '2026-11-19T01:00:00.000Z',
++    exportedAt,
++    kind: 'sale',
++    gross: 1250,
++    row: {},
++  };
++}
++/** The saved scans, as if saved.json held these when the app started. */
++async function savedAre(summaries: ReturnType<typeof summary>[]) {
++  memoryFs.files.set('file:///docs/saved.json', JSON.stringify(summaries));
++  await act(async () => loadSaved());
++}
++
++beforeEach(async () => {
++  jest.clearAllMocks();
++  mockFocused = true;
++  setShutter(camera, null);
++  memoryFs.reset();
++  await loadSaved();
++});
++
++test('a tablist of five tabs in order, each a tab with its name; the open one is selected', async () => {
++  expect(TABS.map((t) => [t.name, t.label, t.icon])).toEqual([
++    ['index', 'Home', House],
++    ['sessions', 'Sessions', Files],
++    ['camera', 'Camera', Camera],
++    ['export', 'Export', Send],
++    ['profile', 'Profile', CircleUser],
++  ]);
++  await render(<TabBar {...propsAt('sessions')} />);
++  // The bar is a tablist; it isn't an accessibility element of its own, so its tabs stay TalkBack's to reach one by one.
++  const list = screen.getByTestId('tab-list');
++  expect(list.props.accessibilityRole).toBe('tablist');
++  const tabs = within(list).getAllByRole('tab');
++  expect(tabs.map((t) => t.props.accessibilityLabel)).toEqual(['Home', 'Sessions', 'Camera', 'Export', 'Profile']);
++  expect(tab('Sessions')).toBeSelected();
++  for (const name of ['Home', 'Camera', 'Export', 'Profile']) expect(tab(name)).not.toBeSelected();
++  // Every side tab is at least 48 dp square.
++  for (const name of ['Home', 'Sessions', 'Export', 'Profile']) {
++    expect(tab(name)).toHaveStyle({ minWidth: touch.target, minHeight: touch.target });
++  }
++  // A white bar with 20 dp corners and design B's shadow, floating 12 dp above the navigation bar's inset.
++  expect(list).toHaveStyle({ backgroundColor: colors.panel, borderRadius: radius.bar, elevation: elevation.overlay });
++  const root = screen.getByTestId('tab-bar');
++  expect(root).toHaveStyle({ position: 'absolute', left: 0, right: 0, bottom: 0 });
++  expect(root).toHaveStyle({ paddingHorizontal: space.m, paddingBottom: space.m + BOTTOM });
++  expect(root.props.pointerEvents).toBe('box-none'); // what's beside the bar stays the screen's
++});
++
++test('the open tab: its icon in ink, with a coral dot under it; the others in the quiet ink, at least 3:1 on white', async () => {
++  await render(<TabBar {...propsAt('export')} />);
++  const open = tab('Export');
++  expect(iconsIn(open, colors.ink).length).toBeGreaterThan(0);
++  expect(iconsIn(open, colors.chevron)).toHaveLength(0);
++  expect(within(open).getByTestId('tab-dot')).toHaveStyle({
++    width: bar.dot, height: bar.dot, borderRadius: bar.dot / 2, backgroundColor: colors.brand,
++  });
++  for (const name of ['Home', 'Sessions', 'Profile']) {
++    expect(iconsIn(tab(name), colors.chevron).length).toBeGreaterThan(0);
++    expect(iconsIn(tab(name), colors.ink)).toHaveLength(0);
++    expect(within(tab(name)).queryByTestId('tab-dot')).toBeNull();
++  }
++  // 24 dp icons
++  expect(iconsIn(tab('Home'), colors.chevron)[0].props.width).toBe(touch.icon);
++  // So the open tab never depends on color alone: the dot, and the quiet ink still reads on the white bar.
++  expect(contrast(colors.chevron, colors.panel)).toBeGreaterThanOrEqual(3);
++});
++
++test('a press tells the tab, then opens it; on the open tab, it only tells it', async () => {
++  await render(<TabBar {...propsAt('sessions')} />);
++  await press(tab('Home'));
++  expect(emit).toHaveBeenCalledWith({ type: 'tabPress', target: keyOf('index'), canPreventDefault: true });
++  expect(navigateToTab).toHaveBeenCalledWith(keyOf('index'));
++
++  jest.clearAllMocks();
++  await press(tab('Sessions')); // already open
++  expect(emit).toHaveBeenCalledWith({ type: 'tabPress', target: keyOf('sessions'), canPreventDefault: true });
++  expect(navigateToTab).not.toHaveBeenCalled();
++
++  jest.clearAllMocks();
++  emit.mockReturnValueOnce({ defaultPrevented: true }); // a listener kept it
++  await press(tab('Profile'));
++  expect(emit).toHaveBeenCalledTimes(1);
++  expect(navigateToTab).not.toHaveBeenCalled();
++});
++
++test("Export's count: a coral pill with ink figures, 99+ past 99, and in its name, Export, 7 to send; none at 0", async () => {
++  expect([countText(1), countText(7), countText(99), countText(100), countText(1234)]).toEqual([
++    '1', '7', '99', '99+', '99+',
++  ]);
++  const exported = '2026-11-19T02:00:00.000Z';
++  await savedAre([...Array.from({ length: 7 }, () => summary()), summary(exported)]); // the exported one doesn't count
++  await render(<TabBar {...propsAt('index')} />);
++  const exportTab = tab('Export, 7 to send');
++  const pill = within(exportTab).getByTestId('export-count');
++  expect(pill).toHaveStyle({ backgroundColor: colors.brand });
++  const figures = within(pill).getByText('7');
++  expect(figures).toHaveStyle({ color: colors.ink });
++  expect(typeStylesOf(figures)).toContain('badge');
++
++  // It follows the saved scans as they change.
++  await savedAre(Array.from({ length: 120 }, () => summary()));
++  expect(within(tab('Export, 120 to send')).getByText('99+')).toBeOnTheScreen();
++
++  await savedAre([summary(exported)]);
++  expect(tab('Export')).toBeOnTheScreen();
++  expect(screen.queryByTestId('export-count')).toBeNull();
++});
++
++test('the middle button: elsewhere, Camera, which opens the camera; on the camera, Take photo, which takes it', async () => {
++  await render(<TabBar {...propsAt('index')} />);
++  const middle = tab('Camera');
++  expect(middle).not.toBeSelected();
++  expect(iconsIn(middle, colors.ink).length).toBeGreaterThan(0); // an ink camera on the coral
++  expect(within(middle).queryByTestId('shutter-core')).toBeNull();
++  // A 60 dp coral circle in a 4 dp paper ring, raised 26 dp above the bar.
++  expect(middle).toHaveStyle({
++    width: bar.circle + 2 * bar.ring,
++    height: bar.circle + 2 * bar.ring,
++    borderRadius: bar.circle / 2 + bar.ring,
++    borderWidth: bar.ring,
++    borderColor: colors.paper,
++    backgroundColor: colors.brand,
++  });
++  expect(screen.getByTestId('camera-slot')).toHaveStyle({ marginTop: -bar.raise });
++  expect(screen.queryByTestId('camera-dot')).toBeNull();
++  await press(middle);
++  expect(emit).toHaveBeenCalledWith({ type: 'tabPress', target: keyOf('camera'), canPreventDefault: true });
++  expect(navigateToTab).toHaveBeenCalledWith(keyOf('camera'));
++
++  jest.clearAllMocks();
++  const take = jest.fn();
++  await act(async () => setShutter(camera, { take, disabled: false }));
++  await screen.rerender(<TabBar {...propsAt('camera')} />);
++  expect(screen.queryByRole('tab', { name: 'Camera' })).toBeNull();
++  const shutter = tab('Take photo');
++  expect(shutter).toBeSelected();
++  expect(shutter).toBeEnabled();
++  // The shutter's look: a white core inside the coral ring, and the open tab's dot under it.
++  expect(within(shutter).getByTestId('shutter-core')).toHaveStyle({ backgroundColor: colors.panel });
++  expect(iconsIn(shutter, colors.ink)).toHaveLength(0);
++  expect(screen.getByTestId('camera-dot')).toHaveStyle({ width: bar.dot, backgroundColor: colors.brand });
++  await press(shutter);
++  expect(take).toHaveBeenCalledTimes(1);
++  expect(navigateToTab).not.toHaveBeenCalled();
++});
++
++test("Take photo waits while the camera can't take one", async () => {
++  await render(<TabBar {...propsAt('camera')} />);
++  expect(tab('Take photo')).toBeDisabled(); // no camera yet
++  const take = jest.fn();
++  await act(async () => setShutter(camera, { take, disabled: true })); // it's starting, or taking one
++  expect(tab('Take photo')).toBeDisabled();
++  await press(tab('Take photo'));
++  expect(take).not.toHaveBeenCalled();
++
++  await act(async () => setShutter(camera, { take, disabled: false }));
++  expect(tab('Take photo')).toBeEnabled();
++  await press(tab('Take photo'));
++  expect(take).toHaveBeenCalledTimes(1);
++
++  await act(async () => setShutter(camera, null)); // it left
++  expect(tab('Take photo')).toBeDisabled();
++});
++
++test('with the keyboard up it hides, and takes no space', async () => {
++  const onHeight = jest.fn();
++  await render(
++    <Tabs onHeight={onHeight}>
++      <TabBar {...propsAt('profile', { tabBarHideOnKeyboard: true })} />
++      <TabScreen />
++    </Tabs>,
++  );
++  await layOut(80);
++  expect(onHeight).toHaveBeenLastCalledWith(80 + bar.raise);
++  expect(bottomClearance()).toBe(80 + bar.raise);
++
++  await keyboard(300);
++  expect(screen.queryByTestId('tab-list')).toBeNull();
++  expect(screen.queryByTestId('tab-bar')).toBeNull();
++  expect(onHeight).toHaveBeenLastCalledWith(0);
++  expect(bottomClearance()).toBe(0);
++  expect(screen.getByText('tab bar 0')).toBeOnTheScreen();
++
++  await keyboard(0);
++  expect(screen.getByTestId('tab-list')).toBeOnTheScreen();
++  await layOut(80);
++  expect(onHeight).toHaveBeenLastCalledWith(80 + bar.raise);
++  expect(bottomClearance()).toBe(80 + bar.raise);
++  expect(screen.getByText(`tab bar ${80 + bar.raise}`)).toBeOnTheScreen();
++});
++
++test('its height, the raised button too, goes to the tab screens, and to the snackbar while the tabs are on top', async () => {
++  const onHeight = jest.fn();
++  const tabs = () => (
++    <Tabs onHeight={onHeight}>
++      <TabBar {...propsAt('index')} />
++      <TabScreen />
++    </Tabs>
++  );
++  await render(tabs());
++  expect(screen.getByText('tab bar 0')).toBeOnTheScreen(); // not laid out yet
++  await layOut(80);
++  expect(screen.getByText(`tab bar ${80 + bar.raise}`)).toBeOnTheScreen();
++  expect(bottomClearance()).toBe(80 + bar.raise);
++
++  // A screen over the tabs (the Scan screen): its own bar counts, not this one; the tab screens keep their space.
++  mockFocused = false;
++  await screen.rerender(tabs());
++  expect(bottomClearance()).toBe(0);
++  expect(screen.getByText(`tab bar ${80 + bar.raise}`)).toBeOnTheScreen();
++
++  mockFocused = true; // back on top
++  await screen.rerender(tabs());
++  expect(bottomClearance()).toBe(80 + bar.raise);
++  await layOut(90); // laid out again (a larger font): the new height
++  expect(bottomClearance()).toBe(90 + bar.raise);
++  expect(screen.getByText(`tab bar ${90 + bar.raise}`)).toBeOnTheScreen();
++
++  await screen.unmount();
++  expect(bottomClearance()).toBe(0);
++});
++
++test('a camera that leaves clears only its own shutter', async () => {
++  const listener = jest.fn();
++  const unsubscribe = subscribeShutter(listener);
++  const old = {}; // the camera's old root, whose late unmount comes after the new one's mount (T26-4)
++  const first = { take: jest.fn(), disabled: false };
++  const second = { take: jest.fn(), disabled: false };
++  setShutter(old, first);
++  setShutter(camera, second);
++  expect(currentShutter()).toBe(second);
++  expect(listener).toHaveBeenCalledTimes(2);
++  setShutter(old, null); // not its own any more: nothing changes
++  expect(currentShutter()).toBe(second);
++
++  await render(<TabBar {...propsAt('camera')} />);
++  await press(tab('Take photo'));
++  expect(second.take).toHaveBeenCalledTimes(1);
++  expect(first.take).not.toHaveBeenCalled();
++
++  await act(async () => setShutter(camera, null));
++  expect(currentShutter()).toBeNull();
++  expect(tab('Take photo')).toBeDisabled();
++  unsubscribe();
++  listener.mockClear();
++  await act(async () => setShutter(camera, second));
++  expect(listener).not.toHaveBeenCalled();
++});
+diff --git a/__tests__/theme.test.ts b/__tests__/theme.test.ts
+index d32fbbb7..0f9022c4 100644
+--- a/__tests__/theme.test.ts
++++ b/__tests__/theme.test.ts
+@@ -1,6 +1,8 @@
+ import { Platform } from 'react-native';
+ 
+-import { colors, durations, elevation, EMBEDDED_FONTS, face, radius, ripple, space, touch, type } from '../lib/theme';
++import {
++  bar, colors, durations, elevation, EMBEDDED_FONTS, face, radius, ripple, space, touch, type,
++} from '../lib/theme';
+ import { contrast } from '../test-utils/contrast';
+ 
+ // Design B §5: the color roles and their measured contrast (§5.1), the type scale (§5.2), space, shape and touch
+@@ -124,7 +126,7 @@ test('face picks the families', () => {
+ 
+ test('space, shape, touch, ripple and motion have their design values', () => {
+   expect(space).toEqual({ xs: 4, s: 8, m: 12, l: 16, xl: 24, xxl: 32 });
+-  expect(radius).toEqual({ badge: 4, field: 6, button: 10, panel: 10, sheet: 16, pill: 999 });
++  expect(radius).toEqual({ badge: 4, field: 6, button: 10, panel: 10, sheet: 16, bar: 20, pill: 999 });
+   expect(touch).toEqual({
+     target: 48, buttonLarge: 56, chip: 40, icon: 24, iconSmall: 20, shutter: 72, thumbW: 36, thumbH: 48,
+   });
+@@ -141,3 +143,10 @@ test('space, shape, touch, ripple and motion have their design values', () => {
+     sheetIn: 250, sheetOut: 200, scrim: 200, menu: 150, snackbar: 200, strip: 150, card: 150,
+   });
+ });
++
++test("the bar's measures", () => {
++  // Spec §6.2: a white bar with 20 dp corners; the middle button a 60 dp coral circle, raised 26 dp, in a 4 dp paper
++  // ring; the open tab's 5 dp coral dot.
++  expect(radius.bar).toBe(20);
++  expect(bar).toEqual({ circle: 60, raise: 26, ring: 4, dot: 5 });
++});
+diff --git a/components/Screen.tsx b/components/Screen.tsx
+index 3098b2a6..c0e6187a 100644
+--- a/components/Screen.tsx
++++ b/components/Screen.tsx
+@@ -1,3 +1,4 @@
++import { BottomTabBarHeightContext } from 'expo-router/js-tabs';
+ import {
+   createContext,
+   type ReactNode,
+@@ -25,7 +26,8 @@ import { colors, space } from '../lib/theme';
+ // Design B §5.6 and §8: the frame every screen is built from. On paper: the header (it takes the status bar's inset),
+ // what's pinned under it outside the scroll (the Scan screen's status strip), the scroll, then the bottom bar (it takes
+ // the navigation bar's inset). The app is edge-to-edge and Android no longer resizes the window for the keyboard, so
+-// the end of the scroll clears the navigation bar when there's no bottom bar, and the open keyboard. A field that
++// the end of the scroll clears the navigation bar when there's no bottom bar (in a tab, the tabs' floating bar, when
++// it's taller), and the open keyboard. A field that
+ // takes focus asks the nearest ScrollIntoViewScope to scroll it into view: the Screen's own, or a sheet's. A sheet's
+ // scope also gives the fields in it the keyboard of its own window (useKeyboardHeight).
+ 
+@@ -154,13 +156,25 @@ export function useScrollIntoView(): (target: ViewInstance | TextInputInstance |
+ }
+ 
+ /**
+- * The space under a scroll's last row: space.xl, plus the navigation bar's inset when no bottom bar takes it, plus the
+- * open keyboard, which covers the bar too. Screen uses it; a screen with its own list gives it to the list.
++ * In a tab's screen, the space the tabs' floating bar takes from the screen's foot (components/TabBar reports it, the
++ * raised button too); 0 outside the tabs, before the bar lays out, and while it hides for the keyboard (ruling P-F5).
++ */
++export function useTabBarSpace(): number {
++  const reported = useContext(BottomTabBarHeightContext); // undefined outside the tabs
++  const keyboard = useKeyboardHeight();
++  return keyboard > 0 ? 0 : (reported ?? 0);
++}
++
++/**
++ * The space under a scroll's last row: space.xl, plus what's under the scroll when no bottom bar takes it (the
++ * navigation bar's inset, or in a tab the floating bar, whichever is taller), plus the open keyboard, which covers
++ * them too. Screen uses it; a screen with its own list gives it to the list.
+  */
+ export function useEndPadding(hasBottomBar: boolean): number {
+   const insets = useSafeAreaInsets();
+   const keyboard = useKeyboardHeight();
+-  return (hasBottomBar ? 0 : insets.bottom) + space.xl + keyboard;
++  const tabBar = useTabBarSpace(); // always called, for the rules of hooks (ruling P-F5)
++  return (hasBottomBar ? 0 : Math.max(insets.bottom, tabBar)) + space.xl + keyboard;
+ }
+ 
+ const styles = StyleSheet.create({
+diff --git a/components/TabBar.tsx b/components/TabBar.tsx
+new file mode 100644
+index 00000000..5165624d
+--- /dev/null
++++ b/components/TabBar.tsx
+@@ -0,0 +1,194 @@
++import { useIsFocused } from 'expo-router';
++import { BottomTabBarHeightCallbackContext, type BottomTabBarProps } from 'expo-router/js-tabs';
++import { type ReactElement, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
++import { StyleSheet, Text, View } from 'react-native';
++
++import { waitingOf } from '../lib/exportFile';
++import { savedList, subscribeSaved } from '../lib/saved';
++import { currentShutter, subscribeShutter } from '../lib/shutter';
++import { setBottomClearance } from '../lib/snackbar';
++import { bar, colors, elevation, radius, space, touch, type } from '../lib/theme';
++import { Camera, CircleUser, Files, House, type IconComponent, Send } from './icons';
++import { useKeyboardHeight } from './Screen';
++import { Tap } from './Tap';
++
++// Camera first, spec §6.2 (calls 19 and 20): the tabs' floating bar. A white bar with 20 dp corners and design B's
++// shadow, 12 dp above the navigation bar's inset, with five slots: Home, Sessions, the raised coral Camera, Export
++// and Profile. Icons only: the open tab's is ink with a coral dot under it, so it never rests on colour alone; the
++// others are the quiet ink. On the camera tab the middle button is the shutter (lib/shutter), a white core in the
++// coral ring. Export carries the count of saved scans not yet exported (ruling T17-3). A press tells the tab first,
++// then opens it, as the default bar does. The bar's height, the raised button too, goes to the tab screens (Screen's
++// useTabBarSpace), and to the snackbar while the tabs are on top (as BottomBar, ruling T19-5). It hides while the
++// keyboard is up (tabBarHideOnKeyboard), and then takes no space.
++
++export type TabName = 'index' | 'sessions' | 'camera' | 'export' | 'profile';
++
++export const TABS: readonly { name: TabName; label: string; icon: IconComponent }[] = [
++  { name: 'index', label: 'Home', icon: House },
++  { name: 'sessions', label: 'Sessions', icon: Files },
++  { name: 'camera', label: 'Camera', icon: Camera },
++  { name: 'export', label: 'Export', icon: Send },
++  { name: 'profile', label: 'Profile', icon: CircleUser },
++];
++
++const MOST = 99; // the count's cap
++
++/** The Export count's figures: "7"; "99+" past 99. */
++export function countText(n: number): string {
++  return n > MOST ? `${MOST}+` : `${n}`;
++}
++
++export function TabBar({ state, descriptors, emitter, navigateToTab, insets }: BottomTabBarProps): ReactElement | null {
++  const open = state.routes[state.index];
++  const hideOnKeyboard = descriptors[open.key]?.options.tabBarHideOnKeyboard ?? false;
++  const keyboard = useKeyboardHeight();
++  const hidden = hideOnKeyboard && keyboard > 0;
++  const onHeight = useContext(BottomTabBarHeightCallbackContext);
++  const focused = useIsFocused(); // the tabs are the screen on top
++  const ownerRef = useRef(null); // this bar, as the clearance knows it
++  const [height, setHeight] = useState<number | null>(null); // as last laid out, the raised button too
++  const saved = useSyncExternalStore(subscribeSaved, savedList);
++  const shutter = useSyncExternalStore(subscribeShutter, currentShutter);
++  const waiting = waitingOf(null, saved).length;
++
++  useEffect(() => {
++    if (hidden) onHeight?.(0);
++    else if (height !== null) onHeight?.(height);
++  }, [hidden, height, onHeight]);
++  // Withdrawn only when covered, hidden or gone, so a new height keeps the bar's place in the order (ruling T25b-1).
++  const showing = focused && !hidden;
++  useEffect(() => {
++    if (!showing) return;
++    return () => setBottomClearance(ownerRef, null);
++  }, [showing]);
++  useEffect(() => {
++    if (showing && height !== null) setBottomClearance(ownerRef, height);
++  }, [showing, height]);
++
++  if (hidden) return null;
++
++  const press = (key: string, selected: boolean) => {
++    const event = emitter.emit({ type: 'tabPress', target: key, canPreventDefault: true });
++    if (!selected && !event.defaultPrevented) navigateToTab(key);
++  };
++
++  return (
++    <View
++      testID="tab-bar"
++      pointerEvents="box-none"
++      onLayout={(e) => setHeight(e.nativeEvent.layout.height + bar.raise)}
++      style={[styles.root, { paddingBottom: space.m + insets.bottom }]}>
++      <View testID="tab-list" accessibilityRole="tablist" style={styles.bar}>
++        {TABS.map(({ name, label, icon: Icon }) => {
++          const route = state.routes.find((r) => r.name === name);
++          if (!route) return null;
++          const selected = route.key === open.key;
++          if (name === 'camera') {
++            const onCamera = selected;
++            const waits = onCamera && (shutter === null || shutter.disabled);
++            return (
++              <View key={route.key} testID="camera-slot" style={styles.cameraSlot}>
++                <Tap
++                  accessibilityRole="tab"
++                  accessibilityLabel={onCamera ? 'Take photo' : label}
++                  accessibilityState={{ selected }}
++                  disabled={waits}
++                  ripple="brand"
++                  focusRadius={CIRCLE / 2}
++                  onPress={() => (onCamera ? currentShutter()?.take() : press(route.key, selected))}
++                  style={styles.circle}>
++                  {onCamera ? (
++                    <View testID="shutter-core" style={styles.core} />
++                  ) : (
++                    <Icon size={touch.icon} color={colors.ink} />
++                  )}
++                </Tap>
++                {selected && <View testID="camera-dot" style={styles.dot} />}
++              </View>
++            );
++          }
++          const count = name === 'export' ? waiting : 0;
++          return (
++            <Tap
++              key={route.key}
++              accessibilityRole="tab"
++              accessibilityLabel={count > 0 ? `${label}, ${count} to send` : label}
++              accessibilityState={{ selected }}
++              ripple="icon"
++              focusRadius={touch.target / 2}
++              onPress={() => press(route.key, selected)}
++              style={styles.tab}>
++              <View>
++                <Icon size={touch.icon} color={selected ? colors.ink : colors.chevron} />
++                {count > 0 && (
++                  <View testID="export-count" style={styles.count}>
++                    <Text style={[type.badge, styles.countText]}>{countText(count)}</Text>
++                  </View>
++                )}
++              </View>
++              {selected && <View testID="tab-dot" style={[styles.dot, styles.tabDot]} />}
++            </Tap>
++          );
++        })}
++      </View>
++    </View>
++  );
++}
++
++const CIRCLE = bar.circle + 2 * bar.ring; // the middle button, its paper ring outside the coral
++const CORE = bar.circle - space.xl; // the shutter's white core, inside the coral ring
++
++const styles = StyleSheet.create({
++  root: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: space.m },
++  bar: {
++    flexDirection: 'row',
++    alignItems: 'center',
++    justifyContent: 'space-around',
++    paddingHorizontal: space.s,
++    backgroundColor: colors.panel,
++    borderRadius: radius.bar,
++    elevation: elevation.overlay,
++  },
++  tab: {
++    minWidth: touch.target,
++    minHeight: touch.target,
++    marginVertical: space.xs,
++    alignItems: 'center',
++    justifyContent: 'center',
++  },
++  // From the bar's top, not its padding's: the circle's top is bar.raise above it.
++  cameraSlot: { alignSelf: 'flex-start', marginTop: -bar.raise, alignItems: 'center', gap: space.xs },
++  circle: {
++    width: CIRCLE,
++    height: CIRCLE,
++    borderRadius: CIRCLE / 2,
++    borderWidth: bar.ring,
++    borderColor: colors.paper,
++    backgroundColor: colors.brand,
++    alignItems: 'center',
++    justifyContent: 'center',
++  },
++  core: {
++    width: CORE,
++    height: CORE,
++    borderRadius: CORE / 2,
++    backgroundColor: colors.panel,
++    borderWidth: 2, // optical: a hairline edge keeps the white core from melting into the paper ring, as in the mockup
++    borderColor: colors.line,
++  },
++  dot: { width: bar.dot, height: bar.dot, borderRadius: bar.dot / 2, backgroundColor: colors.brand },
++  tabDot: { position: 'absolute', bottom: space.xs },
++  count: {
++    position: 'absolute',
++    bottom: touch.icon / 2, // on the icon's top right corner
++    left: touch.icon / 2,
++    minWidth: space.l + space.xs,
++    paddingHorizontal: space.xs,
++    alignItems: 'center',
++    borderRadius: radius.pill,
++    borderWidth: 2, // optical: a white edge parts the pill from the icon, as in the mockup
++    borderColor: colors.panel,
++    backgroundColor: colors.brand,
++  },
++  countText: { color: colors.ink },
++});
+diff --git a/components/icons.tsx b/components/icons.tsx
+index c1360ca7..6e4fe48d 100644
+--- a/components/icons.tsx
++++ b/components/icons.tsx
+@@ -3,8 +3,9 @@ import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
+ 
+ // Lucide's icons (lucide.dev), as on mybizmate.io: tag 1.77.0, under the ISC license (the glyphs Lucide took from
+ // Feather are also under Feather's MIT license). Both texts are in assets/licenses/lucide-ISC.txt.
+-// Each glyph's elements are copied exactly from its SVG at that tag. An export is named after its glyph, except that
+-// Close is x, More is ellipsis-vertical, and ImageIcon, ListIcon and SettingsIcon are image, list and settings.
++// Each glyph's elements are copied exactly from its SVG at that tag, the tabs' bar's too (camera first, spec §6.2):
++// House, Files, Send and CircleUser are house, files, send and circle-user. An export is named after its glyph, except
++// that Close is x, More is ellipsis-vertical, and ImageIcon, ListIcon and SettingsIcon are image, list and settings.
+ // TriangleAlert and CircleAlert keep the old names: at 1.77.0 Lucide calls those glyphs triangle-exclamation-point and
+ // circle-exclamation-point, and keeps triangle-alert and circle-alert as aliases.
+ 
+@@ -50,6 +51,11 @@ export const CircleAlert = lucide(
+   <Line x1="12" x2="12.01" y1="16" y2="16" />,
+ );
+ export const CircleCheck = lucide(<Circle cx="12" cy="12" r="10" />, <Path d="m16 9-5.5 5.5L8 12" />);
++export const CircleUser = lucide(
++  <Circle cx="12" cy="12" r="10" />,
++  <Circle cx="12" cy="10" r="3" />,
++  <Path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662" />,
++);
+ export const Close = lucide(<Path d="M18 6 6 18" />, <Path d="m6 6 12 12" />);
+ export const Download = lucide(
+   <Path d="M12 15V3" />,
+@@ -63,6 +69,11 @@ export const FileText = lucide(
+   <Path d="M16 13H8" />,
+   <Path d="M16 17H8" />,
+ );
++export const Files = lucide(
++  <Path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8" />,
++  <Path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z" />,
++  <Path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1" />,
++);
+ export const Flashlight = lucide(
+   <Path d="M12 13v1" />,
+   <Path d="M17 2a1 1 0 0 1 1 1v4a3 3 0 0 1-.6 1.8l-.6.8A4 4 0 0 0 16 12v8a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-8a4 4 0 0 0-.8-2.4l-.6-.8A3 3 0 0 1 6 7V3a1 1 0 0 1 1-1z" />,
+@@ -75,6 +86,10 @@ export const FlashlightOff = lucide(
+   <Path d="m2 2 20 20" />,
+   <Path d="M7.649 2H17a1 1 0 0 1 1 1v4a3 3 0 0 1-.6 1.8l-.6.8a4 4 0 0 0-.55 1.007" />,
+ );
++export const House = lucide(
++  <Path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />,
++  <Path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
++);
+ export const ImageIcon = lucide(
+   <Rect width="18" height="18" x="3" y="3" rx="2" ry="2" />,
+   <Circle cx="9" cy="9" r="2" />,
+@@ -98,6 +113,10 @@ export const More = lucide(
+   <Circle cx="12" cy="19" r="1" />,
+ );
+ export const Search = lucide(<Path d="m21 21-4.34-4.34" />, <Circle cx="11" cy="11" r="8" />);
++export const Send = lucide(
++  <Path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />,
++  <Path d="m21.854 2.147-10.94 10.939" />,
++);
+ export const SettingsIcon = lucide(
+   <Path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />,
+   <Circle cx="12" cy="12" r="3" />,
+diff --git a/lib/shutter.ts b/lib/shutter.ts
+new file mode 100644
+index 00000000..dc4cc2d6
+--- /dev/null
++++ b/lib/shutter.ts
+@@ -0,0 +1,36 @@
++// Camera first (spec §6.2): on the camera tab, the bar's raised middle button is the shutter. The camera tab gives it
++// here while it's mounted: what a press does, and whether it waits (the camera starting, or a photo on its way). One
++// camera at a time; a camera that goes clears only its own, so an old root's late unmount (ruling T26-4) never takes
++// away the new root's shutter.
++
++export type Shutter = { take: () => void; disabled: boolean };
++
++let holder: object | null = null; // whose shutter it is
++let current: Shutter | null = null;
++const listeners = new Set<() => void>();
++
++/** The camera's shutter, in place of any other's; null clears it, only if it's still that owner's. */
++export function setShutter(owner: object, shutter: Shutter | null): void {
++  if (shutter === null) {
++    if (holder !== owner) return;
++    holder = null;
++    current = null;
++  } else {
++    if (holder === owner && current === shutter) return;
++    holder = owner;
++    current = shutter;
++  }
++  listeners.forEach((listener) => listener());
++}
++
++export function currentShutter(): Shutter | null {
++  return current;
++}
++
++/** For useSyncExternalStore: called after each change to the shutter. */
++export function subscribeShutter(listener: () => void): () => void {
++  listeners.add(listener);
++  return () => {
++    listeners.delete(listener);
++  };
++}
+diff --git a/lib/theme.ts b/lib/theme.ts
+index 5b415e88..47c1ddfc 100644
+--- a/lib/theme.ts
++++ b/lib/theme.ts
+@@ -43,9 +43,9 @@ export const space = { xs: 4, s: 8, m: 12, l: 16, xl: 24, xxl: 32 } as const;
+ 
+ /**
+  * Corners: field for fields and segmented controls; panel for the cards that remain, the reading card and menus; sheet
+- * for a sheet's top corners; pill (full) for chips.
++ * for a sheet's top corners; bar for the tabs' floating bar; pill (full) for chips.
+  */
+-export const radius = { badge: 4, field: 6, button: 10, panel: 10, sheet: 16, pill: 999 } as const;
++export const radius = { badge: 4, field: 6, button: 10, panel: 10, sheet: 16, bar: 20, pill: 999 } as const;
+ 
+ /**
+  * In dp: every target is at least 48 (chips are 40, with hitSlop to 48), and a large button ("Take photo") at least 56
+@@ -56,7 +56,13 @@ export const touch = {
+   target: 48, buttonLarge: 56, chip: 40, icon: 24, iconSmall: 20, shutter: 72, thumbW: 36, thumbH: 48,
+ } as const;
+ 
+-/** Flat by default: only sheets, menus and the snackbar have a shadow. */
++/**
++ * The tabs' bar, in dp (camera first, spec §6.2): the middle button's coral circle, how far it rises above the bar's
++ * top, the paper ring around it, and the open tab's dot.
++ */
++export const bar = { circle: 60, raise: 26, ring: 4, dot: 5 } as const;
++
++/** Flat by default: only sheets, menus, the snackbar and the tabs' bar have a shadow. */
+ export const elevation = { overlay: 8 } as const;
+ 
+ /** How long each of the motions takes, in ms. Nothing else animates, and reduced motion fades only (lib/motion). */

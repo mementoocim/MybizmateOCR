@@ -1,0 +1,112 @@
+diff --git a/__tests__/tabBar.test.tsx b/__tests__/tabBar.test.tsx
+index 762f85d2..c7888c07 100644
+--- a/__tests__/tabBar.test.tsx
++++ b/__tests__/tabBar.test.tsx
+@@ -47,9 +47,15 @@ function propsAt(open: TabName, options: object = {}): BottomTabBarProps {
+   } as unknown as BottomTabBarProps;
+ }
+ 
++/**
++ * What the navigator gives its screens before the bar lays out: the default bar's estimate (BottomTabView's
++ * getTabBarHeight: 49 dp, plus the inset). Never undefined inside the tabs.
++ */
++const ESTIMATE = 49 + BOTTOM;
++
+ /** The tabs as the navigator gives them to its screens: the bar reports its height, and the screens read it. */
+ function Tabs({ onHeight, children }: { onHeight: (height: number) => void; children?: ReactNode }) {
+-  const [height, setHeight] = useState<number | undefined>(undefined);
++  const [height, setHeight] = useState(ESTIMATE);
+   const reported = useCallback(
+     (h: number) => {
+       onHeight(h);
+@@ -228,7 +234,10 @@ test('the middle button: elsewhere, Camera, which opens the camera; on the camer
+   expect(shutter).toBeSelected();
+   expect(shutter).toBeEnabled();
+   // The shutter's look: a white core inside the coral ring, and the open tab's dot under it.
+-  expect(within(shutter).getByTestId('shutter-core')).toHaveStyle({ backgroundColor: colors.panel });
++  // 40 dp outside, its 2 dp edge included: the mockup's 36 dp core in a 2 dp border (CSS content-box; RN is border-box).
++  expect(within(shutter).getByTestId('shutter-core')).toHaveStyle({
++    width: 40, height: 40, borderRadius: 20, borderWidth: 2, backgroundColor: colors.panel,
++  });
+   expect(iconsIn(shutter, colors.ink)).toHaveLength(0);
+   expect(screen.getByTestId('camera-dot')).toHaveStyle({ width: bar.dot, backgroundColor: colors.brand });
+   await press(shutter);
+@@ -279,6 +288,22 @@ test('with the keyboard up it hides, and takes no space', async () => {
+   expect(onHeight).toHaveBeenLastCalledWith(80 + bar.raise);
+   expect(bottomClearance()).toBe(80 + bar.raise);
+   expect(screen.getByText(`tab bar ${80 + bar.raise}`)).toBeOnTheScreen();
++
++  // Without tabBarHideOnKeyboard, the keyboard leaves it in place, and it keeps its height.
++  await screen.unmount();
++  onHeight.mockClear();
++  await render(
++    <Tabs onHeight={onHeight}>
++      <TabBar {...propsAt('profile')} />
++    </Tabs>,
++  );
++  await layOut(80);
++  await keyboard(300);
++  expect(screen.getByTestId('tab-list')).toBeOnTheScreen();
++  expect(onHeight).toHaveBeenLastCalledWith(80 + bar.raise);
++  expect(onHeight).not.toHaveBeenCalledWith(0);
++  expect(bottomClearance()).toBe(80 + bar.raise);
++  await keyboard(0);
+ });
+ 
+ test('its height, the raised button too, goes to the tab screens, and to the snackbar while the tabs are on top', async () => {
+@@ -290,7 +315,7 @@ test('its height, the raised button too, goes to the tab screens, and to the sna
+     </Tabs>
+   );
+   await render(tabs());
+-  expect(screen.getByText('tab bar 0')).toBeOnTheScreen(); // not laid out yet
++  expect(screen.getByText(`tab bar ${ESTIMATE}`)).toBeOnTheScreen(); // not laid out yet: the navigator's estimate
+   await layOut(80);
+   expect(screen.getByText(`tab bar ${80 + bar.raise}`)).toBeOnTheScreen();
+   expect(bottomClearance()).toBe(80 + bar.raise);
+@@ -310,6 +335,10 @@ test('its height, the raised button too, goes to the tab screens, and to the sna
+ 
+   await screen.unmount();
+   expect(bottomClearance()).toBe(0);
++
++  // Outside the tabs there's no bar (the context is undefined): no space.
++  await render(<TabScreen />);
++  expect(screen.getByText('tab bar 0')).toBeOnTheScreen();
+ });
+ 
+ test('a camera that leaves clears only its own shutter', async () => {
+diff --git a/components/Screen.tsx b/components/Screen.tsx
+index c0e6187a..74a47526 100644
+--- a/components/Screen.tsx
++++ b/components/Screen.tsx
+@@ -156,11 +156,13 @@ export function useScrollIntoView(): (target: ViewInstance | TextInputInstance |
+ }
+ 
+ /**
+- * In a tab's screen, the space the tabs' floating bar takes from the screen's foot (components/TabBar reports it, the
+- * raised button too); 0 outside the tabs, before the bar lays out, and while it hides for the keyboard (ruling P-F5).
++ * In a tab's screen, the space the tabs' floating bar takes from the screen's foot: what components/TabBar reports
++ * once it lays out, the raised button too; until then, the navigator's estimate for the default bar (about 49 dp plus
++ * the inset: BottomTabView's getTabBarHeight, ruling T5-2). 0 outside the tabs, and while the bar hides for the
++ * keyboard (ruling P-F5).
+  */
+ export function useTabBarSpace(): number {
+-  const reported = useContext(BottomTabBarHeightContext); // undefined outside the tabs
++  const reported = useContext(BottomTabBarHeightContext); // undefined only outside the tabs
+   const keyboard = useKeyboardHeight();
+   return keyboard > 0 ? 0 : (reported ?? 0);
+ }
+diff --git a/components/TabBar.tsx b/components/TabBar.tsx
+index 5165624d..d250caf3 100644
+--- a/components/TabBar.tsx
++++ b/components/TabBar.tsx
+@@ -136,7 +136,9 @@ export function TabBar({ state, descriptors, emitter, navigateToTab, insets }: B
+ }
+ 
+ const CIRCLE = bar.circle + 2 * bar.ring; // the middle button, its paper ring outside the coral
+-const CORE = bar.circle - space.xl; // the shutter's white core, inside the coral ring
++// The shutter's white core inside the coral ring, 40 dp outside with its edge: the mockup's 36 dp core in a 2 dp
++// border (CSS content-box), as RN measures it (border-box).
++const CORE = bar.circle - space.l - space.xs;
+ 
+ const styles = StyleSheet.create({
+   root: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: space.m },
