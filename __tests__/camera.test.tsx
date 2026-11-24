@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import * as Haptics from 'expo-haptics';
+import { StrictMode } from 'react';
 import { Alert, AppState, Linking, StyleSheet } from 'react-native';
 
 import CameraScreen from '../app/(tabs)/camera';
@@ -616,6 +617,7 @@ test('Done waits for the queue, saying Reading 2 more…, then opens the session
   const id = sessionId()!;
   await read();
   await press(doneButton());
+  await grace(); // Done's grace for a photo on its way: from here, only the reads hold it (ruling T7-10)
   expect(currentSession()).toMatchObject({ id, open: false }); // ended: no capture goes in
   expect(doneButton().props.accessibilityLabel).toBe('Reading 2 more…');
   expect(doneButton()).toHaveProp('accessibilityState', expect.objectContaining({ busy: true }));
@@ -623,9 +625,8 @@ test('Done waits for the queue, saying Reading 2 more…, then opens the session
   expect(mockRouter.navigate).not.toHaveBeenCalled();
   await read();
   expect(doneButton().props.accessibilityLabel).toBe('Reading 1 more…');
+  expect(mockRouter.navigate).not.toHaveBeenCalled();
   await read();
-  await grace(); // Done's grace for a photo on its way
-  await settle();
   expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
   expect(mockRouter.push).not.toHaveBeenCalled();
   // back on the camera: no session open, the hint in the middle again
@@ -722,10 +723,11 @@ test('Done waits while a photo is being taken; a photo that lands as Done waits 
   expect(memoryFs.files.has(uri)).toBe(false); // moved into the queue, not deleted
   expect(captures().map((c) => c.session)).toEqual([id, id, id, id]);
   expect(doneButton().props.accessibilityLabel).toBe('Reading 4 more…');
-  for (let i = 0; i < 4; i++) await read();
+  await grace(); // the grace passes: from here, only the reads hold Done (ruling T7-10)
+  for (let i = 0; i < 3; i++) await read();
+  expect(mockRouter.navigate).not.toHaveBeenCalled();
+  await read();
   expect(recentScans().filter((s) => s.session === id)).toHaveLength(4);
-  await grace(); // Done's grace for a photo on its way
-  await settle();
   expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
 });
 
@@ -772,6 +774,51 @@ test("Done waits for a 'capturing' that arrives just after it was tapped, and fo
   await read();
   expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
   expect(recentScans().filter((s) => s.session === id)).toHaveLength(2);
+});
+
+test('Done after the camera has gone opens nothing: its reads end on an unmounted screen (ruling T7-9)', async () => {
+  // a new font size, display size or language restarts the activity, and this root's camera unmounts (ruling T26-4)
+  const view = await open();
+  await photo('capture_1.jpg');
+  await press(doneButton());
+  await grace();
+  await act(async () => view.unmount());
+  await read();
+  await grace();
+  await settle();
+  expect(mockRouter.navigate).not.toHaveBeenCalled();
+  expect(mockRouter.push).not.toHaveBeenCalled();
+
+  // a capture on its way when it went: Done's wait is let go, and still opens nothing
+  const second = await open();
+  await send('status', { status: 'looking', form: null });
+  await photo('capture_2.jpg');
+  await read();
+  await press(doneButton());
+  await send('status', { status: 'capturing', form: null });
+  await grace();
+  await act(async () => second.unmount());
+  await settle();
+  expect(mockRouter.navigate).not.toHaveBeenCalled();
+  expect(mockRouter.push).not.toHaveBeenCalled();
+});
+
+test("under StrictMode's second effect run the camera is still alive: Done opens its screen", async () => {
+  await render(
+    <StrictMode>
+      <CameraScreen />
+    </StrictMode>,
+  );
+  await settle();
+  await photo('capture_1.jpg');
+  await photo('capture_2.jpg');
+  const id = sessionId()!;
+  await read();
+  await read();
+  await press(doneButton());
+  await grace();
+  await settle();
+  expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
 });
 
 test('Done never hangs on a capture that ends without a photo: an error, or the camera stopping', async () => {

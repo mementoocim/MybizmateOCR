@@ -131,6 +131,7 @@ export default function CameraScreen() {
   const [captureOver, setCaptureOver] = useState(true); // the last 'capturing' ended: its photo, an error or a stop
   const capturingRef = useRef(false); // a photo on its way, for Done (below)
   const landed = useRef<(() => void)[]>([]); // Done, waiting for that photo
+  const alive = useRef(true); // false once unmounted: an old root's camera (ruling T26-4) opens nothing (ruling T7-9)
   const pickingRef = useRef(false); // set at once, so a second picker is refused before the re-render
   const [picking, setPicking] = useState(false);
   const [finishing, setFinishing] = useState<string | null>(null); // Done: the session it waits for
@@ -329,7 +330,8 @@ export default function CameraScreen() {
       await new Promise<void>((resolve) => setTimeout(resolve, CAPTURE_GRACE_MS));
       if (capturingRef.current) await new Promise<void>((resolve) => landed.current.push(resolve));
       await whenRead(id);
-      if (!focusedRef.current) return; // left while it read: the session waits in Sessions
+      // left while it read, or gone (an old root's): the session waits in Sessions
+      if (!alive.current || !focusedRef.current) return;
       const kept = recentScans().filter((s) => s.session === id);
       const ended = currentSession();
       const theFailed = ended?.id === id ? ended.failed : [];
@@ -375,13 +377,15 @@ export default function CameraScreen() {
     if (capturing) return;
     landed.current.splice(0).forEach((resolve) => resolve());
   }, [capturing]);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    alive.current = true; // mounted (again, under StrictMode's second run)
+    const waiting = landed.current;
+    return () => {
+      alive.current = false;
       capturingRef.current = false;
-      landed.current.splice(0).forEach((resolve) => resolve());
-    },
-    [],
-  );
+      waiting.splice(0).forEach((resolve) => resolve());
+    };
+  }, []);
 
   // The tabs' middle button is the shutter while the camera is on top; on another tab it's Camera again.
   const owner = useRef(null); // this camera, as lib/shutter knows it: a stable object
