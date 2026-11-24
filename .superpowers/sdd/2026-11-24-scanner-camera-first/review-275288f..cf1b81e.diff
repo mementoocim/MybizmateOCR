@@ -1,0 +1,338 @@
+diff --git a/__tests__/camera.test.tsx b/__tests__/camera.test.tsx
+index a2eeff33..49a86ddd 100644
+--- a/__tests__/camera.test.tsx
++++ b/__tests__/camera.test.tsx
+@@ -8,7 +8,7 @@ import { captures, pendingIn } from '../lib/captureQueue';
+ import { saveScan } from '../lib/saved';
+ import { getScan, recentScans } from '../lib/scans';
+ import { currentSession, loadSession, retakeIn } from '../lib/session';
+-import { currentShutter } from '../lib/shutter';
++import { CAPTURE_GRACE_MS, currentShutter } from '../lib/shutter';
+ import { setStarted } from '../lib/startup';
+ import { colors, radius, touch, type } from '../lib/theme';
+ import type { ScanResult } from '../modules/scanner';
+@@ -152,6 +152,9 @@ beforeEach(async () => {
+ 
+ afterEach(() => alert.mockRestore());
+ 
++/** Done's grace for a 'capturing' still on its way (lib/shutter) passes. */
++const grace = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, CAPTURE_GRACE_MS + 20)));
++
+ async function settle() {
+   for (let i = 0; i < 10; i++) await act(async () => {});
+ }
+@@ -621,6 +624,8 @@ test('Done waits for the queue, saying Reading 2 more…, then opens the session
+   await read();
+   expect(doneButton().props.accessibilityLabel).toBe('Reading 1 more…');
+   await read();
++  await grace(); // Done's grace for a photo on its way
++  await settle();
+   expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
+   expect(mockRouter.push).not.toHaveBeenCalled();
+   // back on the camera: no session open, the hint in the middle again
+@@ -636,6 +641,8 @@ test("a session of one photo opens that photo's Scan screen", async () => {
+   await press(doneButton());
+   await settle();
+   const scan = recentScans().find((s) => s.session === id)!;
++  await grace(); // Done's grace for a photo on its way
++  await settle();
+   expect(mockRouter.push.mock.calls).toEqual([[{ pathname: '/result', params: { id: scan.id, session: id } }]]);
+   expect(mockRouter.navigate).not.toHaveBeenCalled();
+ 
+@@ -647,6 +654,8 @@ test("a session of one photo opens that photo's Scan screen", async () => {
+   await fail();
+   await press(doneButton());
+   await settle();
++  await grace(); // Done's grace for a photo on its way
++  await settle();
+   expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id: second } }, { withAnchor: true }]]);
+ });
+ 
+@@ -662,6 +671,8 @@ test('Done runs once on a double tap', async () => {
+   });
+   await read();
+   await read();
++  await grace(); // Done's grace for a photo on its way
++  await settle();
+   expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
+   // and with nothing left to read, a double tap still opens one screen
+   await refocus(view); // back from the session screen
+@@ -675,6 +686,8 @@ test('Done runs once on a double tap', async () => {
+     await fireEvent.press(doneButton());
+   });
+   await settle();
++  await grace(); // Done's grace for a photo on its way
++  await settle();
+   expect(mockRouter.navigate.mock.calls).toEqual([
+     [{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }],
+     [{ pathname: '/sessions/[id]', params: { id: second } }, { withAnchor: true }],
+@@ -711,6 +724,8 @@ test('Done waits while a photo is being taken; a photo that lands as Done waits
+   expect(doneButton().props.accessibilityLabel).toBe('Reading 4 more…');
+   for (let i = 0; i < 4; i++) await read();
+   expect(recentScans().filter((s) => s.session === id)).toHaveLength(4);
++  await grace(); // Done's grace for a photo on its way
++  await settle();
+   expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
+ });
+ 
+@@ -723,6 +738,73 @@ test('a press whose photo the stopped camera dropped never leaves Done or the mi
+   await refocus(view); // another tab: the camera stopped, and its photo was dropped natively
+   expect(doneButton()).toBeEnabled();
+   expect(currentShutter()?.disabled).toBe(false);
++
++  // Manual: a press, then a panel takes the camera's place; its photo went with it. Try again: nothing waits (T7-7)
++  await press(autoSwitch());
++  await send('status', { status: 'looking', form: null });
++  await take();
++  await send('status', { status: 'capturing', form: null });
++  expect(doneButton()).toBeDisabled();
++  await send('cameraError', { code: 'start', message: '' });
++  expect(screen.queryByTestId('camera')).toBeNull();
++  expect(doneButton()).toBeEnabled(); // no camera, no photo coming
++  await press(button('Try again'));
++  await send('status', { status: 'looking', form: null });
++  expect(doneButton()).toBeEnabled();
++  expect(currentShutter()?.disabled).toBe(false);
++});
++
++test("Done waits for a 'capturing' that arrives just after it was tapped, and for its photo (ruling T7-8)", async () => {
++  await open();
++  await send('status', { status: 'looking', form: null });
++  await photo('capture_1.jpg');
++  const id = sessionId()!;
++  await read(); // nothing left to read
++  await press(doneButton());
++  await send('status', { status: 'capturing', form: 'sales_invoice' }); // Auto's, on its way as Done was tapped
++  await grace();
++  await settle();
++  expect(mockRouter.navigate).not.toHaveBeenCalled();
++  expect(mockRouter.push).not.toHaveBeenCalled();
++  await photo('capture_2.jpg');
++  expect(captures().map((c) => c.session)).toEqual([id]); // the finishing session, not a new one
++  expect(mockRouter.navigate).not.toHaveBeenCalled(); // until it's read
++  await read();
++  expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
++  expect(recentScans().filter((s) => s.session === id)).toHaveLength(2);
++});
++
++test('Done never hangs on a capture that ends without a photo: an error, or the camera stopping', async () => {
++  const view = await open();
++  await send('status', { status: 'looking', form: null });
++  await photo('capture_1.jpg');
++  await photo('capture_2.jpg');
++  const first = sessionId()!;
++  await read();
++  await read();
++  await press(doneButton());
++  await send('status', { status: 'capturing', form: null });
++  await grace();
++  await send('cameraError', { code: 'capture', message: 'x' }); // no photo comes
++  await settle();
++  expect(mockRouter.navigate.mock.calls).toEqual([
++    [{ pathname: '/sessions/[id]', params: { id: first } }, { withAnchor: true }],
++  ]);
++
++  // the camera stopping: Done ends, and opens nothing from behind another tab
++  await refocus(view);
++  await photo('capture_3.jpg');
++  await read();
++  await press(doneButton());
++  await send('status', { status: 'capturing', form: null });
++  await grace();
++  mockFocused = false;
++  await act(async () => view.rerender(<CameraScreen />));
++  await settle();
++  expect(mockRouter.navigate).toHaveBeenCalledTimes(1);
++  mockFocused = true;
++  await act(async () => view.rerender(<CameraScreen />));
++  expect(screen.queryByRole('button', { name: /^Reading/ })).toBeNull(); // Done is over
+ });
+ 
+ test('leaving keeps the session and the queue; coming back continues it; 30 minutes later it has closed', async () => {
+diff --git a/__tests__/sessionFlow.test.tsx b/__tests__/sessionFlow.test.tsx
+index 0c7c617b..b183d0e4 100644
+--- a/__tests__/sessionFlow.test.tsx
++++ b/__tests__/sessionFlow.test.tsx
+@@ -2,7 +2,7 @@ import { router } from 'expo-router';
+ import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+ 
+ import { currentSession, loadSession } from '../lib/session';
+-import { currentShutter } from '../lib/shutter';
++import { CAPTURE_GRACE_MS, currentShutter } from '../lib/shutter';
+ import type { ScanResult } from '../modules/scanner';
+ import { parseScanResult } from '../modules/scanner/src/parse';
+ import { coreJson } from '../test-utils/coreJson';
+@@ -82,6 +82,11 @@ async function shoot() {
+   await send('photo', { uri });
+   await settle();
+ }
++/** Done's grace for a photo on its way (lib/shutter) passes, on renderRouter's fake timers. */
++async function grace() {
++  await act(async () => jest.advanceTimersByTime(CAPTURE_GRACE_MS));
++  await settle();
++}
+ async function read() {
+   await act(async () => mockReads.shift()!.resolve(parseScanResult(coreJson('inv_0007', `file:///docs/scans/${photos}`))));
+   await settle();
+@@ -106,6 +111,7 @@ test('Done opens the session screen in the Sessions tab, with the bar; Back goes
+   expect(screen.getByRole('button', { name: 'Reading 2 more…' })).toBeTruthy();
+   await read();
+   await read();
++  await grace();
+   expect(screen).toHavePathname(`/sessions/${id}`);
+   expect(onTop()).toEqual(['Session: on top']);
+   expect(screen.getByTestId('tab-bar')).toBeOnTheScreen();
+@@ -147,6 +153,7 @@ test("Done on a second session, with the first one's screen left in Sessions, sh
+   await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Done · 2' })));
+   await read();
+   await read();
++  await grace();
+   expect(screen).toHavePathname(`/sessions/${a}`);
+ 
+   // back to the camera by its tab, session A's screen still in the Sessions tab
+@@ -161,6 +168,7 @@ test("Done on a second session, with the first one's screen left in Sessions, sh
+   await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Done · 2' })));
+   await read();
+   await read();
++  await grace();
+   expect(screen).toHavePathname(`/sessions/${b}`);
+   expect(onTop()).toEqual(['Session: on top']);
+   expect(tab('Sessions')).toBeSelected();
+diff --git a/app/(tabs)/camera.tsx b/app/(tabs)/camera.tsx
+index 67aab27f..3986a416 100644
+--- a/app/(tabs)/camera.tsx
++++ b/app/(tabs)/camera.tsx
+@@ -31,7 +31,7 @@ import { sampleUri } from '../../lib/samples';
+ import { recentScans, subscribeRecent } from '../../lib/scans';
+ import { closeIdleSession, currentSession, endSession, subscribeSession, takeCapture } from '../../lib/session';
+ import { trayOf } from '../../lib/sessions';
+-import { setShutter } from '../../lib/shutter';
++import { CAPTURE_GRACE_MS, setShutter } from '../../lib/shutter';
+ import { useStarted } from '../../lib/startup';
+ import { colors, radius, space, touch, type } from '../../lib/theme';
+ import {
+@@ -128,6 +128,9 @@ export default function CameraScreen() {
+   const camera = useRef<ScannerCameraRef>(null);
+   const shutterPressed = useRef(false); // the photo on its way is the shutter's, not one Auto took
+   const [shooting, setShooting] = useState(false); // the middle button was pressed, and its photo isn't back yet
++  const [captureOver, setCaptureOver] = useState(true); // the last 'capturing' ended: its photo, an error or a stop
++  const capturingRef = useRef(false); // a photo on its way, for Done (below)
++  const landed = useRef<(() => void)[]>([]); // Done, waiting for that photo
+   const pickingRef = useRef(false); // set at once, so a second picker is refused before the re-render
+   const [picking, setPicking] = useState(false);
+   const [finishing, setFinishing] = useState<string | null>(null); // Done: the session it waits for
+@@ -188,6 +191,8 @@ export default function CameraScreen() {
+   }
+ 
+   function tryAgain() {
++    setShooting(false); // the camera that went took its photo with it (ruling T7-7)
++    setCaptureOver(true);
+     setProblem(null);
+     setStatus(STARTING);
+     setHasTorch(false);
+@@ -197,6 +202,7 @@ export default function CameraScreen() {
+   function takePhoto() {
+     shutterPressed.current = true;
+     setShooting(true);
++    setCaptureOver(false);
+     void camera.current?.takePhoto();
+   }
+ 
+@@ -210,6 +216,7 @@ export default function CameraScreen() {
+     if (code === 'capture' || code === 'keep') {
+       shutterPressed.current = false; // no photo comes for that press
+       setShooting(false);
++      setCaptureOver(true);
+     }
+     if (code === 'capture') showError(CAMERA_ERRORS.capture);
+     else if (code === 'keep') showError(CAMERA_ERRORS.keep);
+@@ -227,6 +234,7 @@ export default function CameraScreen() {
+     const byAuto = auto && !shutterPressed.current; // the person's eyes are on the paper, not the screen
+     shutterPressed.current = false;
+     setShooting(false);
++    setCaptureOver(true);
+     // taken as the screen was left, or as a picker opened: no session takes it
+     if (!focusedRef.current || pickingRef.current) {
+       discard(uri);
+@@ -317,6 +325,9 @@ export default function CameraScreen() {
+     try {
+       endSession(id);
+       holdReads(false);
++      // a 'capturing' still on its way arrives, then its photo lands in this session, or the capture ends (T7-8)
++      await new Promise<void>((resolve) => setTimeout(resolve, CAPTURE_GRACE_MS));
++      if (capturingRef.current) await new Promise<void>((resolve) => landed.current.push(resolve));
+       await whenRead(id);
+       if (!focusedRef.current) return; // left while it read: the session waits in Sessions
+       const kept = recentScans().filter((s) => s.session === id);
+@@ -342,15 +353,35 @@ export default function CameraScreen() {
+   // Done waits it stays on, with Auto off and the middle button waiting: stopping it would drop a photo still being
+   // saved (ScannerCameraView.kt deletes one that lands once it has stopped), and none new is taken (ruling T7-2).
+   const live = started && focused && !picking && !sayingWhy;
+-  const capturing = status.status === 'capturing' || shooting; // a photo on its way: Done waits for it
++  const cameraOn = live && viewUp; // a view, running: one that stops or goes drops a photo on its way
++  // a photo on its way: Done waits for it
++  const capturing = cameraOn && ((status.status === 'capturing' && !captureOver) || shooting);
+   const shutterOff = !viewUp || !live || finishing !== null || status.status === 'starting' || capturing;
+ 
+-  // A camera that stops drops a photo on its way: nothing is coming back for the middle button's press.
+-  const [wasLive, setWasLive] = useState(live);
+-  if (live !== wasLive) {
+-    setWasLive(live);
+-    if (!live) setShooting(false);
++  // A camera that stops, or whose view goes for a panel, drops a photo on its way: nothing is coming back for the middle
++  // button's press, nor for a 'capturing' (ruling T7-7).
++  const [wasOn, setWasOn] = useState(cameraOn);
++  if (cameraOn !== wasOn) {
++    setWasOn(cameraOn);
++    if (!cameraOn) {
++      setShooting(false);
++      setCaptureOver(true);
++    }
+   }
++  // Done, waiting for a photo on its way, goes on once there's none (its photo landed, or the capture ended), and when
++  // the camera goes.
++  useEffect(() => {
++    capturingRef.current = capturing;
++    if (capturing) return;
++    landed.current.splice(0).forEach((resolve) => resolve());
++  }, [capturing]);
++  useEffect(
++    () => () => {
++      capturingRef.current = false;
++      landed.current.splice(0).forEach((resolve) => resolve());
++    },
++    [],
++  );
+ 
+   // The tabs' middle button is the shutter while the camera is on top; on another tab it's Camera again.
+   const owner = useRef(null); // this camera, as lib/shutter knows it: a stable object
+@@ -452,7 +483,10 @@ export default function CameraScreen() {
+             torch={torch}
+             testImage={testImage}
+             onReady={(e) => setHasTorch(e.nativeEvent.hasTorch)}
+-            onStatus={(e) => setStatus(e.nativeEvent)}
++            onStatus={(e) => {
++              setStatus(e.nativeEvent);
++              if (e.nativeEvent.status === 'capturing') setCaptureOver(false);
++            }}
+             onPhoto={(e) => onPhoto(e.nativeEvent.uri)}
+             onCameraError={(e) => onCameraError(e.nativeEvent.code, e.nativeEvent.message)}
+           />
+diff --git a/lib/shutter.ts b/lib/shutter.ts
+index dc4cc2d6..94353741 100644
+--- a/lib/shutter.ts
++++ b/lib/shutter.ts
+@@ -5,6 +5,13 @@
+ 
+ export type Shutter = { take: () => void; disabled: boolean };
+ 
++/**
++ * How long Done waits, once it has ended the session, for a photo Auto or the middle button had just started taking:
++ * its 'capturing' can still be on its way from the camera as Done is tapped (ruling T7-8). Then Done waits for that
++ * photo, or for the capture to end without one.
++ */
++export const CAPTURE_GRACE_MS = 250;
++
+ let holder: object | null = null; // whose shutter it is
+ let current: Shutter | null = null;
+ const listeners = new Set<() => void>();

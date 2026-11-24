@@ -1,0 +1,426 @@
+diff --git a/__tests__/camera.test.tsx b/__tests__/camera.test.tsx
+index e66ecc61..a2eeff33 100644
+--- a/__tests__/camera.test.tsx
++++ b/__tests__/camera.test.tsx
+@@ -364,6 +364,8 @@ test('the middle button takes the photo while the camera is on top, and waits wh
+   await send('status', { status: 'capturing', form: 'sales_invoice' });
+   expect(currentShutter()?.disabled).toBe(true); // taking the photo
+   await send('status', { status: 'taken', form: 'sales_invoice' });
++  expect(currentShutter()?.disabled).toBe(true); // its photo isn't back yet
++  await photo('shutter_1.jpg');
+   expect(currentShutter()?.disabled).toBe(false); // it keeps shooting: the next one any time
+ 
+   // while a picker is open, it waits too
+@@ -679,6 +681,50 @@ test('Done runs once on a double tap', async () => {
+   ]);
+ });
+ 
++test('Done waits while a photo is being taken; a photo that lands as Done waits joins its session (ruling T7-2)', async () => {
++  // The last sheet: Auto, or the middle button, is taking it as the person reaches for Done
++  await open();
++  await send('status', { status: 'looking', form: null });
++  await photo('capture_1.jpg');
++  const id = sessionId()!;
++  await send('status', { status: 'capturing', form: 'sales_invoice' }); // Auto took it
++  expect(doneButton()).toBeDisabled();
++  await photo('capture_2.jpg');
++  await send('status', { status: 'taken', form: 'sales_invoice' });
++  expect(doneButton()).toBeEnabled();
++  await take(); // the middle button: until its photo is back, Done waits
++  expect(doneButton()).toBeDisabled();
++  await photo('capture_3.jpg');
++  expect(doneButton()).toBeEnabled();
++  await take(); // a press whose capture failed leaves Done free again
++  await send('cameraError', { code: 'capture', message: 'x' });
++  expect(doneButton()).toBeEnabled();
++
++  // the 'capturing' event still on its way as Done is tapped: the camera stays on, Auto off, and the photo isn't lost
++  await press(doneButton());
++  expect(camera().props.active).toBe(true);
++  expect(camera().props.auto).toBe(false);
++  expect(currentShutter()?.disabled).toBe(true);
++  const uri = await photo('capture_4.jpg');
++  expect(memoryFs.files.has(uri)).toBe(false); // moved into the queue, not deleted
++  expect(captures().map((c) => c.session)).toEqual([id, id, id, id]);
++  expect(doneButton().props.accessibilityLabel).toBe('Reading 4 more…');
++  for (let i = 0; i < 4; i++) await read();
++  expect(recentScans().filter((s) => s.session === id)).toHaveLength(4);
++  expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
++});
++
++test('a press whose photo the stopped camera dropped never leaves Done or the middle button waiting', async () => {
++  const view = await open();
++  await send('status', { status: 'looking', form: null });
++  await photo('capture_1.jpg');
++  await take();
++  expect(doneButton()).toBeDisabled();
++  await refocus(view); // another tab: the camera stopped, and its photo was dropped natively
++  expect(doneButton()).toBeEnabled();
++  expect(currentShutter()?.disabled).toBe(false);
++});
++
+ test('leaving keeps the session and the queue; coming back continues it; 30 minutes later it has closed', async () => {
+   const view = await open();
+   await photo('capture_1.jpg');
+@@ -854,12 +900,17 @@ test("the gallery, the camera app and a PDF join the session the same way; a pic
+ 
+ test('cancelling a picker keeps the open session, its tray and count; with none open, it opens none (ruling P-F9)', async () => {
+   await open();
+-  // with no session open: a cancelled gallery, camera app or PDF opens none
++  // with no session open: a cancelled gallery, camera app or PDF opens none (the camera app is the start panel's)
+   await press(button('Gallery'));
+   await press(button('Import PDF'));
++  await send('cameraError', { code: 'start', message: '' });
++  await press(button(CAMERA_APP));
+   await settle();
++  expect(mockCameraApp).toHaveBeenCalledTimes(1);
+   expect(currentSession()).toBeNull();
+   expect(thumbs()).toEqual([]);
++  await press(button('Try again'));
++  await settle();
+ 
+   // in an open session: its tray and its count stay as they were
+   await photo('capture_1.jpg');
+diff --git a/__tests__/captureQueue.test.ts b/__tests__/captureQueue.test.ts
+index e2825ddc..a51ce81b 100644
+--- a/__tests__/captureQueue.test.ts
++++ b/__tests__/captureQueue.test.ts
+@@ -660,6 +660,34 @@ test('a failed Retake never deletes the scan it was for: a read that throws, or
+   expect(scans.recentScans().map((s) => s.id)).toEqual([old]);
+ });
+ 
++test('a Retake whose read finds no form keeps the original too; an aligned one still replaces it (ruling T7-3)', async () => {
++  const { queue, scans, session } = m;
++  const old = scans.addScan({ label: 'Camera photo', source: 'camera', result: result(), session: A });
++  const oldDir = scans.getScan(old)!.result.scanDir!;
++  const retake = async (seconds: number, name: string) => {
++    session.retakeIn(A, old, at(seconds));
++    const { session: id, replaces } = session.takeCapture(at(seconds));
++    await queue.queuePhoto(photo(name), { session: id, source: 'camera', replaces }, at(seconds));
++  };
++
++  await retake(1, 'capture_1.jpg');
++  await read(result('blank_page')); // the form not found: no better than what it was for
++  const notFound = scans.recentScans()[0];
++  expect(notFound.result.aligned).toBe(false);
++  expect(scans.getScan(old)).toBeDefined();
++  expect(filesIn(oldDir)).not.toEqual([]);
++  expect(scans.recentScans().map((s) => [s.id, s.session])).toEqual([
++    [notFound.id, A],
++    [old, A],
++  ]);
++
++  await retake(2, 'capture_2.jpg');
++  await read(result()); // found: it replaces the original, as before
++  expect(scans.getScan(old)).toBeUndefined();
++  expect(filesIn(oldDir)).toEqual([]);
++  expect(scans.recentScans()).toHaveLength(2);
++});
++
+ test("a photo that can't be moved is read where it is", async () => {
+   const { queue, scans, fs } = m;
+   jest.spyOn(fs.File.prototype, 'move').mockRejectedValueOnce(new Error('No space left on device'));
+diff --git a/__tests__/sessionFlow.test.tsx b/__tests__/sessionFlow.test.tsx
+index 1533f0ef..0c7c617b 100644
+--- a/__tests__/sessionFlow.test.tsx
++++ b/__tests__/sessionFlow.test.tsx
+@@ -1,7 +1,7 @@
+ import { router } from 'expo-router';
+ import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+ 
+-import { currentSession } from '../lib/session';
++import { currentSession, loadSession } from '../lib/session';
+ import { currentShutter } from '../lib/shutter';
+ import type { ScanResult } from '../modules/scanner';
+ import { parseScanResult } from '../modules/scanner/src/parse';
+@@ -15,6 +15,8 @@ import { appRoutes } from '../test-utils/routes';
+ // the scanner's reads are deferred promises; the other screens stand in. The global router is the test's, never the
+ // app's.
+ 
++jest.setTimeout(15000); // the whole app's router, with its reads: slow under a full run's load (ruling T7-5)
++
+ type Read = { resolve: (r: ScanResult) => void };
+ const mockReads: Read[] = [];
+ const mockTakePhoto = jest.fn(async () => {});
+@@ -126,3 +128,47 @@ test('Done opens the session screen in the Sessions tab, with the bar; Back goes
+   await shoot();
+   expect(currentSession()!.id).not.toBe(id);
+ });
++
++test("Done on a second session, with the first one's screen left in Sessions, shows the second; Back goes to Sessions, then the camera", async () => {
++  // ruling T7-6: the Sessions tab keeps its own Stack, which still holds session A's screen
++  await act(async () => mockReads.splice(0).forEach((r) => r.resolve(parseScanResult(coreJson('inv_0007', null)))));
++  await act(() => loadSession()); // the last test's session closes, as a new start closes it
++  memoryFs.reset();
++  photos = 0;
++  mockTakePhoto.mockClear();
++  await renderRouter(appRoutes({ '(tabs)/camera': require('../app/(tabs)/camera').default }), {
++    initialUrl: '/camera',
++  });
++  await settle();
++  await send('status', { status: 'looking', form: null });
++  await shoot();
++  await shoot();
++  const a = currentSession()!.id;
++  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Done · 2' })));
++  await read();
++  await read();
++  expect(screen).toHavePathname(`/sessions/${a}`);
++
++  // back to the camera by its tab, session A's screen still in the Sessions tab
++  await act(async () => fireEvent.press(tab('Camera')));
++  await settle();
++  expect(screen).toHavePathname('/camera');
++  await send('status', { status: 'looking', form: null });
++  await shoot();
++  await shoot();
++  const b = currentSession()!.id;
++  expect(b).not.toBe(a);
++  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Done · 2' })));
++  await read();
++  await read();
++  expect(screen).toHavePathname(`/sessions/${b}`);
++  expect(onTop()).toEqual(['Session: on top']);
++  expect(tab('Sessions')).toBeSelected();
++
++  await act(() => router.back());
++  expect(screen).toHavePathname('/sessions');
++  expect(onTop()).toEqual(['Sessions: on top']);
++  await act(() => router.back());
++  expect(screen).toHavePathname('/camera');
++  expect(router.canGoBack()).toBe(false);
++});
+diff --git a/app/(tabs)/camera.tsx b/app/(tabs)/camera.tsx
+index 768a3b96..67aab27f 100644
+--- a/app/(tabs)/camera.tsx
++++ b/app/(tabs)/camera.tsx
+@@ -52,10 +52,10 @@ import {
+ //
+ // The camera keeps shooting: every capture (Auto, the shutter, the gallery, the camera app, a PDF) joins the open
+ // session (lib/session's takeCapture) and goes to the queue (lib/captureQueue), which reads while the camera stays live.
+-// A read never opens a dialog: a failed one is a "!" in the tray. Done ends the session, waits for its reads, then opens
+-// the session screen, or a lone scan's Scan screen. A problem (no permission, no camera, a camera that won't start)
+-// shows a panel in the picture's place, and the tray stays. A photo Auto took gets one confirm haptic (§5.5). The status
+-// bar's icons are light. Nothing starts, and no permission is asked for, until the splash has gone (call 8).
++// A read never opens a dialog: a failed one is a "!" in the tray. Done waits while a photo is being taken, then ends the
++// session, waits for its reads, and opens the session screen, or a lone scan's Scan screen. A problem (no permission,
++// no camera, a camera that won't start) shows a panel in the picture's place, and the tray stays. A photo Auto took gets
++// one confirm haptic (§5.5). The status bar's icons are light. Nothing starts, and no permission is asked for, until the splash has gone (call 8).
+ 
+ type Permission = 'checking' | 'granted' | 'ask' | 'settings'; // ask: refused, may ask again; settings: refused for good
+ type Status = { status: CameraStatus | 'starting'; form: FormName | null };
+@@ -127,10 +127,11 @@ export default function CameraScreen() {
+   const [torch, setTorch] = useState(false);
+   const camera = useRef<ScannerCameraRef>(null);
+   const shutterPressed = useRef(false); // the photo on its way is the shutter's, not one Auto took
++  const [shooting, setShooting] = useState(false); // the middle button was pressed, and its photo isn't back yet
+   const pickingRef = useRef(false); // set at once, so a second picker is refused before the re-render
+   const [picking, setPicking] = useState(false);
+   const [finishing, setFinishing] = useState<string | null>(null); // Done: the session it waits for
+-  const finishingRef = useRef(false);
++  const finishingRef = useRef<string | null>(null);
+ 
+   // The permission: checked each time the screen is shown and when the app comes back (from the settings, say),
+   // and asked for once; never behind the splash.
+@@ -195,6 +196,7 @@ export default function CameraScreen() {
+ 
+   function takePhoto() {
+     shutterPressed.current = true;
++    setShooting(true);
+     void camera.current?.takePhoto();
+   }
+ 
+@@ -205,7 +207,10 @@ export default function CameraScreen() {
+   }
+ 
+   function onCameraError(code: CameraErrorCode, message: string) {
+-    if (code === 'capture' || code === 'keep') shutterPressed.current = false; // no photo comes for that press
++    if (code === 'capture' || code === 'keep') {
++      shutterPressed.current = false; // no photo comes for that press
++      setShooting(false);
++    }
+     if (code === 'capture') showError(CAMERA_ERRORS.capture);
+     else if (code === 'keep') showError(CAMERA_ERRORS.keep);
+     else setProblem({ code, message });
+@@ -213,24 +218,30 @@ export default function CameraScreen() {
+ 
+   const testImages = testParam !== null;
+ 
+-  /** A photo the camera took: into the open session's queue, unless the camera wasn't on top (ruling P-F9). */
++  /**
++   * A photo the camera took: into the open session's queue, unless the camera wasn't on top (ruling P-F9). One that
++   * lands while Done waits was being taken as Done was tapped (its 'capturing' still on its way): it joins the session
++   * Done is finishing, and Done waits for it too (ruling T7-2).
++   */
+   function onPhoto(uri: string) {
+     const byAuto = auto && !shutterPressed.current; // the person's eyes are on the paper, not the screen
+     shutterPressed.current = false;
+-    // taken as the screen was left, as a picker opened, or after Done: no session takes it
+-    if (!focusedRef.current || pickingRef.current || finishingRef.current) {
++    setShooting(false);
++    // taken as the screen was left, or as a picker opened: no session takes it
++    if (!focusedRef.current || pickingRef.current) {
+       discard(uri);
+       return;
+     }
+     if (byAuto) confirmHaptic();
+     const now = new Date();
+-    const { session: id, replaces } = takeCapture(now);
++    const { session: id, replaces } =
++      finishingRef.current !== null ? { session: finishingRef.current, replaces: null } : takeCapture(now);
+     void queuePhoto(uri, { session: id, source: 'camera', testImage: testImages, replaces }, now).catch(() => {});
+   }
+ 
+   /** A picker, one at a time, with the camera off while it's open. A cancel opens no session (ruling P-F9). */
+   async function whilePicking(pick: () => Promise<void>): Promise<void> {
+-    if (pickingRef.current || finishingRef.current) return;
++    if (pickingRef.current || finishingRef.current !== null) return;
+     pickingRef.current = true;
+     setPicking(true);
+     try {
+@@ -301,7 +312,7 @@ export default function CameraScreen() {
+    * session screen, or the Scan screen when it kept one scan and no read failed. Its Button runs it once.
+    */
+   async function done(id: string): Promise<void> {
+-    finishingRef.current = true;
++    finishingRef.current = id;
+     setFinishing(id);
+     try {
+       endSession(id);
+@@ -314,10 +325,11 @@ export default function CameraScreen() {
+       if (kept.length === 1 && theFailed.length === 0) {
+         open.push({ pathname: '/result', params: { id: kept[0].id, session: id } });
+       } else {
+-        open.navigate({ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }); // Sessions under it
++        // Sessions under it; the Sessions Stack keeps one session screen (its layout, ruling T7-6)
++        open.navigate({ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true });
+       }
+     } finally {
+-      finishingRef.current = false;
++      finishingRef.current = null;
+       setFinishing(null);
+     }
+   }
+@@ -326,11 +338,19 @@ export default function CameraScreen() {
+     !testParam && (permission === 'ask' || permission === 'settings') ? permission : (problem?.code ?? null);
+   const ready = started && (testParam ? testImage !== null : permission === 'granted');
+   const viewUp = !panel && ready;
+-  // Live while it reads (approach 1): off behind the splash, on another tab, while a picker or a dialog is up, and once
+-  // Done has ended the session.
+-  const live = started && focused && !picking && !sayingWhy && finishing === null;
+-  const shutterOff =
+-    !viewUp || !live || status.status === 'starting' || status.status === 'capturing';
++  // Live while it reads (approach 1): off behind the splash, on another tab, and while a picker or a dialog is up. While
++  // Done waits it stays on, with Auto off and the middle button waiting: stopping it would drop a photo still being
++  // saved (ScannerCameraView.kt deletes one that lands once it has stopped), and none new is taken (ruling T7-2).
++  const live = started && focused && !picking && !sayingWhy;
++  const capturing = status.status === 'capturing' || shooting; // a photo on its way: Done waits for it
++  const shutterOff = !viewUp || !live || finishing !== null || status.status === 'starting' || capturing;
++
++  // A camera that stops drops a photo on its way: nothing is coming back for the middle button's press.
++  const [wasLive, setWasLive] = useState(live);
++  if (live !== wasLive) {
++    setWasLive(live);
++    if (!live) setShooting(false);
++  }
+ 
+   // The tabs' middle button is the shutter while the camera is on top; on another tab it's Camera again.
+   const owner = useRef(null); // this camera, as lib/shutter knows it: a stable object
+@@ -428,7 +448,7 @@ export default function CameraScreen() {
+             ref={camera}
+             style={styles.fill}
+             active={live}
+-            auto={auto}
++            auto={auto && finishing === null}
+             torch={torch}
+             testImage={testImage}
+             onReady={(e) => setHasTorch(e.nativeEvent.hasTorch)}
+@@ -474,6 +494,7 @@ export default function CameraScreen() {
+             : {
+                 label: finishing !== null && pending > 0 ? `Reading ${pending} more…` : `Done · ${tray.length}`,
+                 busy: finishing !== null,
++                disabled: finishing === null && capturing,
+                 onPress: () => done(trayId),
+               }
+         }
+diff --git a/app/(tabs)/sessions/_layout.tsx b/app/(tabs)/sessions/_layout.tsx
+index d05b5439..770a3530 100644
+--- a/app/(tabs)/sessions/_layout.tsx
++++ b/app/(tabs)/sessions/_layout.tsx
+@@ -4,10 +4,19 @@ import { colors } from '../../../lib/theme';
+ 
+ /**
+  * The Sessions tab's own Stack: the list, and a session's screen over it, both under the bar. Anchored on the list, so
+- * a session opened cold has the list under it. Every screen draws its own Header, on paper.
++ * a session opened cold has the list under it. Every screen draws its own Header, on paper. It holds one session's
++ * screen at a time (ruling T7-6): the camera's Done opens its session here while the tab may still show another one,
++ * and that one goes, so Back from it is the list, then the camera.
+  */
+ export const unstable_settings = { anchor: 'index' };
+ 
++/** Every session's screen as one, for the Stack: a new one takes the old one's place. */
++const oneSession = () => 'session';
++
+ export default function SessionsLayout() {
+-  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.paper } }} />;
++  return (
++    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.paper } }}>
++      <Stack.Screen name="[id]" dangerouslySingular={oneSession} />
++    </Stack>
++  );
+ }
+diff --git a/components/SessionTray.tsx b/components/SessionTray.tsx
+index c7e0fef6..73ca0b48 100644
+--- a/components/SessionTray.tsx
++++ b/components/SessionTray.tsx
+@@ -15,7 +15,8 @@ import { useTabBarSpace } from './Screen';
+ // thumbnail has a 16 dp mark on its corner: a brand ring while it's read, a ✓ once it's read, a "!" for a retake (a
+ // form not found, or a read that failed). The "!" is a glyph, drawn as the ✓ is (ruling P-F8).
+ 
+-type DoneProps = { label: string; busy: boolean; onPress: () => Promise<void> };
++// disabled: a photo is still being taken, which Done must not leave behind (ruling T7-2)
++type DoneProps = { label: string; busy: boolean; disabled: boolean; onPress: () => Promise<void> };
+ 
+ const MARK = 16; // dp: a thumbnail's mark
+ const MARK_GLYPH = 12; // dp: the ✓ or ! inside it
+@@ -93,7 +94,15 @@ export function SessionTray({
+                 <Thumbnail key={item.key} item={item} n={i + 1} />
+               ))}
+             </ScrollView>
+-            {done && <Button label={done.label} variant="secondary" loading={done.busy} onPress={done.onPress} />}
++            {done && (
++              <Button
++                label={done.label}
++                variant="secondary"
++                loading={done.busy}
++                disabled={done.disabled}
++                onPress={done.onPress}
++              />
++            )}
+           </>
+         )}
+       </View>
+diff --git a/lib/captureQueue.ts b/lib/captureQueue.ts
+index c715fa4b..1aa008da 100644
+--- a/lib/captureQueue.ts
++++ b/lib/captureQueue.ts
+@@ -14,7 +14,7 @@ import { addFailedRead, touchSession } from './session';
+ //
+ // Reads go one at a time, in the order taken, through the camera's read path (scanPhoto, readPdf). Each is kept as a
+ // scan in its session, as of when it was taken (ruling P-F2); a Retake's new scan replaces the unsaved one it was taken
+-// for. A read that throws is the session's failed read, in plain words only (lib/readFailures), with no dialog and
++// for once its form was found (ruling T7-3). A read that throws is the session's failed read, in plain words only (lib/readFailures), with no dialog and
+ // nothing logged. A photo is deleted once recent.json holds its scan, or once its read has failed; when recent.json
+ // can't be written, it stays for the next start (ruling T2-2), and a scan recent.json already holds is never read twice
+ // (ruling P-F2). Review Focus 1.
+@@ -252,7 +252,9 @@ async function read(entry: Entry): Promise<void> {
+     }
+     remove(entry); // in the same tick: the tray never shows it twice
+     touchSession(c.session, new Date());
+-    if (c.replaces !== null) {
++    // a Retake replaces its scan only with one whose form was found: a new one that wasn't is a retake beside it, and
++    // never costs the person a scan they could use (ruling T7-3)
++    if (c.replaces !== null && result.aligned) {
+       try {
+         deleteScan(c.replaces);
+       } catch {
