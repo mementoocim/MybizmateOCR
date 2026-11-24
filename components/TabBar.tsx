@@ -136,7 +136,9 @@ export function TabBar({ state, descriptors, emitter, navigateToTab, insets }: B
 }
 
 const CIRCLE = bar.circle + 2 * bar.ring; // the middle button, its paper ring outside the coral
-const CORE = bar.circle - space.xl; // the shutter's white core, inside the coral ring
+// The shutter's white core inside the coral ring, 40 dp outside with its edge: the mockup's 36 dp core in a 2 dp
+// border (CSS content-box), as RN measures it (border-box).
+const CORE = bar.circle - space.l - space.xs;
 
 const styles = StyleSheet.create({
   root: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: space.m },

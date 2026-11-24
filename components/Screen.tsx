@@ -156,11 +156,13 @@ export function useScrollIntoView(): (target: ViewInstance | TextInputInstance |
 }
 
 /**
- * In a tab's screen, the space the tabs' floating bar takes from the screen's foot (components/TabBar reports it, the
- * raised button too); 0 outside the tabs, before the bar lays out, and while it hides for the keyboard (ruling P-F5).
+ * In a tab's screen, the space the tabs' floating bar takes from the screen's foot: what components/TabBar reports
+ * once it lays out, the raised button too; until then, the navigator's estimate for the default bar (about 49 dp plus
+ * the inset: BottomTabView's getTabBarHeight, ruling T5-2). 0 outside the tabs, and while the bar hides for the
+ * keyboard (ruling P-F5).
  */
 export function useTabBarSpace(): number {
-  const reported = useContext(BottomTabBarHeightContext); // undefined outside the tabs
+  const reported = useContext(BottomTabBarHeightContext); // undefined only outside the tabs
   const keyboard = useKeyboardHeight();
   return keyboard > 0 ? 0 : (reported ?? 0);
 }
