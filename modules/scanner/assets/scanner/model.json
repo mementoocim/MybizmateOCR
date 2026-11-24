@@ -1,5 +1,5 @@
 {
-  "name": "PP-OCRv6 small, Latin cut, pretrained",
+  "name": "PP-OCRv6 small, Latin cut, v1.3.0-wise-ft",
   "sha256": "7bcf78f95fb9169d4ef79257b4319bc49186b5af383a42d692c7faacb9dfb83b",
   "bytes": 12152120
 }

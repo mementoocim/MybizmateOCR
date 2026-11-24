@@ -9,9 +9,9 @@ Reference for how MyBizMate Scan reads form fields and how to retrain, export, a
 **MyBizMate Scan** is an offline Expo / React Native mobile app backed by a local C++ native module (`modules/scanner`). Nothing leaves the phone except `.xlsx` import sheets or `.zip` training exports that the user explicitly shares.
 
 It reads **three Philippine business forms** from live camera photos, gallery images, or PDFs:
-1. **MyBizMate Sales Invoice** (`sales_invoice`) — aligned using its 4 printed corner squares ([field_map.json](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/assets/scanner/field_map.json)).
-2. **MyBizMate Service Invoice** (`service_invoice`) — aligned using its printed table border ([service_invoice.json](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/assets/scanner/service_invoice.json)).
-3. **BIR Form 2307 (Page 1)** (`bir_2307`) — aligned using its outer printed border ([bir_2307.json](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/assets/scanner/bir_2307.json), 160 boxes).
+1. **MyBizMate Sales Invoice** (`sales_invoice`) — aligned using its 4 printed corner squares ([field_map.json](modules/scanner/assets/scanner/field_map.json)).
+2. **MyBizMate Service Invoice** (`service_invoice`) — aligned using its printed table border ([service_invoice.json](modules/scanner/assets/scanner/service_invoice.json)).
+3. **BIR Form 2307 (Page 1)** (`bir_2307`) — aligned using its outer printed border ([bir_2307.json](modules/scanner/assets/scanner/bir_2307.json), 160 boxes).
 
 ### End-to-End Runtime Flow
 
@@ -40,28 +40,28 @@ flowchart TD
 Standard PaddleOCR pipelines run **two** neural networks (`PP-OCR_det` text detection + `PP-OCR_rec` text recognition).
 
 **MyBizMate Scan does NOT use a PaddleOCR detection model (`det`) at all.**
-- **Form detection, deskewing, line removal, and box cropping are 100% OpenCV geometry** inside [align.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/align.cpp), [frame_aligner.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/frame_aligner.cpp), [crop.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/crop.cpp), and [box_cut.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/box_cut.cpp).
+- **Form detection, deskewing, line removal, and box cropping are 100% OpenCV geometry** inside [align.cpp](modules/scanner/cpp/core/align.cpp), [frame_aligner.cpp](modules/scanner/cpp/core/frame_aligner.cpp), [crop.cpp](modules/scanner/cpp/core/crop.cpp), and [box_cut.cpp](modules/scanner/cpp/core/box_cut.cpp).
 - Every box crop handed to the neural network is **already a single horizontal text line** with printed borders and 2307 comb ticks erased to paper gray.
-- **Only ONE model is shipped and fine-tuned:** the **Text Recognition (`rec`) model** at [inference_latin.onnx](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/assets/scanner/inference_latin.onnx) (`PP-OCRv6 small, Latin cut`, ~12.15 MB).
+- **Only ONE model is shipped and fine-tuned:** the **Text Recognition (`rec`) model** at [inference_latin.onnx](modules/scanner/assets/scanner/inference_latin.onnx) (`PP-OCRv6 small, Latin cut`, ~12.15 MB).
 
 ---
 
 ## 3. Exact Technical Contract of `inference_latin.onnx`
 
-When we fine-tune PaddleOCR and export back to ONNX, the exported model **must strictly match** what [recognizer.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/recognizer.cpp) expects in C++:
+When we fine-tune PaddleOCR and export back to ONNX, the exported model **must strictly match** what [recognizer.cpp](modules/scanner/cpp/core/recognizer.cpp) expects in C++:
 
 | Property | Required Specification | Where Enforced |
 |---|---|---|
-| **ONNX File Path** | `modules/scanner/assets/scanner/inference_latin.onnx` (single file, no external `.onnx.data`) | [ScannerModule.kt](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/android/src/main/java/expo/modules/scanner/ScannerModule.kt#L70-L79) |
-| **ONNX Runtime / Opset** | ONNX Runtime Android `1.32.0`, ONNX Opset `11` (IR v6+), `float32` | [build.gradle](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/android/build.gradle#L13) |
-| **Input Tensor Shape** | `[batch, 3, 48, dynamic_width]` (`float32`, layout `NCHW`) | [recognizer.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/recognizer.cpp#L152-L153) |
-| **Color Channel Order** | **BGR** (`OpenCV cv::Mat` default — **do NOT train on RGB**) | [recognizer.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/recognizer.cpp#L140-L150) |
-| **Resize & Padding** | Height fixed to `48 px`; width `ceil(48 * w / h)` right-padded with `0.0f` to batch max width (minimum `320 px`); batch size up to `8` | [recognizer.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/recognizer.cpp#L17-L18), [L130-L151](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/recognizer.cpp#L130-L151) |
-| **Pixel Normalization** | `(pixel / 255.0 - 0.5) / 0.5` → `[-1.0, +1.0]` | [recognizer.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/recognizer.cpp#L146) |
-| **Output Tensor Shape** | `[batch, time_steps, 100]` (`float32`) | [recognizer.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/recognizer.cpp#L155-L156), [test_recognizer.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/tests/test_recognizer.cpp#L22) |
-| **Final Activation** | **Must end with `Softmax(axis=2)`** (outputs `[0..1]` probabilities, **not** raw logits, because `conf` averages top probs and `alts` checks `runnerUp > 0.02`) | [recognizer.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/recognizer.cpp#L205-L219) |
-| **Class Index Mapping (`100` total)** | `0` = `<blank>` (CTC blank)<br>`1..98` = 98 lines of [dict.txt](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/assets/scanner/dict.txt) (`!`..`~` ASCII 33–126 + `É`, `Ñ`, `é`, `ñ`)<br>`99` = `" "` (space, i.e. PaddleOCR `use_space_char: true`) | [recognizer.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/recognizer.cpp#L86-L96) |
-| **Model Version Pin** | `modules/scanner/assets/scanner/model.json` must hold exact `name`, `sha256`, and `bytes` of `inference_latin.onnx` | [versions.ts](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/lib/versions.ts), [versions.test.ts](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/__tests__/versions.test.ts) |
+| **ONNX File Path** | `modules/scanner/assets/scanner/inference_latin.onnx` (single file, no external `.onnx.data`) | [ScannerModule.kt](modules/scanner/android/src/main/java/expo/modules/scanner/ScannerModule.kt#L70-L79) |
+| **ONNX Runtime / Opset** | ONNX Runtime Android `1.32.0`, ONNX Opset `11` (IR v6+), `float32` | [build.gradle](modules/scanner/android/build.gradle#L13) |
+| **Input Tensor Shape** | `[batch, 3, 48, dynamic_width]` (`float32`, layout `NCHW`) | [recognizer.cpp](modules/scanner/cpp/core/recognizer.cpp#L152-L153) |
+| **Color Channel Order** | **BGR** (`OpenCV cv::Mat` default — **do NOT train on RGB**) | [recognizer.cpp](modules/scanner/cpp/core/recognizer.cpp#L140-L150) |
+| **Resize & Padding** | Height fixed to `48 px`; width `ceil(48 * w / h)` right-padded with `0.0f` to batch max width (minimum `320 px`); batch size up to `8` | [recognizer.cpp](modules/scanner/cpp/core/recognizer.cpp#L17-L18), [L130-L151](modules/scanner/cpp/core/recognizer.cpp#L130-L151) |
+| **Pixel Normalization** | `(pixel / 255.0 - 0.5) / 0.5` → `[-1.0, +1.0]` | [recognizer.cpp](modules/scanner/cpp/core/recognizer.cpp#L146) |
+| **Output Tensor Shape** | `[batch, time_steps, 100]` (`float32`) | [recognizer.cpp](modules/scanner/cpp/core/recognizer.cpp#L155-L156), [test_recognizer.cpp](modules/scanner/cpp/tests/test_recognizer.cpp#L22) |
+| **Final Activation** | **Must end with `Softmax(axis=2)`** (outputs `[0..1]` probabilities, **not** raw logits, because `conf` averages top probs and `alts` checks `runnerUp > 0.02`) | [recognizer.cpp](modules/scanner/cpp/core/recognizer.cpp#L205-L219) |
+| **Class Index Mapping (`100` total)** | `0` = `<blank>` (CTC blank)<br>`1..98` = 98 lines of [dict.txt](modules/scanner/assets/scanner/dict.txt) (`!`..`~` ASCII 33–126 + `É`, `Ñ`, `é`, `ñ`)<br>`99` = `" "` (space, i.e. PaddleOCR `use_space_char: true`) | [recognizer.cpp](modules/scanner/cpp/core/recognizer.cpp#L86-L96) |
+| **Model Version Pin** | `modules/scanner/assets/scanner/model.json` must hold exact `name`, `sha256`, and `bytes` of `inference_latin.onnx` | [versions.ts](lib/versions.ts), [versions.test.ts](__tests__/versions.test.ts) |
 
 ### Per-Box Character Masks During C++ CTC Decoding
 
@@ -107,7 +107,7 @@ Because training crops must match the **exact perspective warp, rule-line remova
 4. Tap every training box on the Result screen:
    - Tap **Looks right** if the model's reading is already 100% exact (`confirmed`).
    - Or type the exact written text and tap **Save** if the model misread it (`corrected`).
-   - *Privacy by design:* Personal fields (`customer_name`, `customer_tin`, `customer_address`, `payee_*`, `payor_*`), multi-line stacked crops (`service_invoice` `amount_words`), and PDF-text boxes are automatically excluded ([lib/training/boxes.ts](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/lib/training/boxes.ts)).
+   - *Privacy by design:* Personal fields (`customer_name`, `customer_tin`, `customer_address`, `payee_*`, `payor_*`), multi-line stacked crops (`service_invoice` `amount_words`), and PDF-text boxes are automatically excluded ([lib/training/boxes.ts](lib/training/boxes.ts)).
 5. Tap **Save** on the scan and enter:
    - **Client code** (e.g. `C001`)
    - **Writer code** (e.g. `W01` — identifies the person who handwrote the form, never their real name).
@@ -148,7 +148,7 @@ rec_dataset/
    - Unchecked boxes (`confirmed === false`)
    - Empty labels (`label === ""`, i.e., cleared boxes)
    - Labels longer than `max_text_length` (`25` characters by default — e.g. long `amount_words`)
-   - Labels containing any character outside the 98 characters in [dict.txt](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/assets/scanner/dict.txt) + `" "` (space).
+   - Labels containing any character outside the 98 characters in [dict.txt](modules/scanner/assets/scanner/dict.txt) + `" "` (space).
 
 ---
 
@@ -157,7 +157,7 @@ rec_dataset/
 Train on a CUDA GPU (local PC or Google Colab) using **PaddlePaddle + PaddleOCR**:
 
 1. **Base Weights (Critical):**
-   - Start from the **PP-OCRv6 / PP-OCRv5 mobile recognition** pretrained weights with its CTC head aligned to our exact 98-line [dict.txt](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/assets/scanner/dict.txt) + `use_space_char: true` (**100 output classes**).
+   - Start from the **PP-OCRv6 / PP-OCRv5 mobile recognition** pretrained weights with its CTC head aligned to our exact 98-line [dict.txt](modules/scanner/assets/scanner/dict.txt) + `use_space_char: true` (**100 output classes**).
    - *Tip:* If starting from official multilingual PP-OCRv5/v6 mobile weights rather than an existing Latin-cut `.pdparams` checkpoint, slice the final FC layer weights/bias to the matching indices of `dict.txt` (`<blank>` + 98 chars + `" "`) before fine-tuning so you keep pretrained stroke features instead of training a random head from scratch.
 2. **Core PaddleOCR Config Settings:**
    - `character_dict_path`: exact copy of `modules/scanner/assets/scanner/dict.txt`
@@ -214,12 +214,12 @@ Once the new `inference_latin.onnx` passes Step 4:
    ```powershell
    node -e "const fs=require('fs'),crypto=require('crypto'); const b=fs.readFileSync('modules/scanner/assets/scanner/inference_latin.onnx'); console.log(JSON.stringify({name:'PP-OCRv6 small, Latin cut, ft-v1', sha256:crypto.createHash('sha256').update(b).digest('hex'), bytes:b.length}, null, 2));"
    ```
-3. **Update [model.json](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/assets/scanner/model.json):**
+3. **Update [model.json](modules/scanner/assets/scanner/model.json):**
    Write the new `name` (e.g. `"PP-OCRv6 small, Latin cut, ft-v1"`), `sha256`, and `bytes`.
    - Why this matters: Every scan saved in the app records `<name> <sha256[:12]>` so future training exports always know **which exact model version** produced each reading!
-4. **Update [__tests__/versions.test.ts](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/__tests__/versions.test.ts#L29-L35):**
+4. **Update [__tests__/versions.test.ts](__tests__/versions.test.ts#L29-L35):**
    Update the expected `MODEL.name` string on lines 33–34 to match your new `model.json` `name`.
-5. **Do NOT modify [dict.txt](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/assets/scanner/dict.txt)** unless you intentionally changed the model's output classes and updated C++ `test_recognizer.cpp` (`charCount() == 100`).
+5. **Do NOT modify [dict.txt](modules/scanner/assets/scanner/dict.txt)** unless you intentionally changed the model's output classes and updated C++ `test_recognizer.cpp` (`charCount() == 100`).
 
 ---
 
@@ -232,7 +232,7 @@ Once the new `inference_latin.onnx` passes Step 4:
    npm run lint
    ```
 2. **Understanding C++ Core Tests (`npm run test:core`) After Fine-Tuning:**
-   - [test_recognizer.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/tests/test_recognizer.cpp) and [test_scanner.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/tests/test_scanner.cpp) include **pretrained parity tests** that compare every crop's `text`, `alts`, and `conf` (`±0.002`) against `fixtures/core/crops/inv_0007/expected.json` and `fixtures/core/expected/*.json` (for example, the pretrained model misreads `Eggs` as `"Egqs"` on `inv_0007` line 59!).
+   - [test_recognizer.cpp](modules/scanner/cpp/tests/test_recognizer.cpp) and [test_scanner.cpp](modules/scanner/cpp/tests/test_scanner.cpp) include **pretrained parity tests** that compare every crop's `text`, `alts`, and `conf` (`±0.002`) against `fixtures/core/crops/inv_0007/expected.json` and `fixtures/core/expected/*.json` (for example, the pretrained model misreads `Eggs` as `"Egqs"` on `inv_0007` line 59!).
    - After fine-tuning, confidences and corrected readings **will intentionally change** (e.g. `"Egqs"` → `"Eggs"`!).
    - Therefore, regenerate or update the expected fixture JSONs from your fine-tuned model once you have verified higher validation accuracy on your held-out writers + synthetic benchmark set.
 3. **On-Device Speed & Privacy Checks:**
@@ -249,17 +249,17 @@ Once the new `inference_latin.onnx` passes Step 4:
 
 | Path | Responsibility |
 |---|---|
-| [app/](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/app) | Expo Router screens (`index`, `camera`, `result`, `saved`, `lists`, `settings`, `training`, `speed`) |
-| [components/](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/components) | Reusable UI sheets, cards, overlays, and box editors |
-| [lib/checks/](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/lib/checks) | Invoice & BIR 2307 validation math, date/number parsers, TIN check, rapidfuzz matcher |
-| [lib/training/](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/lib/training) | Annotation-mode box filtering (`boxes.ts`), Client/Writer code validation (`codes.ts`), ZIP export (`export.ts`) |
-| [lib/versions.ts](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/lib/versions.ts) | Reads `app.json` version and `model.json` (`name` + 12-char SHA-256) stamped onto scans |
-| [modules/scanner/assets/scanner/](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/assets/scanner) | **`inference_latin.onnx`**, **`dict.txt`**, **`model.json`**, and form templates (`field_map.json`, `service_invoice.json`, `bir_2307.json`) |
-| [modules/scanner/cpp/core/recognizer.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/recognizer.cpp) | ONNX Runtime inference (`[B,3,48,W]` BGR) + per-field-type CTC greedy & backup decoding |
-| [modules/scanner/cpp/core/scanner.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/scanner.cpp) | Orchestrates photo/PDF decoding, alignment, box cropping, PDF text extraction, and recognition |
-| [modules/scanner/cpp/core/box_cut.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/core/box_cut.cpp) | Removes printed table rules & BIR 2307 comb ticks before handing clean crops to PaddleOCR |
-| [modules/scanner/cpp/tests/](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/tests) | C++ `doctest` suite for alignment, cropping, PDF reading, and recognizer parity |
-| [fixtures/core/](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/fixtures/core) | Synthetic test invoices, BIR 2307 photos/PDFs, pre-cut box crops, and expected outputs |
+| [app/](app) | Expo Router screens (`index`, `camera`, `result`, `saved`, `lists`, `settings`, `training`, `speed`) |
+| [components/](components) | Reusable UI sheets, cards, overlays, and box editors |
+| [lib/checks/](lib/checks) | Invoice & BIR 2307 validation math, date/number parsers, TIN check, rapidfuzz matcher |
+| [lib/training/](lib/training) | Annotation-mode box filtering (`boxes.ts`), Client/Writer code validation (`codes.ts`), ZIP export (`export.ts`) |
+| [lib/versions.ts](lib/versions.ts) | Reads `app.json` version and `model.json` (`name` + 12-char SHA-256) stamped onto scans |
+| [modules/scanner/assets/scanner/](modules/scanner/assets/scanner) | **`inference_latin.onnx`**, **`dict.txt`**, **`model.json`**, and form templates (`field_map.json`, `service_invoice.json`, `bir_2307.json`) |
+| [modules/scanner/cpp/core/recognizer.cpp](modules/scanner/cpp/core/recognizer.cpp) | ONNX Runtime inference (`[B,3,48,W]` BGR) + per-field-type CTC greedy & backup decoding |
+| [modules/scanner/cpp/core/scanner.cpp](modules/scanner/cpp/core/scanner.cpp) | Orchestrates photo/PDF decoding, alignment, box cropping, PDF text extraction, and recognition |
+| [modules/scanner/cpp/core/box_cut.cpp](modules/scanner/cpp/core/box_cut.cpp) | Removes printed table rules & BIR 2307 comb ticks before handing clean crops to PaddleOCR |
+| [modules/scanner/cpp/tests/](modules/scanner/cpp/tests) | C++ `doctest` suite for alignment, cropping, PDF reading, and recognizer parity |
+| [fixtures/core/](fixtures/core) | Synthetic test invoices, BIR 2307 photos/PDFs, pre-cut box crops, and expected outputs |
 
 ---
 
@@ -269,7 +269,7 @@ Inspection of the ONNX graph, C++ core, and training export logic revealed **8 c
 
 1. **Missing `../prototype/` Scripts & `.pdparams` Checkpoint in Repo:**
    - `README.md` references `../prototype/training/` and `../prototype/benchmark/`, which were excluded from this Git repository. Only the compiled `inference_latin.onnx` is present (and ONNX files cannot be trained directly in PaddlePaddle).
-   - **Solution (Implemented in [training/finetune_ppocrv6_colab.ipynb](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/training/finetune_ppocrv6_colab.ipynb)):** Downloads official `PP-OCRv6_small_rec_pretrained.pdparams` (`124.9 MB`) + `ppocrv6_dict.txt` (`18,708` chars → `18,710` classes) and slices both `CTCHead` (`18,710 → 100`) and `NRTRHead` (`18,713/18,714 → 103/104`) to our exact 98 `dict.txt` chars + `<blank>` + `" "` before fine-tuning.
+   - **Solution (Implemented in [training/finetune_ppocrv6_colab.ipynb](training/finetune_ppocrv6_colab.ipynb)):** Downloads official `PP-OCRv6_small_rec_pretrained.pdparams` (`124.9 MB`) + `ppocrv6_dict.txt` (`18,708` chars → `18,710` classes) and slices both `CTCHead` (`18,710 → 100`) and `NRTRHead` (`18,713/18,714 → 103/104`) to our exact 98 `dict.txt` chars + `<blank>` + `" "` before fine-tuning.
 
 2. **Preserving Accented Spanish/Filipino Characters (`É`, `Ñ`, `é`, `ñ`) When Slicing Base Weights:**
    - Standard English-only checkpoints (`en_PP-OCRv3/v4`, 97 classes) and `ppocrv5_dict.txt` lack `Ñ` (lines 95–98 of `dict.txt`), which would force random head initialization.
@@ -296,7 +296,7 @@ Inspection of the ONNX graph, C++ core, and training export logic revealed **8 c
    - **Solution:** Any synthetic or external crops added to training must replicate paper-gray rule removal, `6 px` padding, and BGR color — never train on pure black-and-white binarized images or crops containing thick black cell borders.
 
 8. **Hardcoded Pretrained Expectations in Tests:**
-   - [__tests__/versions.test.ts](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/__tests__/versions.test.ts#L33) hardcodes `'PP-OCRv6 small, Latin cut, pretrained'`.
-   - [test_recognizer.cpp](file:///c:/Users/Keith/Desktop/OCR%20BIZMATE/modules/scanner/cpp/tests/test_recognizer.cpp#L59) and `fixtures/core/expected/*.json` assert exact confidence (`±0.002`) and even a known pretrained typo (`"Egqs"` instead of `"Eggs"` on `inv_0007`).
+   - [__tests__/versions.test.ts](__tests__/versions.test.ts#L33) hardcodes `'PP-OCRv6 small, Latin cut, pretrained'`.
+   - [test_recognizer.cpp](modules/scanner/cpp/tests/test_recognizer.cpp#L59) and `fixtures/core/expected/*.json` assert exact confidence (`±0.002`) and even a known pretrained typo (`"Egqs"` instead of `"Eggs"` on `inv_0007`).
    - **Solution:** After swapping in a better fine-tuned model, update `versions.test.ts` and regenerate the C++ fixture expected JSONs once validation metrics improve.
 

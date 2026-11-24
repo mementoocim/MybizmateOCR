@@ -55,6 +55,6 @@ test('model.json is the shipped model', () => {
   const onnx: Uint8Array = require('fs').readFileSync('modules/scanner/assets/scanner/inference_latin.onnx'); // jest runs from the repo's root
   const sha256: string = require('crypto').createHash('sha256').update(onnx).digest('hex');
   const { MODEL, modelVersion } = V();
-  expect(MODEL).toEqual({ name: 'PP-OCRv6 small, Latin cut, pretrained', sha256, bytes: onnx.length });
-  expect(modelVersion()).toBe(`PP-OCRv6 small, Latin cut, pretrained ${sha256.slice(0, 12)}`);
+  expect(MODEL).toEqual({ name: 'PP-OCRv6 small, Latin cut, v1.3.0-wise-ft', sha256, bytes: onnx.length });
+  expect(modelVersion()).toBe(`PP-OCRv6 small, Latin cut, v1.3.0-wise-ft ${sha256.slice(0, 12)}`);
 });

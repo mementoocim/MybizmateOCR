@@ -16,7 +16,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MODELS_DIR = Path(__file__).resolve().parent / "models"
 REGISTRY_PATH = MODELS_DIR / "registry.json"
 APP_SCANNER_ASSETS_DIR = REPO_ROOT / "modules/scanner/assets/scanner"
-DEFAULT_APP_MODEL_NAME = "PP-OCRv6 small, Latin cut, pretrained"
+# The app shows "<base>, <version>" (lib/versions.ts) and writes it into every scan and training export.
+APP_MODEL_BASE_NAME = "PP-OCRv6 small, Latin cut"
+
+
+def app_model_name(version: str) -> str:
+    return f"{APP_MODEL_BASE_NAME}, {version}"
+
+
+def write_json(path: Path, data: dict) -> None:
+    # newline="\n": on Windows write_text would turn every line ending into CRLF.
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
 
 # === 3. REGISTRY HELPERS ===
@@ -28,7 +38,7 @@ def load_registry() -> dict:
 
 def save_registry(reg: dict) -> None:
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    REGISTRY_PATH.write_text(json.dumps(reg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    write_json(REGISTRY_PATH, reg)
 
 
 def register_version(
@@ -36,7 +46,6 @@ def register_version(
     onnx_path: Path,
     notes: str,
     metrics: dict | None = None,
-    app_model_name: str = DEFAULT_APP_MODEL_NAME,
 ) -> dict:
     version_dir = MODELS_DIR / version
     version_dir.mkdir(parents=True, exist_ok=True)
@@ -46,10 +55,12 @@ def register_version(
 
     raw = dest_onnx.read_bytes()
     sha256_hex = hashlib.sha256(raw).hexdigest()
-    model_json = {"name": app_model_name, "sha256": sha256_hex, "bytes": len(raw)}
-    (version_dir / "model.json").write_text(json.dumps(model_json, indent=2) + "\n", encoding="utf-8")
+    model_json = {"name": app_model_name(version), "sha256": sha256_hex, "bytes": len(raw)}
+    write_json(version_dir / "model.json", model_json)
     if metrics is not None:
-        (version_dir / "metrics.json").write_text(json.dumps(metrics, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        # Record the registered copy, repo-relative, not wherever the evaluated file happened to sit.
+        metrics = {**metrics, "onnx_path": dest_onnx.relative_to(REPO_ROOT).as_posix()}
+        write_json(version_dir / "metrics.json", metrics)
 
     reg = load_registry()
     reg["versions"][version] = {
@@ -71,13 +82,16 @@ def promote_version(version: str) -> dict:
     if not src_onnx.is_file() or not src_meta.is_file():
         raise FileNotFoundError(f"Version '{version}' is incomplete in {version_dir}")
 
+    # The app's model.json names the promoted version, so scans and training exports say which model read them.
+    model_json = json.loads(src_meta.read_text(encoding="utf-8"))
+    model_json["name"] = app_model_name(version)
     shutil.copy2(src_onnx, APP_SCANNER_ASSETS_DIR / "inference_latin.onnx")
-    shutil.copy2(src_meta, APP_SCANNER_ASSETS_DIR / "model.json")
+    write_json(APP_SCANNER_ASSETS_DIR / "model.json", {"name": model_json["name"], "sha256": model_json["sha256"], "bytes": model_json["bytes"]})
 
     reg = load_registry()
     reg["active_version"] = version
     save_registry(reg)
-    return {"promoted": version, "model_json": json.loads(src_meta.read_text(encoding="utf-8"))}
+    return {"promoted": version, "model_json": model_json}
 
 
 # === 4. CLI ENTRYPOINT ===
