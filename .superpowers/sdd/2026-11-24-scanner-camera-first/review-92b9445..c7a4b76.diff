@@ -1,0 +1,499 @@
+diff --git a/__tests__/home.test.tsx b/__tests__/home.test.tsx
+index 332b0254..1c4c240d 100644
+--- a/__tests__/home.test.tsx
++++ b/__tests__/home.test.tsx
+@@ -195,6 +195,27 @@ test('a press opens its screen once, until Home is on top again (final review, M
+   expect(mockPush).not.toHaveBeenCalled();
+ });
+ 
++test("a push and a tab share Home's one guard: two presses at once open only the first (ruling T6-1)", async () => {
++  // a guard each let both through: Your lists pushed, then the camera's href resolved over it, a second tabs
++  await render(<Home />);
++  const yourLists = () => within(screen.getByTestId('header')).getByRole('button', { name: 'Your lists' });
++  await act(async () => {
++    await fireEvent.press(yourLists());
++    await fireEvent.press(button('Take photo'));
++  });
++  expect(mockPush.mock.calls).toEqual([['/lists']]);
++  expect(mockNavigate).not.toHaveBeenCalled();
++
++  // the other way round, back on Home: the camera tab only
++  await backHome();
++  await act(async () => {
++    await fireEvent.press(button('Take photo'));
++    await fireEvent.press(yourLists());
++  });
++  expect(mockNavigate.mock.calls).toEqual([['/camera']]);
++  expect(mockPush.mock.calls).toEqual([['/lists']]);
++});
++
+ test('capture: Take photo, From gallery, Import PDF, and what it reads', async () => {
+   await render(<Home />);
+   // Take photo: primary and large, on a line of its own
+diff --git a/__tests__/layout.test.tsx b/__tests__/layout.test.tsx
+index 6041825e..208843eb 100644
+--- a/__tests__/layout.test.tsx
++++ b/__tests__/layout.test.tsx
+@@ -123,12 +123,12 @@ test("Header: Back goes back by the screen's own navigation, never the global ro
+   expect(mockReplace).not.toHaveBeenCalled();
+ });
+ 
+-test('Header: with nothing to go back to, Back goes Home (ruling T24-1)', async () => {
+-  // A screen with nothing under it: the Stack is anchored on Home (app/_layout), so this is the fallback.
++test('Header: with nothing to go back to, Back goes to the camera (rulings T24-1, T6-2)', async () => {
++  // A screen with nothing under it: the Stack is anchored on the tabs (app/_layout), so the camera is the fallback.
+   mockNavigation.canGoBack.mockReturnValue(false);
+   await render(<Header title="Speed test" />);
+   await fireEvent.press(button('Back'));
+-  expect(mockReplace.mock.calls).toEqual([['/']]);
++  expect(mockReplace.mock.calls).toEqual([['/camera']]);
+   expect(mockNavigation.goBack).not.toHaveBeenCalled();
+ });
+ 
+@@ -141,7 +141,7 @@ test('Header: Back goes back once, however fast it is tapped twice', async () =>
+   });
+   expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+ 
+-  // with nothing under it: Home, once
++  // with nothing under it: the camera, once
+   mockNavigation.goBack.mockReset();
+   mockNavigation.canGoBack.mockReturnValue(false);
+   await render(<Header title="Speed test" />);
+@@ -149,7 +149,7 @@ test('Header: Back goes back once, however fast it is tapped twice', async () =>
+     await fireEvent.press(button('Back'));
+     await fireEvent.press(button('Back'));
+   });
+-  expect(mockReplace.mock.calls).toEqual([['/']]);
++  expect(mockReplace.mock.calls).toEqual([['/camera']]);
+   expect(mockNavigation.goBack).not.toHaveBeenCalled();
+ });
+ 
+diff --git a/__tests__/navigation.test.tsx b/__tests__/navigation.test.tsx
+index 2616942b..04ef04be 100644
+--- a/__tests__/navigation.test.tsx
++++ b/__tests__/navigation.test.tsx
+@@ -9,9 +9,9 @@ import { currentSnack } from '../lib/snackbar';
+ import { toast } from '../lib/toast';
+ import { appRoutes } from '../test-utils/routes';
+ 
+-// lib/navigation: going back, as the header's Back does it (and a Retake that goes back, and a
+-// saved scan deleted from ⋮): to the screen under this one, or Home with nothing under it (ruling T24-1). It's bound to
+-// the screen's own navigation, never expo-router's global router (ruling T26-4). A new font size, display size or
++// lib/navigation: going back, as the header's Back does it (and a Retake that goes back, and a saved scan deleted from
++// ⋮): to the screen under this one, or the camera with nothing under it (rulings T24-1, T6-2). It's bound to the
++// screen's own navigation, never expo-router's global router (ruling T26-4). A new font size, display size or
+ // language restarts Android's activity in the same JS context: the new root mounts before the old one has gone, and the
+ // old one's late unmount unbinds that router, whose every method then throws, and empties the navigation ref it reads.
+ // And opening a screen from a press, as the app's screens do it: once, until the screen is on top again.
+@@ -107,13 +107,14 @@ test('a press opens its screen once, until this screen is on top again (final re
+   expect(onTop()).toEqual(['Your lists: on top']);
+ });
+ 
+-test('with nothing under the screen, Back goes Home (ruling T24-1)', async () => {
++test('with nothing under the screen, Back goes to the camera, where the app starts (rulings T24-1, T6-2)', async () => {
+   await openHome();
+   await press("Licenses in Home's place");
+   expect(onTop()).toEqual(['Open-source licenses: on top']);
+-  expect(screen.queryByText('Home: under')).toBeNull(); // nothing under it
++  expect(screen.queryByText(/: under$/)).toBeNull(); // nothing under it
+   await press('Back');
+-  expect(onTop()).toEqual(['Home: on top']);
++  expect(screen).toHavePathname('/camera');
++  expect(onTop()).toEqual(['Camera: on top']);
+ });
+ 
+ test('after Android restarts the screen, Back still goes back, to the screen under it (ruling T26-4)', async () => {
+diff --git a/__tests__/result.test.tsx b/__tests__/result.test.tsx
+index 633ca122..ec531dde 100644
+--- a/__tests__/result.test.tsx
++++ b/__tests__/result.test.tsx
+@@ -706,11 +706,11 @@ test('not found: a PDF chooses a PDF; Retake opens the camera, the camera app ag
+   await press(button('Retake'));
+   expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+ 
+-  // with nothing under it, Home (ruling T24-1: the Stack's anchor, so a fallback)
++  // with nothing under it, the camera (ruling T6-2: the tabs are the Stack's anchor, so a fallback)
+   mockNavigation.canGoBack.mockReturnValue(false);
+   await show('blank_page', { source: 'gallery', from: 'recent' });
+   await press(button('Retake'));
+-  expect(mockRouter.replace).toHaveBeenLastCalledWith('/');
++  expect(mockRouter.replace).toHaveBeenLastCalledWith('/camera');
+   expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+ });
+ 
+@@ -845,7 +845,7 @@ test('deleting from ⋮: a delete that fails says so, once the screen has gone b
+ });
+ 
+ test('deleting from ⋮ with nothing under the screen goes Home, in the same order (ruling T24-1)', async () => {
+-  // The Stack is anchored on Home (app/_layout), so this is the fallback, as for the header's Back
++  // The Stack is anchored on the tabs (app/_layout), so the camera is the fallback, as for the header's Back
+   mockNavigation.canGoBack.mockReturnValue(false);
+   const remove = jest.spyOn(savedStore, 'deleteSaved');
+   const id = await showSaved('inv_0007');
+@@ -853,7 +853,7 @@ test('deleting from ⋮ with nothing under the screen goes Home, in the same ord
+   await press(button('More options'));
+   await press(screen.getByRole('menuitem', { name: 'Delete saved scan' }));
+   await act(async () => alertButtons()[1].onPress!());
+-  expect(mockRouter.replace.mock.calls).toEqual([['/']]);
++  expect(mockRouter.replace.mock.calls).toEqual([['/camera']]);
+   expect(mockNavigation.goBack).not.toHaveBeenCalled();
+   // Review Focus 4's order: it leaves, then deletes, in the same press
+   expect(mockRouter.replace.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
+@@ -1214,10 +1214,10 @@ test('Retake runs once, however fast it is tapped twice (ruling T25b-2)', async
+   await doubleTap();
+   expect(mockNavigation.goBack).toHaveBeenCalledTimes(2);
+ 
+-  mockNavigation.canGoBack.mockReturnValue(false); // with nothing under it: Home, once
++  mockNavigation.canGoBack.mockReturnValue(false); // with nothing under it: the camera, once
+   await show('inv_0007', { source: 'gallery', from: 'recent' });
+   await doubleTap();
+-  expect(mockRouter.replace.mock.calls).toEqual([['/']]);
++  expect(mockRouter.replace.mock.calls).toEqual([['/camera']]);
+ 
+   // straight from the camera: down to the camera tab again, this screen gone, once
+   mockRouter.replace.mockClear();
+diff --git a/__tests__/tabs.test.tsx b/__tests__/tabs.test.tsx
+index 678e8da4..6602b160 100644
+--- a/__tests__/tabs.test.tsx
++++ b/__tests__/tabs.test.tsx
+@@ -2,7 +2,7 @@ import { router } from 'expo-router';
+ import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+ 
+ import { Button } from '../components/Buttons';
+-import { useNavigateOnce } from '../lib/navigation';
++import { useNavigateOnce, useOpenOnce } from '../lib/navigation';
+ import { appRoutes, standIn } from '../test-utils/routes';
+ 
+ // Camera first (spec §6.1, calls 1 and 8): the app's routes. The tabs, Home, Sessions, the camera, Export and Profile,
+@@ -199,6 +199,41 @@ test('a press that opens a tab from a screen switches to it once, with one tabs
+   expect(router.canGoBack()).toBe(false);
+ });
+ 
++test("a screen's presses share one guard: a push and a tab in one act open one of them, with one tabs (ruling T6-1)", async () => {
++  // Home's Your lists (a push over the tabs) then Take photo (the camera tab), before anything re-renders: with a guard
++  // each, the tab's href resolved once Your lists was on top, and pushed a second tabs, a second camera in it
++  function Home() {
++    const open = useOpenOnce();
++    const Where = standIn('Home');
++    return (
++      <>
++        <Where />
++        <Button label="Your lists" onPress={() => open.push('/lists')} />
++        <Button label="Take photo" onPress={() => open.navigate('/camera')} />
++      </>
++    );
++  }
++  const both = (first: string, second: string) =>
++    act(async () => {
++      await fireEvent.press(screen.getByRole('button', { name: first }));
++      await fireEvent.press(screen.getByRole('button', { name: second }));
++    });
++
++  const view = await renderRouter(appRoutes({ '(tabs)/index': Home }), { initialUrl: '/camera' });
++  await press(tab('Home'));
++  await both('Your lists', 'Take photo');
++  expect(rootStack(view)).toEqual(['(tabs)', 'lists']); // the first press only
++  expect(onTop()).toEqual(['Your lists: on top']);
++  await act(() => router.back());
++  expect(onTop()).toEqual(['Home: on top']);
++
++  // the other way round: the camera tab, and no Your lists over it
++  await both('Take photo', 'Your lists');
++  expect(rootStack(view)).toEqual(['(tabs)']);
++  expect(screen).toHavePathname('/camera');
++  expect(onTop()).toEqual(['Camera: on top']);
++});
++
+ test('a press that opens a tab from another tab switches to it, and Back goes to the camera', async () => {
+   function Home() {
+     const navigateOnce = useNavigateOnce();
+diff --git a/app/(tabs)/index.tsx b/app/(tabs)/index.tsx
+index bbe4b964..664c7108 100644
+--- a/app/(tabs)/index.tsx
++++ b/app/(tabs)/index.tsx
+@@ -15,7 +15,7 @@ import { Sheet } from '../../components/Sheet';
+ import { totalOf, waitingOf } from '../../lib/exportFile';
+ import { peso } from '../../lib/format';
+ import { lists, subscribeLists } from '../../lib/lists';
+-import { useNavigateOnce, usePushOnce } from '../../lib/navigation';
++import { useOpenOnce } from '../../lib/navigation';
+ import { type SavedSummary, savedList, subscribeSaved } from '../../lib/saved';
+ import { SAMPLES } from '../../lib/samples';
+ import { useScanFlow } from '../../lib/scanFlow';
+@@ -43,8 +43,8 @@ const LOCK = 16; // dp: the footer's lock, beside its overline
+ const handwriting = (font: string) => `${font === 'PatrickHand' ? 'Patrick Hand' : font} handwriting`;
+ 
+ export default function Home() {
+-  const push = usePushOnce(); // a screen over the tabs
+-  const navigateOnce = useNavigateOnce(); // another tab: the camera, Profile
++  // one guard for every press (ruling T6-1): push, a screen over the tabs; navigate, another tab (the camera, Profile)
++  const { push, navigate: navigateOnce } = useOpenOnce();
+   const flow = useScanFlow();
+   const recent = useSyncExternalStore(subscribeRecent, recentScans); // a scan read on any screen shows at once
+   const saved = useSyncExternalStore(subscribeSaved, savedList);
+diff --git a/app/(tabs)/profile.tsx b/app/(tabs)/profile.tsx
+index 6c74209d..4b66fe44 100644
+--- a/app/(tabs)/profile.tsx
++++ b/app/(tabs)/profile.tsx
+@@ -19,12 +19,13 @@ import { colors, space, touch, type } from '../../lib/theme';
+ import { versionLine } from '../../lib/versions';
+ 
+ // Design B §9.10: Settings, in groups, as the Profile tab (camera first, spec §6.8, call 17), so with no Back. Your
+-// business: VAT-registered or not, which suggests each sale's tax type. Export defaults: what MyBizMate's imports need that isn't on the paper (lib/settings.ts), in figures. A field is
+-// saved as it's typed: going back while a field still has the cursor doesn't blur it (React Native calls no onBlur on
+-// unmount), so saving when it's left would lose the change. An ATC that isn't 2 letters and 3 digits gets a warning in
+-// place of its helper, and is saved all the same. The fields scroll into view above the keyboard through the Screen.
+-// Your lists: Customers and items, with their counts, opens Your lists. About: Privacy, in plain words in a sheet; the
+-// open-source licenses; the version. In team builds, Team tools (§9.11).
++// business: VAT-registered or not, which suggests each sale's tax type. Export defaults: what MyBizMate's imports need
++// that isn't on the paper (lib/settings.ts), in figures. A field is saved as it's typed: going back while a field still
++// has the cursor doesn't blur it (React Native calls no onBlur on unmount), so saving when it's left would lose the
++// change. An ATC that isn't 2 letters and 3 digits gets a warning in place of its helper, and is saved all the same.
++// The fields scroll into view above the keyboard through the Screen. Your lists: Customers and items, with their
++// counts, opens Your lists. About: Privacy, in plain words in a sheet; the open-source licenses; the version. In team
++// builds, Team tools (§9.11).
+ 
+ const NOTE =
+   "These fill in what MyBizMate's import needs that isn't on the paper. You can change them on each invoice when you save it. Changes save as you type.";
+diff --git a/app/licenses.tsx b/app/licenses.tsx
+index 01e860c0..61c2ca9e 100644
+--- a/app/licenses.tsx
++++ b/app/licenses.tsx
+@@ -6,7 +6,7 @@ import { Screen, useEndPadding } from '../components/Screen';
+ import { LICENSES } from '../lib/licenses';
+ import { usePushOnce } from '../lib/navigation';
+ 
+-// Design B §9.10: Settings › About › Open-source licenses. What the app ships (lib/licenses), a row each: the name,
++// Design B §9.10: Profile › About › Open-source licenses. What the app ships (lib/licenses), a row each: the name,
+ // then its license and version in figures, and a chevron. A row opens its text (app/license), by its place here.
+ 
+ export default function LicensesScreen() {
+diff --git a/app/saved.tsx b/app/saved.tsx
+index 8426bd2e..8a5c9123 100644
+--- a/app/saved.tsx
++++ b/app/saved.tsx
+@@ -17,7 +17,7 @@ import { confirmDeleteSaved } from '../lib/confirmDelete';
+ import { waitingOf } from '../lib/exportFile';
+ import { amount, monthYear } from '../lib/format';
+ import { lists, newParties, subscribeLists } from '../lib/lists';
+-import { useNavigateOnce, usePushOnce } from '../lib/navigation';
++import { useOpenOnce } from '../lib/navigation';
+ import { openSaved, type SavedSummary, savedList, subscribeSaved } from '../lib/saved';
+ import type { Kind } from '../lib/scans';
+ import { savedSub } from '../lib/sessions';
+@@ -54,8 +54,8 @@ const EXPORTED: BadgeSpec = { label: 'Exported', tone: 'neutral' };
+ type Month = { month: string; key: string; data: SavedSummary[] };
+ 
+ export default function SavedScreen() {
+-  const push = usePushOnce();
+-  const navigateOnce = useNavigateOnce(); // the camera, a tab under this screen
++  // one guard for every press (ruling T6-1): push, a scan's screen; navigate, the camera, a tab under this screen
++  const { push, navigate: navigateOnce } = useOpenOnce();
+   const { kind } = useLocalSearchParams<{ kind?: Kind }>();
+   const all = useSyncExternalStore(subscribeSaved, savedList);
+   const theLists = useSyncExternalStore(subscribeLists, lists);
+diff --git a/app/speed.tsx b/app/speed.tsx
+index b9e5c399..569330a5 100644
+--- a/app/speed.tsx
++++ b/app/speed.tsx
+@@ -10,7 +10,7 @@ import { formatMs } from '../lib/format';
+ import { runSpeedTest, type SpeedResult } from '../lib/speedTest';
+ import { colors, space, type } from '../lib/theme';
+ 
+-// The team's speed test (the test app's activity_speed.xml and SpeedTestActivity.java), from Settings › Team tools or
++// The team's speed test (the test app's activity_speed.xml and SpeedTestActivity.java), from Profile › Team tools or
+ // mybizmatescan://speed, in team builds only. Design B §9.11: the design's tokens and components; what it runs, times
+ // and shows is as it was. The bar follows the run's real progress, so it doesn't loop like the loading bar.
+ 
+diff --git a/app/training.tsx b/app/training.tsx
+index d54c347a..2aae1295 100644
+--- a/app/training.tsx
++++ b/app/training.tsx
+@@ -14,7 +14,7 @@ import { PER_EXPORT, pendingTraining, writeTrainingExport } from '../lib/trainin
+ const ZIP_MIME = 'application/zip';
+ const WORDS: Wording = { one: 'scan', many: 'scans', next: 'next export' };
+ 
+-// Training data, from Settings › Team tools: the scans saved in annotation mode that haven't gone out yet, shared the
++// Training data, from Profile › Team tools: the scans saved in annotation mode that haven't gone out yet, shared the
+ // oldest 50 at a time as a zip of their training boxes' crops and labels, and marked once the person says the file went
+ // where they wanted. Design B §9.11: the design's tokens and components, with milestone 4's copy and behaviour.
+ export default function TrainingScreen() {
+diff --git a/lib/licenses.ts b/lib/licenses.ts
+index 7e0a4894..5686c216 100644
+--- a/lib/licenses.ts
++++ b/lib/licenses.ts
+@@ -1,6 +1,6 @@
+ import { MODEL } from './versions';
+ 
+-// Design B §9.10: what Settings › About › Open-source licenses lists (app/licenses.tsx), each with its license, its
++// Design B §9.10: what Profile › About › Open-source licenses lists (app/licenses.tsx), each with its license, its
+ // version and the text the app ships for it (app/license.tsx). The texts are .txt assets that
+ // scripts/collect-licenses.mjs gathers into assets/licenses, a file each (`npm run licenses`). A version is its
+ // source's: the installed package's (node_modules/<package>/package.json, which is what ships), the scanner module's
+diff --git a/lib/navigation.ts b/lib/navigation.ts
+index 69fd0a71..60370ec6 100644
+--- a/lib/navigation.ts
++++ b/lib/navigation.ts
+@@ -1,16 +1,17 @@
+ import { type Href, useFocusEffect, useNavigation, useRouter } from 'expo-router';
+ import { useCallback, useRef } from 'react';
+ 
+-// Going back, the one way every screen does it: the header's Back, a Retake that goes back (a
+-// sample, or a scan opened from Home or Saved), and a saved scan deleted from the Scan screen's ⋮ (Review Focus 4). And
+-// opening a screen from a press, once.
++// Going back, the one way every screen does it: the header's Back, a Retake that goes back (a sample, or a scan opened
++// from Home or Saved), and a saved scan deleted from the Scan screen's ⋮ (Review Focus 4). And opening a screen or a
++// tab from a press, once.
+ 
+ /**
+- * Back to the screen under this one, or Home when there's none (ruling T24-1: the Stack is anchored on Home, so this
+- * is the fallback). The screen's own navigation goes back, and useRouter() goes Home: both reach the live root through
+- * React. Never expo-router's global router, nor its shared navigation ref (ruling T26-4): a new font size, display size
+- * or language restarts Android's activity in the same JS context, and the old root's late unmount unbinds that router,
+- * whose every method then throws, and clears the ref that router.canGoBack() and useRouter().canGoBack() read.
++ * Back to the screen under this one, or the camera when there's none (rulings T24-1 and T6-2: the root Stack is
++ * anchored on the tabs, and the tabs on the camera, where the app starts, so this is the fallback). The screen's own
++ * navigation goes back, and useRouter() goes to the camera: both reach the live root through React. Never
++ * expo-router's global router, nor its shared navigation ref (ruling T26-4): a new font size, display size or language
++ * restarts Android's activity in the same JS context, and the old root's late unmount unbinds that router, whose every
++ * method then throws, and clears the ref that router.canGoBack() and useRouter().canGoBack() read.
+  * Going back queues one GO_BACK per call: a caller that can be tapped twice guards it to run once.
+  */
+ export function useGoBackOrHome(): () => void {
+@@ -18,54 +19,53 @@ export function useGoBackOrHome(): () => void {
+   const router = useRouter();
+   return () => {
+     if (navigation.canGoBack()) navigation.goBack();
+-    else router.replace('/');
++    else router.replace('/camera');
+   };
+ }
+ 
+ /**
+- * A screen's push from a press, once: a second press before the new screen is up would push it again (two cameras, one
+- * over the other: the final review's Minor 4). It pushes again once the screen is focused again, back from the one it
+- * opened. A screen takes one, for all its presses, so two different presses can't stack two screens either. On the
+- * live root's router, useRouter(), as useGoBackOrHome goes Home (ruling T26-4).
++ * A screen's presses that open another screen or a tab, once, behind one guard: a second press before the new screen
++ * is up would open it again (two cameras, one over the other: the final review's Minor 4). The screen opens again once
++ * it's focused again, back from the one it opened. A screen takes one, for all its presses, pushes and tabs alike, so
++ * two different presses can't open two screens either (ruling T6-1: with a guard each, Home's Your lists then Take
++ * photo, in one go, pushed Your lists, and the camera's href, resolved over it, a second tabs).
++ * - push: a screen over this one.
++ * - navigate: a tab, or a screen in one. From inside the tabs, it navigates: the tabs switch. From a screen above them
++ *   (the Scan screen), it's expo-router's dismissTo: the screens over the tabs go, and the tabs switch, since navigate
++ *   would push a second tabs over the first, and Back would show the screen just left (while dismissTo does nothing
++ *   from inside the tabs).
++ * On the live root's router, useRouter(), as useGoBackOrHome goes to the camera (ruling T26-4).
+  */
+-export function usePushOnce(): (href: Href) => void {
+-  const router = useRouter();
+-  const pushed = useRef(false); // set at once, so a second press is refused before the screen has gone
+-  useFocusEffect(
+-    useCallback(() => {
+-      pushed.current = false;
+-    }, []),
+-  );
+-  return (href) => {
+-    if (pushed.current) return;
+-    pushed.current = true;
+-    router.push(href);
+-  };
+-}
+-
+-/**
+- * As usePushOnce, for a tab, or a screen in one: opened from a press, once. From inside the tabs, it navigates: the
+- * tabs switch. From a screen above them (the Scan screen), it's expo-router's dismissTo: the screens over the tabs go,
+- * and the tabs switch, since navigate would push a second tabs over the first, and Back would show the screen just left
+- * (while dismissTo does nothing from inside the tabs). On the live root's router (ruling T26-4).
+- */
+-export function useNavigateOnce(): (href: Href) => void {
++export function useOpenOnce(): { push: (href: Href) => void; navigate: (href: Href) => void } {
+   const router = useRouter();
+   const navigation = useNavigation();
+-  const opened = useRef(false); // set at once, so a second press is refused before the tab is up
++  const opened = useRef(false); // set at once, so a second press is refused before the screen or tab is up
+   useFocusEffect(
+     useCallback(() => {
+       opened.current = false;
+     }, []),
+   );
+-  return (href) => {
++  const once = (open: () => void) => {
+     if (opened.current) return;
+     opened.current = true;
+-    if (inTabs(navigation)) router.navigate(href);
+-    else router.dismissTo(href);
++    open();
++  };
++  return {
++    push: (href) => once(() => router.push(href)),
++    navigate: (href) => once(() => (inTabs(navigation) ? router.navigate(href) : router.dismissTo(href))),
+   };
+ }
+ 
++/** useOpenOnce's push, for a screen that only pushes. */
++export function usePushOnce(): (href: Href) => void {
++  return useOpenOnce().push;
++}
++
++/** useOpenOnce's navigate, for a screen that only opens tabs. */
++export function useNavigateOnce(): (href: Href) => void {
++  return useOpenOnce().navigate;
++}
++
+ /** Whether a screen is inside the tabs: a tab, or a screen in a tab's own Stack. */
+ type Nav = { getState(): { type?: string } | undefined; getParent(): Nav | undefined };
+ function inTabs(navigation: Nav): boolean {
+diff --git a/lib/settings.ts b/lib/settings.ts
+index 1e9c0e18..cc7a0224 100644
+--- a/lib/settings.ts
++++ b/lib/settings.ts
+@@ -4,7 +4,7 @@ import { readJson, writeJson } from './jsonFile';
+ // The export defaults, kept on the phone: whether the business is VAT-registered, the accounts the imports need (as
+ // a code or a name from the business's chart of accounts, which isn't on the phone: an invoice's revenue or expense
+ // account, and the offset account a 2307's withheld tax goes to), and the last withholding tax ATC. And the team's
+-// own: whether annotation mode is on (Settings › Team tools, team builds only), and the client and writer codes the
++// own: whether annotation mode is on (Profile › Team tools, team builds only), and the client and writer codes the
+ // last annotated save used, which the next one starts from. And whether Home's "Get set up" was finished once: it
+ // never shows again after that (design B §9.2).
+ 
+diff --git a/lib/share.ts b/lib/share.ts
+index 8ccd67eb..3b567492 100644
+--- a/lib/share.ts
++++ b/lib/share.ts
+@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
+ import { toast } from './toast';
+ 
+ // Sharing an export file: the import files (the export sheet, which asks its question as a step of its own) and the
+-// team's training data (Settings › Team tools, which asks it in an Alert).
++// team's training data (Profile › Team tools, which asks it in an Alert).
+ 
+ /** How what's in a file is counted ("1 sale", "2 sales"), and what leaves it out once marked ("the next export"). */
+ export type Wording = { one: string; many: string; next: string };
+diff --git a/lib/training/export.ts b/lib/training/export.ts
+index cd9e0193..c53e0e50 100644
+--- a/lib/training/export.ts
++++ b/lib/training/export.ts
+@@ -11,7 +11,7 @@ import { APP_VERSION } from '../versions';
+ import { zipStored } from '../zip';
+ import { isTrainingScan, type TrainingBox, type TrainingScan, trainingRecord } from './record';
+ 
+-// The training-data export (Settings › Team tools, team builds): the scans saved in annotation mode that haven't gone
++// The training-data export (Profile › Team tools, team builds): the scans saved in annotation mode that haven't gone
+ // out in one yet, the oldest 50 at a time, as a zip of manifest.json (each scan's training record) and each training
+ // box's crop at the path its record gives. Nothing else goes in: no personal box, no page or photo, no other file.
+ 
+diff --git a/lib/versions.ts b/lib/versions.ts
+index d8b6b212..b8819653 100644
+--- a/lib/versions.ts
++++ b/lib/versions.ts
+@@ -1,7 +1,7 @@
+ import Constants from 'expo-constants';
+ 
+ // The app's and the model's versions. Each scan keeps both from when it was made (StoredScan.made), so an update
+-// between scanning and exporting doesn't relabel its training data. Settings › About shows the app's, with the build
++// between scanning and exporting doesn't relabel its training data. Profile › About shows the app's, with the build
+ // number when the build has one.
+ 
+ type Model = { name: string; sha256: string; bytes: number };

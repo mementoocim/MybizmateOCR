@@ -115,7 +115,8 @@ Never `git add -A` without that list.
 - Task 3 is done and reviewed: the capture queue (`lib/captureQueue.ts`), the pickers and the read-failure words.
 - Task 4 is done and reviewed: sessions from the scans (`lib/sessions.ts`) and search by scan.
 - Task 5 is done and reviewed: the bar (`components/TabBar.tsx`), the shutter store (`lib/shutter.ts`), the four Lucide icons and `useTabBarSpace`.
-- **Task 6 is next**, on the branch `camera-first`, after the user reviews Task 5. Its brief isn't extracted yet: take it from the plan's Task 6 section.
+- Task 6 is done and reviewed: the tabs (`app/(tabs)/`), a launch opens the camera (`app/+native-intent.tsx`), Back goes to the camera, Profile holds Settings, one open-guard per screen (`useOpenOnce`).
+- **Task 7 is next**, on the branch `camera-first`, after the user reviews Task 6. Its brief isn't extracted yet: take it from the plan's Task 7 section.
 
 **The user's answers for this plan:**
 - execution is subagent-driven, with a fresh implementer and a reviewer per task;
