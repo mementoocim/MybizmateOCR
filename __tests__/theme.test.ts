@@ -1,6 +1,8 @@
 import { Platform } from 'react-native';
 
-import { colors, durations, elevation, EMBEDDED_FONTS, face, radius, ripple, space, touch, type } from '../lib/theme';
+import {
+  bar, colors, durations, elevation, EMBEDDED_FONTS, face, radius, ripple, space, touch, type,
+} from '../lib/theme';
 import { contrast } from '../test-utils/contrast';
 
 // Design B §5: the color roles and their measured contrast (§5.1), the type scale (§5.2), space, shape and touch
@@ -124,7 +126,7 @@ test('face picks the families', () => {
 
 test('space, shape, touch, ripple and motion have their design values', () => {
   expect(space).toEqual({ xs: 4, s: 8, m: 12, l: 16, xl: 24, xxl: 32 });
-  expect(radius).toEqual({ badge: 4, field: 6, button: 10, panel: 10, sheet: 16, pill: 999 });
+  expect(radius).toEqual({ badge: 4, field: 6, button: 10, panel: 10, sheet: 16, bar: 20, pill: 999 });
   expect(touch).toEqual({
     target: 48, buttonLarge: 56, chip: 40, icon: 24, iconSmall: 20, shutter: 72, thumbW: 36, thumbH: 48,
   });
@@ -140,4 +142,11 @@ test('space, shape, touch, ripple and motion have their design values', () => {
   expect(durations).toEqual({
     sheetIn: 250, sheetOut: 200, scrim: 200, menu: 150, snackbar: 200, strip: 150, card: 150,
   });
+});
+
+test("the bar's measures", () => {
+  // Spec §6.2: a white bar with 20 dp corners; the middle button a 60 dp coral circle, raised 26 dp, in a 4 dp paper
+  // ring; the open tab's 5 dp coral dot.
+  expect(radius.bar).toBe(20);
+  expect(bar).toEqual({ circle: 60, raise: 26, ring: 4, dot: 5 });
 });

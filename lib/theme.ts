@@ -43,9 +43,9 @@ export const space = { xs: 4, s: 8, m: 12, l: 16, xl: 24, xxl: 32 } as const;
 
 /**
  * Corners: field for fields and segmented controls; panel for the cards that remain, the reading card and menus; sheet
- * for a sheet's top corners; pill (full) for chips.
+ * for a sheet's top corners; bar for the tabs' floating bar; pill (full) for chips.
  */
-export const radius = { badge: 4, field: 6, button: 10, panel: 10, sheet: 16, pill: 999 } as const;
+export const radius = { badge: 4, field: 6, button: 10, panel: 10, sheet: 16, bar: 20, pill: 999 } as const;
 
 /**
  * In dp: every target is at least 48 (chips are 40, with hitSlop to 48), and a large button ("Take photo") at least 56
@@ -56,7 +56,13 @@ export const touch = {
   target: 48, buttonLarge: 56, chip: 40, icon: 24, iconSmall: 20, shutter: 72, thumbW: 36, thumbH: 48,
 } as const;
 
-/** Flat by default: only sheets, menus and the snackbar have a shadow. */
+/**
+ * The tabs' bar, in dp (camera first, spec §6.2): the middle button's coral circle, how far it rises above the bar's
+ * top, the paper ring around it, and the open tab's dot.
+ */
+export const bar = { circle: 60, raise: 26, ring: 4, dot: 5 } as const;
+
+/** Flat by default: only sheets, menus, the snackbar and the tabs' bar have a shadow. */
 export const elevation = { overlay: 8 } as const;
 
 /** How long each of the motions takes, in ms. Nothing else animates, and reduced motion fades only (lib/motion). */

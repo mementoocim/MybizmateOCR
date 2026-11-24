@@ -3,8 +3,9 @@ import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 
 // Lucide's icons (lucide.dev), as on mybizmate.io: tag 1.77.0, under the ISC license (the glyphs Lucide took from
 // Feather are also under Feather's MIT license). Both texts are in assets/licenses/lucide-ISC.txt.
-// Each glyph's elements are copied exactly from its SVG at that tag. An export is named after its glyph, except that
-// Close is x, More is ellipsis-vertical, and ImageIcon, ListIcon and SettingsIcon are image, list and settings.
+// Each glyph's elements are copied exactly from its SVG at that tag, the tabs' bar's too (camera first, spec §6.2):
+// House, Files, Send and CircleUser are house, files, send and circle-user. An export is named after its glyph, except
+// that Close is x, More is ellipsis-vertical, and ImageIcon, ListIcon and SettingsIcon are image, list and settings.
 // TriangleAlert and CircleAlert keep the old names: at 1.77.0 Lucide calls those glyphs triangle-exclamation-point and
 // circle-exclamation-point, and keeps triangle-alert and circle-alert as aliases.
 
@@ -50,6 +51,11 @@ export const CircleAlert = lucide(
   <Line x1="12" x2="12.01" y1="16" y2="16" />,
 );
 export const CircleCheck = lucide(<Circle cx="12" cy="12" r="10" />, <Path d="m16 9-5.5 5.5L8 12" />);
+export const CircleUser = lucide(
+  <Circle cx="12" cy="12" r="10" />,
+  <Circle cx="12" cy="10" r="3" />,
+  <Path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662" />,
+);
 export const Close = lucide(<Path d="M18 6 6 18" />, <Path d="m6 6 12 12" />);
 export const Download = lucide(
   <Path d="M12 15V3" />,
@@ -63,6 +69,11 @@ export const FileText = lucide(
   <Path d="M16 13H8" />,
   <Path d="M16 17H8" />,
 );
+export const Files = lucide(
+  <Path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8" />,
+  <Path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z" />,
+  <Path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1" />,
+);
 export const Flashlight = lucide(
   <Path d="M12 13v1" />,
   <Path d="M17 2a1 1 0 0 1 1 1v4a3 3 0 0 1-.6 1.8l-.6.8A4 4 0 0 0 16 12v8a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-8a4 4 0 0 0-.8-2.4l-.6-.8A3 3 0 0 1 6 7V3a1 1 0 0 1 1-1z" />,
@@ -74,6 +85,10 @@ export const FlashlightOff = lucide(
   <Path d="M16 16v4a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-8a4 4 0 0 0-.8-2.4l-.6-.8A3 3 0 0 1 6 7V6" />,
   <Path d="m2 2 20 20" />,
   <Path d="M7.649 2H17a1 1 0 0 1 1 1v4a3 3 0 0 1-.6 1.8l-.6.8a4 4 0 0 0-.55 1.007" />,
+);
+export const House = lucide(
+  <Path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />,
+  <Path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
 );
 export const ImageIcon = lucide(
   <Rect width="18" height="18" x="3" y="3" rx="2" ry="2" />,
@@ -98,6 +113,10 @@ export const More = lucide(
   <Circle cx="12" cy="19" r="1" />,
 );
 export const Search = lucide(<Path d="m21 21-4.34-4.34" />, <Circle cx="11" cy="11" r="8" />);
+export const Send = lucide(
+  <Path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />,
+  <Path d="m21.854 2.147-10.94 10.939" />,
+);
 export const SettingsIcon = lucide(
   <Path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />,
   <Circle cx="12" cy="12" r="3" />,

@@ -1,3 +1,4 @@
+import { BottomTabBarHeightContext } from 'expo-router/js-tabs';
 import {
   createContext,
   type ReactNode,
@@ -25,7 +26,8 @@ import { colors, space } from '../lib/theme';
 // Design B §5.6 and §8: the frame every screen is built from. On paper: the header (it takes the status bar's inset),
 // what's pinned under it outside the scroll (the Scan screen's status strip), the scroll, then the bottom bar (it takes
 // the navigation bar's inset). The app is edge-to-edge and Android no longer resizes the window for the keyboard, so
-// the end of the scroll clears the navigation bar when there's no bottom bar, and the open keyboard. A field that
+// the end of the scroll clears the navigation bar when there's no bottom bar (in a tab, the tabs' floating bar, when
+// it's taller), and the open keyboard. A field that
 // takes focus asks the nearest ScrollIntoViewScope to scroll it into view: the Screen's own, or a sheet's. A sheet's
 // scope also gives the fields in it the keyboard of its own window (useKeyboardHeight).
 
@@ -154,13 +156,25 @@ export function useScrollIntoView(): (target: ViewInstance | TextInputInstance |
 }
 
 /**
- * The space under a scroll's last row: space.xl, plus the navigation bar's inset when no bottom bar takes it, plus the
- * open keyboard, which covers the bar too. Screen uses it; a screen with its own list gives it to the list.
+ * In a tab's screen, the space the tabs' floating bar takes from the screen's foot (components/TabBar reports it, the
+ * raised button too); 0 outside the tabs, before the bar lays out, and while it hides for the keyboard (ruling P-F5).
+ */
+export function useTabBarSpace(): number {
+  const reported = useContext(BottomTabBarHeightContext); // undefined outside the tabs
+  const keyboard = useKeyboardHeight();
+  return keyboard > 0 ? 0 : (reported ?? 0);
+}
+
+/**
+ * The space under a scroll's last row: space.xl, plus what's under the scroll when no bottom bar takes it (the
+ * navigation bar's inset, or in a tab the floating bar, whichever is taller), plus the open keyboard, which covers
+ * them too. Screen uses it; a screen with its own list gives it to the list.
  */
 export function useEndPadding(hasBottomBar: boolean): number {
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardHeight();
-  return (hasBottomBar ? 0 : insets.bottom) + space.xl + keyboard;
+  const tabBar = useTabBarSpace(); // always called, for the rules of hooks (ruling P-F5)
+  return (hasBottomBar ? 0 : Math.max(insets.bottom, tabBar)) + space.xl + keyboard;
 }
 
 const styles = StyleSheet.create({

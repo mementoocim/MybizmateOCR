@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { BottomTabBarHeightContext } from 'expo-router/js-tabs';
 import { createRef, type ReactNode, useEffect } from 'react';
 import {
   DeviceEventEmitter,
@@ -17,7 +18,9 @@ import { Button, type ButtonProps } from '../components/Buttons';
 import { Header } from '../components/Header';
 import { IconButton } from '../components/IconButton';
 import { ListIcon, SettingsIcon } from '../components/icons';
-import { Screen, ScrollIntoViewScope, useEndPadding, useKeyboardHeight, useScrollIntoView } from '../components/Screen';
+import {
+  Screen, ScrollIntoViewScope, useEndPadding, useKeyboardHeight, useScrollIntoView, useTabBarSpace,
+} from '../components/Screen';
 import { colors, space, touch, type } from '../lib/theme';
 import { keyboard } from '../test-utils/keyboard';
 import { standIn } from '../test-utils/scrollStandIn';
@@ -333,6 +336,51 @@ test('useEndPadding: a screen with its own list pads it the same way', async () 
   await keyboard(300);
   expect(endPadding('own-list')).toMatchObject({ paddingBottom: space.xl + 300 });
   await keyboard(0);
+});
+
+test('in a tab, the end of a scroll clears the bar; with the keyboard up, the keyboard', async () => {
+  // The tabs give their screens the bar's height (components/TabBar reports it, the raised button too): 120 here,
+  // more than the navigation bar's inset. The bar hides while the keyboard is up (ruling P-F5), so then it's the
+  // keyboard over the inset, as outside the tabs.
+  function TabSpace() {
+    return <Text>{`tab bar ${useTabBarSpace()}`}</Text>;
+  }
+  const inTab = (children: ReactNode) => (
+    <BottomTabBarHeightContext.Provider value={120}>{children}</BottomTabBarHeightContext.Provider>
+  );
+  await render(
+    inTab(
+      <Screen header={<Header title="Sessions" />}>
+        <TabSpace />
+      </Screen>,
+    ),
+  );
+  expect(endPadding('screen-scroll')).toMatchObject({ paddingBottom: 120 + space.xl });
+  expect(screen.getByText('tab bar 120')).toBeOnTheScreen();
+  await keyboard(300);
+  expect(endPadding('screen-scroll')).toMatchObject({ paddingBottom: BOTTOM + space.xl + 300 });
+  expect(screen.getByText('tab bar 0')).toBeOnTheScreen();
+  await keyboard(0);
+  expect(endPadding('screen-scroll')).toMatchObject({ paddingBottom: 120 + space.xl });
+
+  // A screen's own bottom bar takes the space as before: the end keeps only its own.
+  await screen.rerender(
+    inTab(
+      <Screen header={<Header title="Scan" />} bottom={<BottomBar buttons={retakeAnd('Save sale')} />}>
+        <Text>Body</Text>
+      </Screen>,
+    ),
+  );
+  expect(endPadding('screen-scroll')).toMatchObject({ paddingBottom: space.xl });
+
+  // Outside the tabs there's no bar: the inset, as before.
+  await screen.rerender(
+    <Screen header={<Header title="Your lists" />}>
+      <TabSpace />
+    </Screen>,
+  );
+  expect(endPadding('screen-scroll')).toMatchObject({ paddingBottom: BOTTOM + space.xl });
+  expect(screen.getByText('tab bar 0')).toBeOnTheScreen();
 });
 
 test('useScrollIntoView: scrolls a target to 24 dp under the top of the scroll; outside any scope it does nothing', async () => {
