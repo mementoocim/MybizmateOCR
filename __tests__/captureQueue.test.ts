@@ -542,6 +542,74 @@ test('a photo kept back goes once a later write holds its scan; a resume meanwhi
   expect(queued()).toEqual([]);
 });
 
+test('a resume while a photo is still moving neither queues it twice nor takes its folder (ruling T3-2)', async () => {
+  const { queue, fs } = m;
+  // expo-file-system's move is async: the file can be in files/queue before its promise resolves, or not there yet
+  const move = fs.File.prototype.move;
+  const landings: (() => void)[] = [];
+  jest.spyOn(fs.File.prototype, 'move').mockImplementation(function (
+    this: InstanceType<typeof fs.File>,
+    ...args: Parameters<typeof move>
+  ) {
+    const [to] = args;
+    if (!to.uri.startsWith(QUEUE + '/')) return move.apply(this, args); // recent.json's own writes
+    if (to.uri.endsWith('-1-camera.jpg')) {
+      // there at once, its promise later
+      return move.apply(this, args).then(() => new Promise<void>((resolve) => landings.push(resolve)));
+    }
+    return new Promise<void>((resolve, reject) => landings.push(() => void move.apply(this, args).then(resolve, reject)));
+  });
+  void queue.queuePhoto(photo('capture_1.jpg'), { session: A, source: 'camera' }, T);
+  void queue.queuePhoto(photo('capture_2.jpg'), { session: B, source: 'camera' }, at(1));
+  await flush();
+  expect(queued()).toEqual([`${A}/${T.getTime()}-1-camera.jpg`]); // B's folder is made, its photo not there yet
+  expect(memoryFs.dirs.has(`${QUEUE}/${B}`)).toBe(true);
+
+  await queue.resumeQueue(); // a start run again meanwhile
+  expect(queue.captures()).toHaveLength(2);
+  expect(memoryFs.dirs.has(`${QUEUE}/${B}`)).toBe(true); // a folder a photo is moving into stays
+  landings.forEach((land) => land());
+  await flush();
+  expect(queued()).toEqual([`${A}/${T.getTime()}-1-camera.jpg`, `${B}/${at(1).getTime()}-2-camera.jpg`]);
+  await read(result());
+  await read(result());
+  expect(mockScanPhoto).toHaveBeenCalledTimes(2);
+  expect(m.scans.recentScans().map((s) => s.session)).toEqual([B, A]);
+  await flush();
+  expect(queued()).toEqual([]);
+});
+
+test("a scan that can't be kept leaves the queue, and its photo stays for the next start (ruling T3-3)", async () => {
+  const { queue, scans } = m;
+  jest.spyOn(scans, 'addScan').mockImplementationOnce(() => {
+    throw new Error('out of memory');
+  });
+  await queue.queuePhoto(photo('capture_1.jpg'), { session: A, source: 'camera' }, T);
+  await queue.queuePhoto(photo('capture_2.jpg'), { session: A, source: 'camera' }, at(1));
+  await read(result());
+  expect(queue.captures().map((c) => c.at)).toEqual([at(1)]); // it left; the next one is read
+  expect(mockScanPhoto).toHaveBeenCalledTimes(2);
+  await read(result());
+  await flush();
+  expect(mockScanPhoto).toHaveBeenCalledTimes(2); // never read again in a loop
+  expect(scans.recentScans().map((s) => s.at)).toEqual([at(1)]);
+  // the second scan's write landed: it doesn't hold the first one's, so that photo stays
+  const first = `${A}/${T.getTime()}-1-camera.jpg`;
+  expect(queued()).toEqual([first]);
+  await queue.resumeQueue(); // nor is it read again in this JS context
+  expect(mockScanPhoto).toHaveBeenCalledTimes(2);
+
+  jest.restoreAllMocks();
+  jest.resetModules(); // the next start reads it
+  const next = load();
+  await next.scans.loadRecent();
+  await next.queue.resumeQueue();
+  await read(result());
+  expect(next.scans.recentScans().map((s) => s.at)).toEqual([T, at(1)]);
+  await flush();
+  expect(queued()).toEqual([]);
+});
+
 test("a photo that can't be moved is read where it is", async () => {
   const { queue, scans, fs } = m;
   jest.spyOn(fs.File.prototype, 'move').mockRejectedValueOnce(new Error('No space left on device'));

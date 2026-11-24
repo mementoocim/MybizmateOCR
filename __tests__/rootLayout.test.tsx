@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { act, renderRouter, screen } from 'expo-router/testing-library';
+import { useEffect } from 'react';
 import { type StyleProp, StyleSheet, Text, type ViewStyle } from 'react-native';
 
 import { setStarted, useStarted } from '../lib/startup';
@@ -116,4 +117,21 @@ test('once the splash has gone, the app is started and the queue resumes', async
   await act(async () => mockEndSplash());
   expect(screen.getByText('Started')).toBeOnTheScreen();
   expect(mockResume).toHaveBeenCalledTimes(1);
+});
+
+test("a root mounted anew is not started for its screens' first effects, nor after (ruling T3-1)", async () => {
+  // React runs a screen's effects before its root's: the camera under the splash must never see true, even once
+  const seen: boolean[] = [];
+  function Camera() {
+    const started = useStarted();
+    useEffect(() => {
+      seen.push(started);
+    }, [started]);
+    return <Text>Camera</Text>;
+  }
+  setStarted(true); // as the root before this one left it
+  await renderRouter({ ...ROUTES, index: Camera }, { initialUrl: '/' });
+  expect(seen).toEqual([false]);
+  await act(async () => mockEndSplash());
+  expect(seen).toEqual([false, true]);
 });

@@ -40,8 +40,11 @@ export type Capture = {
   reading: boolean;
 };
 
-/** A capture, with its place in the reading order and whether its photo has landed where it's read from. */
-type Entry = { capture: Capture; order: readonly [at: number, seq: number]; ready: boolean };
+/**
+ * A capture, with its place in the reading order, whether its photo has landed where it's read from, and where in
+ * files/queue it's moving to: a move is async, so the file can be there before the move resolves (ruling T3-2).
+ */
+type Entry = { capture: Capture; order: readonly [at: number, seq: number]; ready: boolean; target: string | null };
 
 let entries: Entry[] = []; // in the reading order
 let list: readonly Capture[] = []; // replaced, never changed in place: the tray subscribes to it
@@ -53,6 +56,7 @@ const listeners = new Set<() => void>();
 const waiters: { session: string; resolve: () => void }[] = [];
 const settling = new Set<string>(); // photos read, waiting for recent.json to hold their scans
 const keptBack = new Set<string>(); // photos whose scans recent.json couldn't hold: the next start has them (T2-2)
+const unkept = new Set<string>(); // photos read whose scans couldn't be kept: only the next start reads them (T3-3)
 
 const QUEUE = 'queue';
 const SOURCES: readonly PhotoSource[] = ['camera', 'gallery', 'camera_app'];
@@ -122,7 +126,7 @@ const before = (a: Entry['order'], b: Entry['order']) => a[0] < b[0] || (a[0] ==
 
 /** Puts a capture in its place in the reading order: after every one taken before it, or at the same time. */
 function add(capture: Omit<Capture, 'key' | 'reading'>, order: Entry['order'], ready: boolean): Entry {
-  const entry: Entry = { capture: { ...capture, key: `c${++keys}`, reading: false }, order, ready };
+  const entry: Entry = { capture: { ...capture, key: `c${++keys}`, reading: false }, order, ready, target: null };
   const at = entries.findIndex((e) => !e.capture.reading && before(order, e.order));
   entries = at < 0 ? [...entries, entry] : [...entries.slice(0, at), entry, ...entries.slice(at)];
   return entry;
@@ -149,16 +153,21 @@ function deleteFile(uri: string): void {
 
 const extensionOf = (uri: string): string => /\.([A-Za-z0-9]+)$/.exec(uri.replace(/[?#].*$/, ''))?.[1] ?? 'jpg';
 
-/** Moves a photo into files/queue/<session>/ under the name given; its new uri, or null when it couldn't move. */
-async function moveIn(from: string, session: string, name: string): Promise<string | null> {
+/**
+ * Moves a photo into files/queue/<session>/ under the name given, its destination on the entry before the move starts;
+ * its new uri, or null when it couldn't move.
+ */
+async function moveIn(entry: Entry, from: string, session: string, name: string): Promise<string | null> {
   try {
     if (!FOLDER_NAME.test(session)) return null;
     const folder = new Directory(Paths.document, QUEUE, session);
-    if (!folder.exists) folder.create({ intermediates: true });
     const to = new File(folder, name);
+    entry.target = to.uri;
+    if (!folder.exists) folder.create({ intermediates: true });
     await new File(from).move(to);
     return to.uri;
   } catch {
+    entry.target = null;
     return null; // it's read where it is
   }
 }
@@ -181,7 +190,7 @@ export async function queuePhoto(
     false,
   );
   changed();
-  const moved = await moveIn(from, p.session, queuedName(at, n, p.source, testImage, extensionOf(from)));
+  const moved = await moveIn(entry, from, p.session, queuedName(at, n, p.source, testImage, extensionOf(from)));
   entry.ready = true;
   if (moved !== null) update(entry, { uri: moved });
   next();
@@ -212,7 +221,7 @@ function next(): void {
   if (!entry || !entry.ready) return;
   busy = true;
   update(entry, { reading: true });
-  void read(entry);
+  void read(entry).catch(() => {}); // it never throws: each step that can is caught where it is
 }
 
 async function read(entry: Entry): Promise<void> {
@@ -230,7 +239,14 @@ async function read(entry: Entry): Promise<void> {
       if (c.kind === 'pdf') letGoOfPdf(c.uri);
     }
     // a form not found is a scan like any other: it has its Retake
-    addScan({ label: labelOf(c), source: c.source, result, testImage: c.testImage, session: c.session, at: c.at });
+    try {
+      addScan({ label: labelOf(c), source: c.source, result, testImage: c.testImage, session: c.session, at: c.at });
+    } catch {
+      // it couldn't be kept: it leaves the queue, and its photo stays for the next start to read (ruling T3-3)
+      remove(entry);
+      if (c.kind === 'photo') unkept.add(c.uri);
+      return;
+    }
     remove(entry); // in the same tick: the tray never shows it twice
     touchSession(c.session, new Date());
     if (c.replaces !== null) {
@@ -273,10 +289,12 @@ const alreadyRead = (session: string, at: Date) =>
 /**
  * At start, once the recent scans are loaded: what's left in files/queue, read into its sessions, oldest first. A name
  * the queue didn't give is a camera photo, read after the others. A photo already queued, or read and waiting to go, is
- * skipped, so it's idempotent; one whose scan is kept already goes (ruling P-F2). An empty folder goes.
+ * skipped, so it's idempotent, as is one still moving in (ruling T3-2); one whose scan is kept already goes (ruling
+ * P-F2). An empty folder goes, unless a photo is moving into it.
  */
 export async function resumeQueue(): Promise<void> {
-  const known = new Set([...entries.map((e) => e.capture.uri), ...settling, ...keptBack]);
+  const moving = entries.flatMap((e) => (e.target !== null ? [e.target] : []));
+  const known = new Set([...entries.map((e) => e.capture.uri), ...moving, ...settling, ...keptBack, ...unkept]);
   const found: { session: string; uri: string; name: string; parsed: ReturnType<typeof parseQueuedName> }[] = [];
   try {
     const root = new Directory(Paths.document, QUEUE);
@@ -285,7 +303,8 @@ export async function resumeQueue(): Promise<void> {
       if (!(folder instanceof Directory)) continue;
       const files = folder.list();
       if (files.length === 0) {
-        folder.delete();
+        const base = folder.uri.endsWith('/') ? folder.uri : `${folder.uri}/`;
+        if (!moving.some((target) => target.startsWith(base))) folder.delete(); // not one a photo is moving into
         continue;
       }
       for (const file of files) {
