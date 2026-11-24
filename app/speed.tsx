@@ -1,14 +1,21 @@
-import { Fragment, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
-import { PrimaryButton } from '../components/Buttons';
+import { Button } from '../components/Buttons';
+import { Header } from '../components/Header';
+import { LedgerRow } from '../components/LedgerRow';
+import { Screen } from '../components/Screen';
 import { TeamOnly } from '../components/TeamOnly';
 import { formatMs } from '../lib/format';
 import { runSpeedTest, type SpeedResult } from '../lib/speedTest';
-import { bold, colors } from '../lib/theme';
+import { colors, space, type } from '../lib/theme';
 
 // The team's speed test (the test app's activity_speed.xml and SpeedTestActivity.java), from Settings › Team tools or
-// mybizmatescan://speed, in team builds only.
+// mybizmatescan://speed, in team builds only. Design B §9.11: the design's tokens and components; what it runs, times
+// and shows is as it was. The bar follows the run's real progress, so it doesn't loop like the loading bar.
+
+const BAR = 4; // dp: the progress bar's height
+const NOTE = "Reads 8 sample invoices 3 times with this phone's processor, about 30 seconds. Nothing is sent anywhere.";
 
 function deviceLine(): string {
   if (Platform.OS !== 'android') return `${Platform.OS} ${String(Platform.Version)}`;
@@ -30,9 +37,11 @@ function rows(r: SpeedResult): [string, string][] {
 
 export default function SpeedScreen() {
   return (
-    <TeamOnly>
-      <SpeedTest />
-    </TeamOnly>
+    <Screen header={<Header title="Speed test" />}>
+      <TeamOnly>
+        <SpeedTest />
+      </TeamOnly>
+    </Screen>
   );
 }
 
@@ -42,6 +51,7 @@ function SpeedTest() {
   const [line, setLine] = useState('');
   const [result, setResult] = useState<SpeedResult | null>(null);
 
+  // The button gets this promise: it loads until the run ends, and a second tap starts nothing (Review Focus 3).
   async function run() {
     setRunning(true);
     setProgress(0);
@@ -63,75 +73,57 @@ function SpeedTest() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>How fast this phone reads invoices</Text>
-      <Text style={styles.device}>{deviceLine()}</Text>
+    <>
+      <View style={styles.top}>
+        <Text style={[type.headline, styles.ink]}>How fast this phone reads invoices</Text>
+        <Text style={[type.label, styles.mute, styles.device]}>{deviceLine()}</Text>
 
-      <View style={styles.big}>
-        <Text style={styles.bigNumber}>{result ? formatMs(result.medianMs) : '—'}</Text>
-        <Text style={styles.bigLabel}>per invoice, median</Text>
+        <View style={styles.median}>
+          <Text style={[type.figureStrong, styles.ink]}>{result ? formatMs(result.medianMs) : '—'}</Text>
+          <Text style={[type.label, styles.mute]}>per invoice, median</Text>
+        </View>
+
+        {running && (
+          <View testID="speed-progress" style={styles.track}>
+            <View testID="speed-progress-fill" style={[styles.fill, { width: `${Math.round(progress * 100)}%` }]} />
+          </View>
+        )}
+        {line !== '' && <Text style={[type.label, styles.mute, styles.progress]}>{line}</Text>}
       </View>
 
-      {running && (
-        <View style={styles.track}>
-          <View style={[styles.fill, { width: `${Math.round(progress * 100)}%` }]} />
-        </View>
-      )}
-      {line !== '' && <Text style={styles.progressText}>{line}</Text>}
-
       {result && (
-        <View style={styles.card}>
-          {rows(result).map(([label, value], i) => (
-            <Fragment key={label}>
-              {i > 0 && <View style={styles.divider} />}
-              <View style={styles.row}>
-                <Text style={styles.rowLabel}>{label}</Text>
-                <Text style={styles.rowValue}>{value}</Text>
-              </View>
-            </Fragment>
+        <View style={styles.rows}>
+          {rows(result).map(([label, value]) => (
+            <LedgerRow key={label} label={label} value={value} />
           ))}
         </View>
       )}
 
-      <View style={styles.button}>
-        <PrimaryButton label={result ? 'Run again' : 'Run speed test'} disabled={running} onPress={() => void run()} />
+      <View style={styles.bottom}>
+        <Button label={result ? 'Run again' : 'Run speed test'} onPress={run} />
+        <Text style={[type.label, styles.mute]}>{NOTE}</Text>
       </View>
-      <Text style={styles.note}>
-        {"Reads 8 sample invoices 3 times with this phone's processor, about 30 seconds. Nothing is sent anywhere."}
-      </Text>
-    </ScrollView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.paper },
-  content: { padding: 20, paddingBottom: 32 },
-  title: { ...bold, fontSize: 24, color: colors.ink },
-  device: { fontSize: 13, color: colors.mute, marginTop: 6 },
-  big: { marginTop: 18 },
-  bigNumber: { ...bold, fontSize: 56, color: colors.coralText },
-  bigLabel: { fontSize: 14, color: colors.mute },
-  track: { height: 4, borderRadius: 2, backgroundColor: colors.coralTint, marginTop: 18, overflow: 'hidden' },
-  fill: { height: 4, backgroundColor: colors.coral },
-  progressText: { fontSize: 13, color: colors.mute, marginTop: 8 },
-  card: {
-    marginTop: 12,
-    backgroundColor: colors.panel,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.line,
+  // on the gutter; the rows under it run edge to edge
+  top: { paddingTop: space.l, paddingHorizontal: space.l },
+  ink: { color: colors.ink },
+  mute: { color: colors.mute },
+  device: { marginTop: space.xs },
+  median: { marginTop: space.l },
+  track: {
+    height: BAR,
+    borderRadius: BAR / 2,
+    backgroundColor: colors.sand,
+    overflow: 'hidden',
+    marginTop: space.l,
   },
-  divider: { height: 1, backgroundColor: colors.line, marginHorizontal: 16 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 52,
-    paddingStart: 16,
-    paddingEnd: 12,
-    paddingVertical: 13,
-  },
-  rowLabel: { width: 104, fontSize: 14, color: colors.mute },
-  rowValue: { ...bold, flex: 1, fontSize: 15, color: colors.ink },
-  button: { marginTop: 18 },
-  note: { fontSize: 12, color: colors.mute, marginTop: 12 },
+  fill: { height: BAR, borderRadius: BAR / 2, backgroundColor: colors.brand },
+  progress: { marginTop: space.s },
+  // the results as a section: white rows on hairlines, with one over the first
+  rows: { marginTop: space.m, borderTopWidth: 1, borderTopColor: colors.hairline },
+  bottom: { padding: space.l, gap: space.m },
 });

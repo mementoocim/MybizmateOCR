@@ -2,6 +2,8 @@ import { parseScanResult } from './src/parse';
 import ScannerModule from './src/ScannerModule';
 import type { CoreInfo, ScanOptions, ScanResult, ScannerStats } from './src/types';
 
+export { ImeInsetsView } from './src/ImeInsetsView';
+export type { ImeChangeEvent, ImeInsetsViewProps } from './src/ImeInsetsView';
 export { parseScanResult } from './src/parse';
 export { ScannerCameraView } from './src/ScannerCameraView';
 export type { CameraErrorCode, CameraStatus, ScannerCameraProps, ScannerCameraRef } from './src/ScannerCameraView';

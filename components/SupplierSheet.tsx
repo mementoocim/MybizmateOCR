@@ -1,30 +1,41 @@
-import { useState, useSyncExternalStore } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { type RefObject, useState, useSyncExternalStore } from 'react';
+import { StyleSheet, Text, View, type ViewInstance } from 'react-native';
 
 import { addParty, lists, subscribeLists, suppliersOf } from '../lib/lists';
 import { SAMPLE_NAMES, type SaleView } from '../lib/sale';
 import { type PartyChoice, type StoredScan, updateScan } from '../lib/scans';
-import { bold, colors, sectionLabel } from '../lib/theme';
+import { colors, space, type } from '../lib/theme';
 import { toast } from '../lib/toast';
-import { TextButton } from './Buttons';
+import { ButtonRow } from './BottomBar';
+import type { ButtonProps } from './Buttons';
+import { ListRow } from './ListRow';
 import { PartyPicker } from './PartyPicker';
+import { SectionHeader } from './SectionHeader';
 import { Sheet } from './Sheet';
+import { TextField } from './TextField';
 
-/** The Supplier row's sheet on a purchase: the seller is printed, not read, so the person chooses it. */
+// Design B §9.5: the Supplier row's sheet on a purchase. The seller is printed, not read, so the person chooses it:
+// from their suppliers (the picker, its search not focused on open, so the keyboard doesn't cover these choices), as
+// Various suppliers, or by a name not in the list, used as typed or added to the suppliers. A list of full-bleed rows
+// and strips, so the sheet has no gutter, and the field and its buttons pad themselves onto it.
+
 export function SupplierSheet({
   visible,
   scan,
   onClose,
+  returnFocus,
 }: {
   visible: boolean;
   scan: StoredScan;
   sale: SaleView;
   onClose: () => void;
+  returnFocus?: RefObject<ViewInstance | null>; // the row that opened it
 }) {
   const theLists = useSyncExternalStore(subscribeLists, lists);
   const [name, setName] = useState('');
   const suppliers = suppliersOf(theLists);
   const typed = name.trim();
+  const sample = scan.source === 'sample';
 
   function pick(party: PartyChoice) {
     updateScan(scan.id, { party });
@@ -51,59 +62,43 @@ export function SupplierSheet({
     toast('Added to your suppliers.');
   }
 
+  const use: ButtonProps = {
+    label: 'Use this name',
+    variant: 'secondary',
+    disabled: !typed,
+    onPress: () => pick({ name: typed }),
+  };
+  const addIt: ButtonProps = { label: 'Add to your suppliers', variant: 'text', disabled: !typed, onPress: add };
+
   return (
     <Sheet
       visible={visible}
       title="Supplier"
       subtitle="Who sold it to you: the business printed at the top of the invoice. The scanner doesn't read that part, so choose it here."
-      onClose={onClose}>
-      {suppliers.length > 0 && (
-        <PartyPicker parties={suppliers} placeholder="Search your suppliers" onPick={(p) => pick({ listId: p.id })} />
-      )}
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => pick({ various: true })}
-        style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-        <Text style={styles.name}>Various suppliers</Text>
-        <Text style={styles.line}>Exported as VARIOUS-SUPP</Text>
-      </Pressable>
-      <View style={styles.section}>
-        <Text style={sectionLabel}>NOT IN YOUR LIST?</Text>
-        <TextInput
-          accessibilityLabel="Supplier's name"
-          placeholder="Supplier's name"
-          placeholderTextColor={colors.mute}
-          value={name}
-          onChangeText={setName}
-          style={styles.input}
+      onClose={onClose}
+      returnFocus={returnFocus}
+      gutter={false}>
+      {suppliers.length > 0 ? (
+        <PartyPicker
+          parties={suppliers}
+          label="Search your suppliers"
+          onPick={(p) => pick({ listId: p.id })}
+          autoFocus={false} // its choices show first: the keyboard would cover them (ruling T14-1)
         />
-        <TextButton label="Use this name" disabled={!typed} onPress={() => pick({ name: typed })} />
-        {scan.source === 'sample' ? (
-          <Text style={styles.note}>{SAMPLE_NAMES}</Text>
-        ) : (
-          <TextButton label="Add to your suppliers" disabled={!typed} onPress={() => void add()} />
-        )}
+      ) : null}
+      <ListRow title="Various suppliers" sub="Exported as VARIOUS-SUPP" onPress={() => pick({ various: true })} />
+      <SectionHeader title="Not in your list?" />
+      <View style={styles.typed}>
+        <TextField label="Supplier's name" value={name} onChangeText={setName} />
+        {/* a sample's made-up names never reach the lists: the note in place of Add */}
+        <ButtonRow buttons={sample ? [use] : [use, addIt]} />
+        {sample ? <Text style={[type.body, styles.note]}>{SAMPLE_NAMES}</Text> : null}
       </View>
     </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  pressed: { opacity: 0.6 },
-  name: { ...bold, fontSize: 15, color: colors.ink },
-  line: { fontSize: 13, color: colors.mute, marginTop: 2 },
-  section: { marginTop: 20 },
-  note: { fontSize: 14, color: colors.mute, marginTop: 6, lineHeight: 20 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: colors.ink,
-    backgroundColor: colors.panel,
-    marginVertical: 8,
-  },
+  typed: { paddingHorizontal: space.l, paddingTop: space.l, gap: space.m },
+  note: { color: colors.mute },
 });

@@ -1,10 +1,19 @@
 import { File } from 'expo-file-system';
-import { useRef, useState, useSyncExternalStore } from 'react';
-import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Alert, FlatList, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 
-import { OutlinedButton, TextButton } from '../components/Buttons';
+import type { BadgeSpec } from '../components/Badge';
+import { Banner } from '../components/Banner';
+import { Button } from '../components/Buttons';
+import { EmptyState } from '../components/EmptyState';
+import { Header } from '../components/Header';
+import { Search } from '../components/icons';
+import { ListRow } from '../components/ListRow';
+import { Screen, useEndPadding } from '../components/Screen';
+import { SectionHeader } from '../components/SectionHeader';
 import { Segmented } from '../components/Segmented';
 import { Sheet } from '../components/Sheet';
+import { TextField } from '../components/TextField';
 import { decodeCsv } from '../lib/csv';
 import { peso } from '../lib/format';
 import {
@@ -17,21 +26,29 @@ import {
   importPartiesCsv,
   ListImportError,
   type ListItem,
+  type Lists,
   lists,
   type Party,
   partyName,
   subscribeLists,
   suppliersOf,
 } from '../lib/lists';
-import { bold, colors } from '../lib/theme';
+import { matchesItem, matchesParty } from '../lib/search';
+import { colors, space, type } from '../lib/theme';
 import { toast } from '../lib/toast';
 import { releaseAccess } from '../modules/scanner';
 
-// Your lists: the customers, suppliers and items the checks use, imported from CSV files (MyBizMate's export, saved as
-// CSV in Excel or Google Sheets). They stay on this phone.
+// Design B §9.9: Your lists, the customers, suppliers and items the checks use, imported from CSV files (MyBizMate's
+// export, saved as CSV in Excel or Google Sheets). They stay on this phone. The tabs say their counts plainly. A search
+// finds a party by its name, TIN or code, or an item by its name, and goes when the tab changes; the strip under the
+// actions counts what it found. Import CSV and How to import, which explains the file in a sheet. Then the rows (a
+// virtualized list; not tappable, as today) and, at the end, a Clear that names what it clears and asks first. An empty
+// tab says what to import, with both actions. An import that worked says so in the snackbar; a file that can't be
+// imported says why in a banner under the actions, until another file is picked or the tab changes.
 
 type Tab = 'customers' | 'suppliers' | 'items';
-type Row = { id: string; name: string; line: string };
+/** A row of the list: its title, its sub-line (in figures when mono), and its badge. */
+type Row = { id: string; title: string; sub: string; mono: boolean; badge: BadgeSpec | null };
 
 const INTRO: Record<Tab, string> = {
   customers:
@@ -39,14 +56,27 @@ const INTRO: Record<Tab, string> = {
   suppliers: 'The suppliers you choose from when you save a purchase. Import them the same way as customers.',
   items: 'Your items and their list prices. A row whose price is far from its list price is marked to check.',
 };
-const EMPTY: Record<Tab, string> = {
-  customers: 'No customers yet.',
-  suppliers: 'No suppliers yet.',
-  items: 'No items yet.',
-};
 const PARTY_COLUMNS =
   "The first row names the columns, as in MyBizMate's Parties import: Code, Type, Entity type, Registered name, Last name, First name, Middle name, Trade name, TIN, Sub-street, Street, Barangay, City / Municipality, Province, ZIP, VAT status and Payment terms. Other columns are skipped. Contact numbers and emails are never kept.";
 const ITEM_COLUMNS = 'The first row names the columns: Name, Unit and Price.';
+/** An empty tab's words (the suppliers' and items' bodies are the plan's call 18). */
+const EMPTY: Record<Tab, { title: string; body: string }> = {
+  customers: {
+    title: 'No customers yet',
+    body: 'Import the parties file from MyBizMate as a CSV. Scans then match names and TINs against it.',
+  },
+  suppliers: {
+    title: 'No suppliers yet',
+    body: 'Import the parties file from MyBizMate as a CSV. You choose from these when you save a purchase.',
+  },
+  items: {
+    title: 'No items yet',
+    body: "Import your items as a CSV, with Name, Unit and Price. Scans then check each row's price.",
+  },
+};
+/** One of a tab's rows: "1 customer". */
+const SINGULAR: Record<Tab, string> = { customers: 'customer', suppliers: 'supplier', items: 'item' };
+const NEW: BadgeSpec = { label: 'New', tone: 'brand' };
 
 // Android's Downloads can hand over a link that doesn't carry the file's name (content://…/document/msf%3A123), so a
 // file is a CSV by its name or by the type the phone gives it.
@@ -59,36 +89,66 @@ function isCsv(file: { name: string; type: string | null }): boolean {
 
 const counted = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const skipped = (s: ImportSummary) => (s.skipped > 0 ? ` ${counted(s.skipped, 'row', 'rows')} skipped: no name.` : '');
+/** A sub-line's parts, the empty ones left out: "TIN 123-456-789-00000 · C001", "sack · ₱1,350.00". */
+const join = (parts: readonly string[]) => parts.filter((part) => part !== '').join(' · ');
 
-/** Under a party's name: its TIN and code, or, with no code, that it came from a scan (and whether it went out since). */
-function partyLine(p: Party): string {
-  const parts: string[] = [];
-  if (p.tin) parts.push(`TIN ${formatTin(p.tin)}`);
-  if (p.code) parts.push(p.code);
-  else if (p.fromScan) parts.push(p.exportedAt ? 'sent in a Parties file' : 'added from a scan');
-  return parts.join(' · ');
+/**
+ * A party's row: its name over its TIN and code, in figures. One added from a scan with no code yet says so, after its
+ * TIN, in words, with New until it has gone out in a Parties file.
+ */
+function partyRow(p: Party): Row {
+  const tin = p.tin ? `TIN ${formatTin(p.tin)}` : '';
+  if (p.fromScan && p.code === '') {
+    const added = `Added from a scan · ${p.exportedAt ? 'sent in a Parties file' : 'not exported yet'}`;
+    return { id: p.id, title: partyName(p), sub: join([tin, added]), mono: false, badge: p.exportedAt ? null : NEW };
+  }
+  return { id: p.id, title: partyName(p), sub: join([tin, p.code]), mono: true, badge: null };
 }
 
-function itemLine(i: ListItem): string {
-  return [i.unit, i.price === null ? '' : peso(i.price)].filter((part) => part !== '').join(' · ');
+/** An item's row: its name over its unit and price, the missing ones left out. */
+function itemRow(i: ListItem): Row {
+  const sub = join([i.unit, i.price === null ? '' : peso(i.price)]);
+  return { id: i.id, title: i.name, sub, mono: false, badge: null };
 }
+
+/** The tab's rows that what's typed finds (all of them, with nothing typed). */
+function rowsOf(l: Lists, tab: Tab, query: string): Row[] {
+  if (tab === 'items') return l.items.filter((i) => matchesItem(i, query)).map(itemRow);
+  return (tab === 'customers' ? customersOf(l) : suppliersOf(l)).filter((p) => matchesParty(p, query)).map(partyRow);
+}
+
+const renderRow = ({ item }: { item: Row }) => (
+  <ListRow testID="list-row" title={item.title} sub={item.sub || null} subMono={item.mono} badge={item.badge} />
+);
 
 export default function ListsScreen() {
   const theLists = useSyncExternalStore(subscribeLists, lists);
   const [tab, setTab] = useState<Tab>('customers');
-  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [problem, setProblem] = useState<string | null>(null); // why the last file couldn't be imported
+  const [howToOpen, setHowToOpen] = useState(false);
+  const howToButton = useRef<ViewInstance>(null); // TalkBack focus goes back to it once the sheet has gone
   const picking = useRef(false); // two quick presses open one picker
+  const end = useEndPadding(false);
+
   const customers = customersOf(theLists);
   const suppliers = suppliersOf(theLists);
-  const rows: Row[] =
-    tab === 'items'
-      ? theLists.items.map((i) => ({ id: i.id, name: i.name, line: itemLine(i) }))
-      : (tab === 'customers' ? customers : suppliers).map((p) => ({ id: p.id, name: partyName(p), line: partyLine(p) }));
+  const total = { customers: customers.length, suppliers: suppliers.length, items: theLists.items.length }[tab];
+  const rows = useMemo(() => rowsOf(theLists, tab, query), [theLists, tab, query]);
+  const noun = total === 1 ? SINGULAR[tab] : tab;
+  const searchLabel = tab === 'items' ? 'Search name' : 'Search name, TIN or code';
   const options: { value: Tab; label: string }[] = [
-    { value: 'customers', label: `Customers (${customers.length})` },
-    { value: 'suppliers', label: `Suppliers (${suppliers.length})` },
-    { value: 'items', label: `Items (${theLists.items.length})` },
+    { value: 'customers', label: `Customers ${customers.length}` },
+    { value: 'suppliers', label: `Suppliers ${suppliers.length}` },
+    { value: 'items', label: `Items ${theLists.items.length}` },
   ];
+
+  function changeTab(next: Tab) {
+    if (next === tab) return;
+    setTab(next);
+    setQuery('');
+    setProblem(null);
+  }
 
   async function importCsv() {
     if (picking.current) return;
@@ -99,8 +159,9 @@ export default function ListsScreen() {
       const picked = await File.pickFileAsync({ mimeTypes: ['*/*'] });
       if (picked.canceled) return;
       file = picked.result;
+      setProblem(null); // another file: the last one's problem goes with it
       if (!isCsv(picked.result)) {
-        toast('Choose a .csv file. In Excel or Google Sheets, save or download the sheet as CSV.');
+        setProblem('Choose a .csv file. In Excel or Google Sheets, save or download the sheet as CSV.');
         return;
       }
       const text = decodeCsv(await picked.result.bytes()); // UTF-8, or Excel's plain CSV (Windows-1252)
@@ -114,10 +175,10 @@ export default function ListsScreen() {
         );
       }
     } catch (e) {
-      if (!(e instanceof ListImportError)) toast("Couldn't read that file.");
-      else if (into === 'items') toast('That file has no Name column.');
+      if (!(e instanceof ListImportError)) setProblem("Couldn't read that file.");
+      else if (into === 'items') setProblem('That file has no Name column.');
       else {
-        toast(
+        setProblem(
           "That file has no Registered name, Last name or First name column. Use the columns of MyBizMate's Parties import.",
         );
       }
@@ -131,78 +192,114 @@ export default function ListsScreen() {
 
   function clear() {
     const what = tab;
-    Alert.alert(`Clear all ${what}?`, "They're removed from this phone only.", [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear',
-        style: 'destructive',
-        onPress: () => void (what === 'items' ? clearItems() : clearParties(what === 'customers' ? 'customer' : 'supplier')),
-      },
-    ]);
+    const n = total;
+    Alert.alert(
+      n === 1 ? `Clear 1 ${SINGULAR[what]}?` : `Clear all ${n} ${what}?`,
+      "They're removed from this phone. Saved scans don't change. You can import the file again.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            setQuery(''); // nothing left to search
+            void (what === 'items' ? clearItems() : clearParties(what === 'customers' ? 'customer' : 'supplier'));
+          },
+        },
+      ],
+    );
   }
 
+  const openHowTo = () => setHowToOpen(true);
+  const closeHowTo = () => setHowToOpen(false);
+  const banner = problem ? <Banner tone="danger" text={problem} live /> : null;
+
   return (
-    <View style={styles.screen}>
-      <FlatList
-        data={rows}
-        keyExtractor={(r) => r.id}
-        contentContainerStyle={styles.content}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <Segmented options={options} value={tab} onChange={setTab} />
-            <Text style={styles.intro}>{INTRO[tab]}</Text>
-            <OutlinedButton label="Import CSV" onPress={() => void importCsv()} />
-            <View style={styles.columnsButton}>
-              <TextButton label="Which columns?" onPress={() => setColumnsOpen(true)} />
-            </View>
-          </View>
-        }
-        ListEmptyComponent={<Text style={styles.empty}>{EMPTY[tab]}</Text>}
-        renderItem={({ item, index }) => (
-          <View style={[styles.row, index === 0 && styles.first, index === rows.length - 1 && styles.last]}>
-            <Text style={styles.name}>{item.name}</Text>
-            {item.line !== '' && <Text style={styles.line}>{item.line}</Text>}
-          </View>
-        )}
-        ListFooterComponent={
-          rows.length > 0 ? (
-            <View style={styles.clear}>
-              <TextButton label={`Clear ${tab}`} color={colors.ember} onPress={clear} />
-            </View>
-          ) : undefined
-        }
-      />
+    <View style={styles.root}>
+      <Screen scroll={false} header={<Header title="Your lists" />}>
+        <FlatList
+          testID="lists-list"
+          data={rows}
+          keyExtractor={(r) => r.id}
+          renderItem={renderRow}
+          keyboardShouldPersistTaps="handled" // the clear button and the tabs take the first tap with the keyboard up
+          ListHeaderComponent={
+            <>
+              <View style={styles.controls}>
+                <Segmented label="List" options={options} value={tab} onChange={changeTab} />
+                {total > 0 ? (
+                  <>
+                    <TextField
+                      label={searchLabel}
+                      placeholder={searchLabel}
+                      hideLabel
+                      leading={Search}
+                      clearLabel="Clear the search"
+                      value={query}
+                      onChangeText={setQuery}
+                    />
+                    <View style={styles.actions}>
+                      <Button label="Import CSV" variant="secondary" onPress={importCsv} />
+                      <Button ref={howToButton} label="How to import" variant="text" onPress={openHowTo} />
+                    </View>
+                    {banner}
+                  </>
+                ) : null}
+              </View>
+              {total > 0 ? (
+                <SectionHeader title={query.trim() ? `${rows.length} of ${total} ${noun}` : `${total} ${noun}`} />
+              ) : null}
+            </>
+          }
+          ListEmptyComponent={
+            total === 0 ? (
+              <>
+                <EmptyState
+                  title={EMPTY[tab].title}
+                  body={EMPTY[tab].body}
+                  actions={[
+                    { label: 'Import CSV', onPress: importCsv },
+                    { label: 'How to import', onPress: openHowTo, variant: 'text', ref: howToButton },
+                  ]}
+                />
+                {banner ? <View style={styles.emptyBanner}>{banner}</View> : null}
+              </>
+            ) : undefined // a search that finds nothing: the strip says "0 of 21 customers"
+          }
+          ListFooterComponent={
+            total > 0 ? (
+              <View style={styles.clear}>
+                <Button label={`Clear ${tab}`} variant="destructiveText" onPress={clear} />
+              </View>
+            ) : undefined
+          }
+          contentContainerStyle={{ paddingBottom: end }}
+        />
+      </Screen>
       <Sheet
-        visible={columnsOpen}
-        title={tab === 'items' ? 'Columns for items' : 'Columns for customers and suppliers'}
-        onClose={() => setColumnsOpen(false)}>
-        <Text style={styles.columns}>{tab === 'items' ? ITEM_COLUMNS : PARTY_COLUMNS}</Text>
-        <TextButton label="Close" onPress={() => setColumnsOpen(false)} />
+        visible={howToOpen}
+        title={`How to import ${tab}`}
+        onClose={closeHowTo}
+        returnFocus={howToButton}
+        // the title row's Close, as every sheet has, and this one (ruling T18-1)
+        actions={[{ label: 'Close', variant: 'secondary', onPress: closeHowTo }]}>
+        <View style={styles.howTo}>
+          <Text style={[type.body, styles.howToText]}>{INTRO[tab]}</Text>
+          <Text style={[type.body, styles.howToText]}>{tab === 'items' ? ITEM_COLUMNS : PARTY_COLUMNS}</Text>
+        </View>
       </Sheet>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.paper },
-  content: { padding: 16, paddingBottom: 32 },
-  header: { gap: 12, marginBottom: 16 },
-  intro: { fontSize: 15, color: colors.mute, lineHeight: 22 },
-  columnsButton: { alignItems: 'center' },
-  empty: { fontSize: 15, color: colors.mute, textAlign: 'center', marginTop: 8 },
-  row: {
-    backgroundColor: colors.panel,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  first: { borderTopWidth: 1, borderTopLeftRadius: 18, borderTopRightRadius: 18 },
-  last: { borderBottomWidth: 1, borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
-  name: { ...bold, fontSize: 15, color: colors.ink },
-  line: { fontSize: 13, color: colors.mute, marginTop: 2 },
-  clear: { alignItems: 'center', marginTop: 16 },
-  columns: { fontSize: 15, color: colors.ink, lineHeight: 22, marginBottom: 12 },
+  root: { flex: 1 },
+  // the tabs, the search, the actions and a banner on the gutter (they have no margins of their own), over the strip
+  controls: { gap: space.m, paddingHorizontal: space.l, paddingVertical: space.m },
+  // Import CSV at its own width, How to import beside it; at large text they wrap
+  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.s },
+  emptyBanner: { paddingHorizontal: space.l },
+  clear: { alignItems: 'center', paddingTop: space.l, paddingHorizontal: space.l },
+  howTo: { gap: space.m },
+  howToText: { color: colors.ink },
 });

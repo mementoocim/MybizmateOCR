@@ -29,15 +29,17 @@ export function is2307(scan: StoredScan): boolean {
   return scan.result.aligned && scan.result.form === 'bir_2307';
 }
 
-// One run of the checks per scan as it stands, as for a sale (lib/sale.ts): the stores replace a scan, the lists or
-// the settings when they change, so the same objects give the same answer.
-const views = new WeakMap<StoredScan, { lists: Lists; settings: Settings; view: CertView }>();
+// One run of the checks per scan as it stands, as for a sale (lib/sale.ts): the stores replace a scan or the lists when
+// they change, so the same objects give the same answer. The checks read no setting, so a settings change never runs
+// them again (the final review's Important 1).
+const views = new WeakMap<StoredScan, { lists: Lists; view: CertView }>();
 
+/** A scan's certificate. It takes the settings as saleOf does, and reads none of them. */
 export function certOf(scan: StoredScan, lists: Lists, settings: Settings): CertView {
   const hit = views.get(scan);
-  if (hit && hit.lists === lists && hit.settings === settings) return hit.view;
+  if (hit && hit.lists === lists) return hit.view;
   const view = checkCert(scan, lists);
-  views.set(scan, { lists, settings, view });
+  views.set(scan, { lists, view });
   return view;
 }
 
@@ -61,7 +63,7 @@ function checkCert(scan: StoredScan, lists: Lists): CertView {
   return { cert, problems: problems2307(cert), payor };
 }
 
-/** The 2307's period as Saved invoices names it: "Q4 2026", or the months it spans when it isn't one quarter. */
+/** The 2307's period as Saved names it: "Q4 2026", or the months it spans when it isn't one quarter. */
 export function periodName(cert: Cert2307): string {
   if (cert.quarter !== null) {
     const [year, quarter] = cert.quarter.split('-');

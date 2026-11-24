@@ -1,25 +1,37 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 
 import Home from '../app/index';
 import { getScan } from '../lib/scans';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
+import { dialogWords } from '../test-utils/dialogs';
 import { memoryFs } from '../test-utils/memoryFs';
 
 // Import PDF, on Home: the system's file picker hands over a PDF, the scanner reads its page 1 (readPdf) and its
-// result opens, labelled with the file's name. A PDF the scanner refuses is named in plain words.
+// result opens, labelled with the file's name. A PDF the scanner refuses is named in plain words, in a dialog: the
+// reason as its title and what to do as its message, or one sentence as a title alone (the plan's call 16, rulings
+// T16-1 and T16-1a).
 
+let mockTeam = false;
 const mockPush = jest.fn();
 const mockReadPdf = jest.fn();
 const mockDisplayName = jest.fn();
 const mockScanPhoto = jest.fn();
 const mockLibrary = jest.fn();
 const mockPick = jest.fn();
-const mockToast = jest.fn();
 const mockRelease = jest.fn(async (_uri: string) => undefined);
 
+jest.mock('../lib/build', () => ({
+  get TEAM_BUILD() {
+    return mockTeam;
+  },
+}));
 jest.mock('expo-router', () => ({
+  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
+  // a screen's pushes run once until it's focused again (lib/navigation)
+  useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
   useIsFocused: () => true,
 }));
 jest.mock('../modules/scanner', () => ({
@@ -28,7 +40,6 @@ jest.mock('../modules/scanner', () => ({
   scanPhoto: (uri: string, options: object) => mockScanPhoto(uri, options),
   releaseAccess: (uri: string) => mockRelease(uri),
 }));
-jest.mock('../lib/toast', () => ({ toast: (m: string) => mockToast(m) }));
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: () => mockLibrary(),
   requestCameraPermissionsAsync: jest.fn(),
@@ -67,14 +78,20 @@ async function importPdf(answer: object) {
 const refused = (code: string) => Object.assign(new Error(`refused: ${code}`), { code });
 const labels = () => mockPush.mock.calls.map(([to]) => getScan(to.params.id)?.label);
 
+let alert: jest.SpyInstance;
+
 beforeEach(async () => {
   jest.clearAllMocks();
+  mockTeam = false;
   memoryFs.reset();
   names.clear();
   mockReadPdf.mockResolvedValue(parseScanResult(coreJson('sales_text_0')));
   mockDisplayName.mockImplementation(async (uri: string) => names.get(uri) ?? null);
+  alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   await render(<Home />);
 });
+
+afterEach(() => alert.mockRestore());
 
 test('a PDF is read and opened', async () => {
   const uri = `${LINK}54`;
@@ -85,10 +102,10 @@ test('a PDF is read and opened', async () => {
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
   const scan = getScan(mockPush.mock.calls[0][0].params.id);
   expect(scan).toMatchObject({ label: 'PDF: sales_text_0.pdf', source: 'pdf' });
-  expect(screen.getAllByText('PDF: sales_text_0.pdf').length).toBeGreaterThan(0); // in Recent scans
+  expect(screen.getAllByText('sales_text_0.pdf').length).toBeGreaterThan(0); // in Recent scans, by its file name
   expect(screen.queryByText(/msf/)).toBeNull(); // never the link's own id
   expect(memoryFs.files.has(uri)).toBe(true); // the person's file is only read
-  expect(mockToast).not.toHaveBeenCalled();
+  expect(alert).not.toHaveBeenCalled();
 });
 
 test('a PDF without a name is "PDF"', async () => {
@@ -106,13 +123,13 @@ test('a cancelled pick does nothing', async () => {
   await importPdf({ canceled: true, result: null });
   expect(mockDisplayName).not.toHaveBeenCalled();
   expect(mockReadPdf).not.toHaveBeenCalled();
-  expect(mockToast).not.toHaveBeenCalled();
+  expect(alert).not.toHaveBeenCalled();
   expect(mockPush).not.toHaveBeenCalled();
 });
 
 test('not a PDF', async () => {
   await importPdf(picked(`${STORAGE}notes.txt`, 'notes.txt', 'text/plain'));
-  expect(mockToast).toHaveBeenCalledWith('Choose a PDF file.');
+  expect(dialogWords(alert)).toStrictEqual([['Choose a PDF file.']]); // one sentence: a title alone
   expect(mockReadPdf).not.toHaveBeenCalled();
   expect(mockPush).not.toHaveBeenCalled();
 
@@ -122,36 +139,63 @@ test('not a PDF', async () => {
   await importPdf(picked(`${LINK}65`, 'Invoice.PDF', ''));
   expect(mockReadPdf).toHaveBeenLastCalledWith(`${LINK}65`);
   expect(labels()).toEqual(['PDF', 'PDF: Invoice.PDF']);
-  expect(mockToast).toHaveBeenCalledTimes(1);
+  expect(alert).toHaveBeenCalledTimes(1);
+});
+
+test('a refused PDF says why in a dialog', async () => {
+  let refuse: (e: unknown) => void = () => {};
+  mockReadPdf.mockImplementationOnce(() => new Promise((_, reject) => (refuse = reject)));
+  await importPdf(picked(`${STORAGE}locked.pdf`, 'locked.pdf'));
+  // while it reads, the card says what it's reading
+  expect(screen.getByText('Reading…')).toBeOnTheScreen();
+  expect(screen.getByText('Reading the PDF')).toBeOnTheScreen();
+  expect(screen.queryByText('Straightening the photo and reading every box')).toBeNull();
+
+  await act(async () => refuse(refused('pdf_password')));
+  expect(dialogWords(alert)).toEqual([['That PDF has a password.', 'Save a copy without one, then import it.']]);
+  expect(screen.queryByText('Reading…')).toBeNull();
+  expect(screen.queryByText('locked.pdf')).toBeNull(); // nothing in Recent scans
+  expect(mockPush).not.toHaveBeenCalled();
 });
 
 test.each([
-  ['pdf_too_big', 'That PDF is over 20 MB. Choose a smaller file.'],
-  ['pdf_password', 'That PDF has a password. Save a copy without one, then import it.'],
-  ['pdf_broken', "Couldn't read that PDF."],
-  ['pdf_unreadable', "Couldn't read that PDF."],
-  ['pdf_page_too_big', "That PDF's page is too big to read."],
-])('refused (%s): "%s"', async (code, words) => {
+  ['pdf_too_big', ['That PDF is over 20 MB.', 'Choose a smaller file.']],
+  ['pdf_password', ['That PDF has a password.', 'Save a copy without one, then import it.']],
+  ['pdf_broken', ["Couldn't read that PDF."]], // one sentence: a title alone
+  ['pdf_unreadable', ["Couldn't read that PDF."]],
+  ['pdf_page_too_big', ["That PDF's page is too big to read."]],
+])('refused (%s): %j', async (code, dialog) => {
   mockReadPdf.mockRejectedValueOnce(refused(code));
   await importPdf(picked(`${STORAGE}${code}.pdf`, `${code}.pdf`));
-  expect(mockToast).toHaveBeenCalledWith(words);
-  expect(mockToast).toHaveBeenCalledTimes(1);
+  expect(dialogWords(alert)).toStrictEqual([dialog]); // once, with exactly these words
   expect(mockPush).not.toHaveBeenCalled();
-  expect(screen.queryByText(`PDF: ${code}.pdf`)).toBeNull(); // nothing in Recent scans
-  expect(screen.queryByText('Reading the invoice…')).toBeNull();
+  expect(screen.queryByText(`${code}.pdf`)).toBeNull(); // nothing in Recent scans
+  expect(screen.queryByText('Reading…')).toBeNull();
 });
 
-test("the scanner failing isn't put on the PDF", async () => {
-  // a closed scanner, or a model that didn't load (expo's ERR_UNEXPECTED): the scanner's own words, naming what it read
+test("the scanner failing isn't put on the PDF; its own words show in team builds only (final review, Minor 3)", async () => {
+  // A closed scanner, or a model that didn't load (expo's ERR_UNEXPECTED): what it was reading, then what to do, in
+  // plain words. The scanner's own message is raw error text, which a client never sees (design §12 A11).
   const failure = Object.assign(new Error('The scanner was closed'), { code: 'ERR_UNEXPECTED' });
-  mockLibrary.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'content://media/1' }] });
-  mockScanPhoto.mockRejectedValueOnce(failure);
-  await act(async () => fireEvent.press(screen.getByText('Choose from gallery')));
-  mockReadPdf.mockRejectedValueOnce(failure);
-  await importPdf(picked(`${STORAGE}y.pdf`, 'y.pdf'));
-  expect(mockToast.mock.calls).toEqual([
-    ["Couldn't read that photo: The scanner was closed"],
-    ["Couldn't read that PDF: The scanner was closed"],
+  async function failBoth() {
+    alert.mockClear();
+    mockLibrary.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'content://media/1' }] });
+    mockScanPhoto.mockRejectedValueOnce(failure);
+    await act(async () => fireEvent.press(screen.getByText('From gallery')));
+    mockReadPdf.mockRejectedValueOnce(failure);
+    await importPdf(picked(`${STORAGE}y.pdf`, 'y.pdf'));
+  }
+  await failBoth();
+  expect(dialogWords(alert)).toEqual([
+    ["Couldn't read that photo", 'Try again, or retake it.'],
+    ["Couldn't read that PDF", 'Try importing it again.'],
+  ]);
+  // a team build adds the scanner's own words under them, as the splash and the camera show theirs
+  mockTeam = true;
+  await failBoth();
+  expect(dialogWords(alert)).toEqual([
+    ["Couldn't read that photo", 'Try again, or retake it.\n\nThe scanner was closed'],
+    ["Couldn't read that PDF", 'Try importing it again.\n\nThe scanner was closed'],
   ]);
   expect(mockPush).not.toHaveBeenCalled();
 });
@@ -192,7 +236,10 @@ test("the picker's lasting access to the file is given up once it has been read,
   mockRelease.mockRejectedValueOnce(new Error('gone'));
   await importPdf(picked(`${LINK}73`, 'sales_text_0.pdf'));
   expect(mockPush).toHaveBeenCalledTimes(2);
-  expect(mockToast.mock.calls).toEqual([['That PDF has a password. Save a copy without one, then import it.'], ['Choose a PDF file.']]);
+  expect(dialogWords(alert)).toStrictEqual([
+    ['That PDF has a password.', 'Save a copy without one, then import it.'],
+    ['Choose a PDF file.'],
+  ]);
   // a copy the picker made (a file://) holds no grant: it is deleted instead
   mockRelease.mockClear();
   await importPdf(picked('file:///tmp/Inbox/sales_text_0.pdf', 'sales_text_0.pdf'));
@@ -202,9 +249,10 @@ test("the picker's lasting access to the file is given up once it has been read,
 test('two quick presses open one picker', async () => {
   let answer: (value: object) => void = () => {};
   mockPick.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+  // A fast double tap: inside one act() scope, React doesn't re-render the button as busy between the two presses.
   await act(async () => {
-    fireEvent.press(screen.getByText('Import PDF'));
-    fireEvent.press(screen.getByText('Import PDF'));
+    await fireEvent.press(screen.getByText('Import PDF'));
+    await fireEvent.press(screen.getByText('Import PDF'));
   });
   expect(mockPick).toHaveBeenCalledTimes(1);
   await act(async () => answer({ canceled: true, result: null }));

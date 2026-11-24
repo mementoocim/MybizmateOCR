@@ -273,7 +273,7 @@ test('a save in annotation mode sends the scan again, with its labels as now che
   await first.saved.markExported([sale], SALES_DAY);
   expect(await first.exp.pendingTraining()).toEqual([]);
 
-  // later: the sale opened from Saved invoices, a box corrected, and saved again in annotation mode
+  // later: the sale opened from Saved, a box corrected, and saved again in annotation mode
   jest.resetModules();
   const m = load();
   await m.settings.loadSettings();

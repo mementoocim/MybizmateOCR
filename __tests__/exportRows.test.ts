@@ -31,6 +31,7 @@ const SETTINGS: Settings = {
   annotation: false,
   clientCode: '',
   writerCode: '',
+  setupDone: false,
 };
 const DETAILS = { taxType: 'VAT', account: '4010', terms: 'account', atc: '' } as const;
 const OFFSET = { account: '1205' } as const; // a 2307's: its offset account

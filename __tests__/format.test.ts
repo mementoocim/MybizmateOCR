@@ -1,10 +1,57 @@
-import { formatClock, formatMs, monthSpan, peso, prettyDate, qty } from '../lib/format';
+import {
+  amount,
+  formatClock,
+  formatMs,
+  formatSeconds,
+  monthDay,
+  monthSpan,
+  monthYear,
+  peso,
+  prettyDate,
+  qty,
+} from '../lib/format';
+
+test('amount: rows without the peso sign', () => {
+  expect(amount(5810.5)).toBe('5,810.50');
+  expect(amount(12345678.9)).toBe('12,345,678.90');
+  expect(amount(-12.3)).toBe('-12.30');
+  expect(amount(null)).toBe('—');
+});
+
+test('monthDay', () => {
+  expect(monthDay('2026-11-22')).toBe('Nov\u00A022');
+  expect(monthDay('2026-01-05')).toBe('Jan\u00A05');
+  // an empty or malformed date: a dash, as Saved's prettyDate(…) ?? '—' had it
+  for (const date of ['', '2026-11', '2026-13-01', '2026-00-05', '2026-11-xx', '2026-11-00', 'Nov 22, 2026']) {
+    expect([date, monthDay(date)]).toEqual([date, '—']);
+  }
+});
+
+test('a short date keeps its day on its line: a no-break space, never a plain one', () => {
+  // QA pass 4, at 360 dp: a saved scan's subtitle wrapped as "SAVED AS A 2307 · NOV" / "23"
+  expect(monthDay('2026-11-23')).toBe('Nov\u00A023');
+  expect(monthDay('2026-11-23')).not.toContain(' ');
+});
+
+test('monthYear', () => {
+  // Saved's month sections: a date's first 7 characters, the month in full
+  expect(monthYear('2026-11')).toBe('November 2026');
+  expect(monthYear('2026-03')).toBe('March 2026');
+  expect(monthYear('2026-01')).toBe('January 2026');
+  expect(monthYear('2025-12')).toBe('December 2025');
+  expect(monthYear('2026-09-20'.slice(0, 7))).toBe('September 2026');
+  // an empty or malformed one: a dash
+  for (const month of ['', '2026', '2026-13', '2026-00', '2026-1x', 'xxxx-11', 'Nov 202']) {
+    expect([month, monthYear(month)]).toEqual([month, '—']);
+  }
+});
 
 test('pesos, quantities and dates as the test app writes them', () => {
   expect(peso(1575)).toBe('₱1,575.00');
   expect(peso(1234567.5)).toBe('₱1,234,567.50');
   expect(peso(0.5)).toBe('₱0.50');
   expect(peso(null)).toBe('—');
+  expect(peso(-12.3)).toBe('-₱12.30');
   expect(qty(0.5)).toBe('0.5');
   expect(qty(1500)).toBe('1,500');
   expect(qty(1 / 3)).toBe('0.33');
@@ -22,9 +69,25 @@ test('the months a period spans', () => {
 });
 
 test('times under a second in ms, longer ones in seconds', () => {
+  // the team's: the speed test and the Scan screen's stage timings
   expect(formatMs(57)).toBe('57 ms');
   expect(formatMs(1400)).toBe('1.4 s');
   expect(formatMs(12345)).toBe('12.3 s');
+});
+
+test("a read's time in seconds with one decimal, under a second too", () => {
+  // design §9.5: the Scan screen's "FROM THE PDF'S TEXT · 0.7 S" and "Read on this phone in 3.2 s"
+  expect(formatSeconds(214)).toBe('0.2\u00A0s');
+  expect(formatSeconds(700)).toBe('0.7\u00A0s');
+  expect(formatSeconds(3240)).toBe('3.2\u00A0s');
+  expect(formatSeconds(12345)).toBe('12.3\u00A0s');
+  expect(formatSeconds(0)).toBe('0.0\u00A0s');
+});
+
+test("a read's time keeps its unit on its line: a no-break space, never a plain one", () => {
+  // QA pass 2, at 100%: a Service Invoice's subtitle wrapped as "INVOICE NO. 8195852 · READ IN 3.7" / "S"
+  expect(formatSeconds(3700)).toBe('3.7\u00A0s');
+  expect(formatSeconds(3700)).not.toContain(' ');
 });
 
 test('a clock time', () => {

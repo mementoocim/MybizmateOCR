@@ -5,7 +5,8 @@ import { readJson, writeJson } from './jsonFile';
 // a code or a name from the business's chart of accounts, which isn't on the phone: an invoice's revenue or expense
 // account, and the offset account a 2307's withheld tax goes to), and the last withholding tax ATC. And the team's
 // own: whether annotation mode is on (Settings › Team tools, team builds only), and the client and writer codes the
-// last annotated save used, which the next one starts from.
+// last annotated save used, which the next one starts from. And whether Home's "Get set up" was finished once: it
+// never shows again after that (design B §9.2).
 
 export type TaxType = 'VAT' | 'NONVAT' | 'ZERO' | 'EXEMPT' | 'NA';
 export type Settings = {
@@ -17,6 +18,7 @@ export type Settings = {
   annotation: boolean;
   clientCode: string;
   writerCode: string;
+  setupDone: boolean; // "Get set up" was finished once
 };
 
 const FILE = 'settings.json';
@@ -30,6 +32,7 @@ const DEFAULTS: Settings = {
   annotation: false,
   clientCode: '',
   writerCode: '',
+  setupDone: false,
 };
 
 let current: Settings = DEFAULTS; // replaced, never changed in place: screens subscribe to it
@@ -63,8 +66,15 @@ export async function loadSettings(): Promise<void> {
   changed();
 }
 
+/**
+ * Changes the settings and keeps them on the phone. A change that changes nothing (a save's defaults, as a rule) keeps
+ * the same settings and tells no screen, so nothing that shows them draws again (the final review's Important 1).
+ */
 export function updateSettings(change: Partial<Settings>): Promise<void> {
-  current = { ...current, ...change };
-  changed();
+  const keys = Object.keys(change) as (keyof Settings)[];
+  if (keys.some((key) => change[key] !== current[key])) {
+    current = { ...current, ...change };
+    changed();
+  }
   return writeJson(FILE, current);
 }

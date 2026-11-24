@@ -116,7 +116,7 @@ class ScannerModule : Module() {
 
     AsyncFunction("stats") { mapOf("loadMs" to scanner.loadMs, "peakKb" to peakKb()) }
 
-    // The scanner camera (ScannerCameraView.kt): the module's only view.
+    // The scanner camera (ScannerCameraView.kt): the first view, the module's default (requireNativeView('Scanner')).
     View(ScannerCameraView::class) {
       Events("onReady", "onStatus", "onPhoto", "onCameraError")
       Prop("active") { view: ScannerCameraView, active: Boolean -> view.setActive(active) }
@@ -126,6 +126,13 @@ class ScannerModule : Module() {
       OnViewDidUpdateProps { view: ScannerCameraView -> view.applyProps() }
       AsyncFunction("takePhoto") { view: ScannerCameraView -> view.takePhoto() }
       OnViewDestroys { view: ScannerCameraView -> view.release() }
+    }
+
+    // The keyboard's height in a sheet's own window (ImeInsetsView.kt): a second view, which TypeScript finds by this
+    // name (requireNativeView('Scanner', 'ImeInsetsView')) whatever R8 calls the class.
+    View(ImeInsetsView::class) {
+      Name("ImeInsetsView")
+      Events("onImeChange")
     }
 
     // Waits for a scan in flight, then frees the native scanner (ScannerHolder).
@@ -365,7 +372,7 @@ class ScannerModule : Module() {
     0L
   }
 
-  /** Recent scans live in the app's files: keep the newest few folders (Recent scans shows 6), delete the rest. */
+  /** Recent scans live in the app's files: keep the newest few folders (Recent scans shows 20), delete the rest. */
   private fun keepNewest(dir: File, keep: Int) {
     dir.listFiles()
       ?.filter { it.isDirectory }
@@ -375,6 +382,6 @@ class ScannerModule : Module() {
   }
 
   private companion object {
-    const val KEEP_SCANS = 6
+    const val KEEP_SCANS = 20
   }
 }

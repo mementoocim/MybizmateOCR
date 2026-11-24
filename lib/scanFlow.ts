@@ -2,20 +2,31 @@ import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import { Alert } from 'react-native';
 
 import { displayName, readPdf, releaseAccess, scanPhoto, type ScanResult } from '../modules/scanner';
+import { TEAM_BUILD } from './build';
+import { useGoBackOrHome } from './navigation';
 import { SAMPLES, sampleUri } from './samples';
 import { addScan, type ScanSource, type StoredScan } from './scans';
-import { toast } from './toast';
 
 // testImage: a photo from the camera's test hook (development builds), kept marked so it never becomes training data
 type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean; testImage?: boolean };
 
 const codeOf = (e: unknown) => (e as { code?: string } | null)?.code ?? '';
 
-/** The scanner's own failure (closed, or its model didn't load), naming what it was reading, with its message. */
+/** What to do when the scanner itself failed, in plain words. */
+const SCANNER_NEXT = { photo: 'Try again, or retake it.', PDF: 'Try importing it again.' } as const;
+
+/**
+ * The scanner's own failure (closed, or its model didn't load), naming what it was reading, then what to do. Its own
+ * message is raw error text: a team build adds it under the words, as the splash and the camera show theirs, and a
+ * client never sees it (design §12 A11; the final review's Minor 3).
+ */
 function scannerFailed(what: 'photo' | 'PDF', e: unknown): string {
-  return `Couldn't read that ${what}: ${(e as { message?: string } | null)?.message ?? String(e)}`;
+  const words = `Couldn't read that ${what}: ${SCANNER_NEXT[what]}`;
+  const raw = (e as { message?: string } | null)?.message ?? String(e);
+  return TEAM_BUILD && raw !== '' ? `${words}\n\n${raw}` : words;
 }
 
 function photoFailed(e: unknown): string {
@@ -47,6 +58,22 @@ function isPdf(name: string | null, type: string | null): boolean {
   return (name ?? '').toLowerCase().endsWith('.pdf') || mime === PDF_TYPE;
 }
 
+/**
+ * A failure's words as Alert.alert's arguments: the reason as the title, then what to do as the message (ruling
+ * T16-1), since Android stops a dialog's title at two lines with an ellipsis. The words are today's, with plain words
+ * in place of the scanner's own message (scannerFailed), split at the colon after "Couldn't read that photo" (or PDF)
+ * or at the end of the first sentence, whichever comes first. A full stop, "?" or "!" ends a sentence only when a space
+ * and more words follow, so a file's name never splits. Words that don't split are the title alone, with no message,
+ * as one-argument Alert.alert sends them (ruling T16-1a), never a message under an empty title: React Native shows an
+ * empty title on Android as a blank, focusable heading.
+ */
+export function failureDialog(words: string): [title: string, message?: string] {
+  const split = /: |[.?!] (?=\S)/.exec(words);
+  if (!split) return [words];
+  const reasonEnd = split[0] === ': ' ? split.index : split.index + 1; // a sentence keeps its full stop; a colon goes
+  return [words.slice(0, reasonEnd), words.slice(split.index + split[0].length)];
+}
+
 /** The picker's own copy of a file, once it has been read. */
 function deleteCopy(file: File): void {
   try {
@@ -58,13 +85,19 @@ function deleteCopy(file: File): void {
 
 /**
  * Getting a photo or a PDF read: from the camera, the phone's camera app, the gallery, a sample or the file picker,
- * then on to its result. One at a time: while one is being picked or read (busy), another does nothing.
+ * then on to its result. One at a time: while one is being picked or read (busy), another does nothing. While one is
+ * read, readingWhat says what it is (a photo, a sample's too, or a PDF), for the reading card. A failure that stops a
+ * capture is said in a dialog, in plain words (sayWhy): the scanner's own message shows in team builds only. From the
+ * failure until the dialog's OK, or its dismissal, sayingWhy is true: the camera stays off behind it.
  */
 export function useScanFlow() {
   const router = useRouter();
+  const goBackOrHome = useGoBackOrHome();
   const busyRef = useRef(false);
+  const leaving = useRef(false); // set at once, so a second Retake is refused before the screen has gone
   const [busy, setBusy] = useState(false);
-  const [reading, setReading] = useState(false);
+  const [sayingWhy, setSayingWhy] = useState(false);
+  const [readingWhat, setReading] = useState<'photo' | 'pdf' | null>(null);
   // false once the screen is left: a read that ends after that is kept in Recent scans, and nothing opens.
   const focused = useIsFocused();
   const here = useRef(true);
@@ -78,6 +111,18 @@ export function useScanFlow() {
     [],
   );
 
+  /**
+   * A failure that stops a capture, said in a dialog (design B §9.2, the plan's call 16), with Android's one OK. It's
+   * up until that OK, or its dismissal: the camera stays off meanwhile, as Auto would take another photo behind it (the
+   * final review's Minor 5).
+   */
+  function sayWhy(words: string): void {
+    const [title, message] = failureDialog(words);
+    const closed = () => setSayingWhy(false);
+    setSayingWhy(true);
+    Alert.alert(title, message, [{ text: 'OK', onPress: closed }], { onDismiss: closed });
+  }
+
   /** One pick and read; false when another was under way, so this one wasn't started. */
   async function oneAtATime(task: () => Promise<void>): Promise<boolean> {
     if (busyRef.current) return false;
@@ -86,7 +131,7 @@ export function useScanFlow() {
     try {
       await task();
     } finally {
-      setReading(false);
+      setReading(null);
       setBusy(false);
       busyRef.current = false;
     }
@@ -99,8 +144,9 @@ export function useScanFlow() {
     scan: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'testImage'>,
     replace: boolean | undefined,
     failed: (e: unknown) => string,
+    what: 'photo' | 'pdf',
   ): Promise<void> {
-    setReading(true);
+    setReading(what);
     try {
       const result = await read();
       const id = addScan({ ...scan, result });
@@ -109,7 +155,7 @@ export function useScanFlow() {
       if (replace) router.replace(target);
       else router.push(target);
     } catch (e: unknown) {
-      toast(failed(e));
+      sayWhy(failed(e));
     }
   }
 
@@ -121,7 +167,7 @@ export function useScanFlow() {
       try {
         uri = await getUri();
       } catch {
-        toast(openError);
+        sayWhy(openError);
         return;
       }
       if (!uri) return;
@@ -131,6 +177,7 @@ export function useScanFlow() {
         { label, source, sampleId: opts.sampleId, testImage: opts.testImage },
         opts.replace,
         photoFailed,
+        'photo',
       );
     });
   }
@@ -158,7 +205,7 @@ export function useScanFlow() {
       async () => {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
-          toast('The camera app needs the camera permission too. Choose a photo from the gallery instead.');
+          sayWhy('The camera app needs the camera permission too. Choose a photo from the gallery instead.');
           return null;
         }
         const taken = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
@@ -191,11 +238,11 @@ export function useScanFlow() {
         // the name its app gives: a link's own last segment can be an id (Android's Downloads: …/document/msf%3A54)
         const name = await displayName(file.uri).catch(() => null);
         if (!isPdf(name, file.type)) {
-          toast('Choose a PDF file.');
+          sayWhy('Choose a PDF file.');
           return;
         }
         const scan = { label: name ? `PDF: ${name}` : 'PDF', source: 'pdf' } as const;
-        await readAndOpen(() => readPdf(file.uri), scan, opts.replace, pdfFailed);
+        await readAndOpen(() => readPdf(file.uri), scan, opts.replace, pdfFailed, 'pdf');
       } finally {
         // giving up the access is no part of the read: nothing waits for it, and its failure changes nothing
         if (file.uri.startsWith('file://')) deleteCopy(file);
@@ -205,22 +252,47 @@ export function useScanFlow() {
   }
 
   /**
-   * Retake: the same source again (for a PDF, the picker again); back Home after a sample or a scan opened from Recent
-   * scans.
+   * Retake: the same source again (for a PDF, the picker again); back after a sample or a scan opened from Home's
+   * Recent scans or Saved (Home when there's nothing to go back to: useGoBackOrHome). Going back, or to the camera,
+   * leaves the screen at once, and runs once (ruling T25b-2), as the header's Back and the camera's Close do: going
+   * back queues a GO_BACK per call, so a fast double tap would leave the screen under this one too. A picker can run
+   * again once it's done (oneAtATime).
    */
   async function retake(scan: StoredScan, openedFromRecent: boolean): Promise<void> {
-    if (openedFromRecent || scan.source === 'sample') {
-      router.back();
-      return;
-    }
-    if (scan.source === 'camera') {
-      router.replace('/camera');
-      return;
-    }
+    if (openedFromRecent || scan.source === 'sample') return leaveOnce(goBackOrHome);
+    if (scan.source === 'camera') return toCamera();
     if (scan.source === 'camera_app') return fromCameraApp({ replace: true });
     if (scan.source === 'pdf') return fromPdf({ replace: true });
     return fromGallery({ replace: true });
   }
 
-  return { busy, reading, scanUri, fromGallery, fromCameraApp, fromSample, fromPdf, retake };
+  /**
+   * The in-app camera in this screen's place, once (ruling T25b-2): a Retake straight from the camera, and the
+   * not-found layout's Retake for a gallery photo or a PDF (the final review's Minor 2).
+   */
+  function toCamera(): void {
+    leaveOnce(() => router.replace('/camera'));
+  }
+
+  /** Leaves the screen, once: a second tap before it has gone does nothing. */
+  function leaveOnce(leave: () => void): void {
+    if (leaving.current) return;
+    leaving.current = true;
+    leave();
+  }
+
+  const reading = readingWhat !== null;
+  return {
+    busy,
+    sayingWhy,
+    reading,
+    readingWhat,
+    scanUri,
+    fromGallery,
+    fromCameraApp,
+    fromSample,
+    fromPdf,
+    retake,
+    toCamera,
+  };
 }
