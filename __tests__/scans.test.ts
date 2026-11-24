@@ -263,22 +263,61 @@ test("a queued photo's scan keeps the time the photo was taken, not the time it 
 
 test('scansWritten waits until recent.json holds the scan just added', async () => {
   const { addScan, scansWritten, updateScan } = require('../lib/scans');
-  await scansWritten(); // nothing written yet
+  await expect(scansWritten()).resolves.toBe(true); // nothing to write yet
   const a = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a'), session: SESSION });
   const b = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/b'), session: SESSION });
   expect(recentIds()).toEqual([]); // still being written
-  await scansWritten();
+  await expect(scansWritten()).resolves.toBe(true);
   expect(recentIds()).toEqual([b, a]);
 
-  // a write that fails: it resolves all the same, and the next change is written
+  // a write that fails: it says so (ruling T2-2), so the queue keeps the photo; the next change is written
   const { File } = require('expo-file-system'); // the one lib/jsonFile uses until the next reset
   jest.spyOn(File.prototype, 'write').mockRejectedValueOnce(new Error('No space left on device'));
   const c = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/c'), session: SESSION });
-  await expect(scansWritten()).resolves.toBeUndefined();
+  await expect(scansWritten()).resolves.toBe(false);
   expect(recentIds()).toEqual([b, a]);
   updateScan(c, { kind: 'purchase' });
-  await scansWritten();
+  await expect(scansWritten()).resolves.toBe(true); // the latest write holds every change so far, c's too
   expect(recentIds()).toEqual([c, b, a]);
+});
+
+test('a scan given a time that is no time is kept as of now; recent.json is still written (ruling T2-1)', async () => {
+  const { addScan, getScan, scansWritten, updateScan } = require('../lib/scans');
+  const before = Date.now();
+  const bad = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a'), session: SESSION, at: new Date(NaN) });
+  const { at } = getScan(bad);
+  expect(at.getTime()).toBeGreaterThanOrEqual(before);
+  expect(at.getTime()).toBeLessThanOrEqual(Date.now());
+  await expect(scansWritten()).resolves.toBe(true);
+  // and every later change is written too
+  const next = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/b'), session: SESSION });
+  updateScan(bad, { kind: 'purchase' });
+  await expect(scansWritten()).resolves.toBe(true);
+  expect(recentIds()).toEqual([next, bad]);
+  expect(JSON.parse(memoryFs.files.get(RECENT) as string)[1].at).toBe(at.toISOString());
+});
+
+test('recent.json is read once: a start run again keeps the scans in memory, which can be ahead of it (ruling P-F1)', async () => {
+  // recent.json as the last run left it
+  const old = { id: 'old-5', label: 'Camera photo', source: 'camera', at: '2026-11-20T01:00:00.000Z', result: result('/s/old') };
+  memoryFs.files.set(RECENT, JSON.stringify([old]));
+  memoryFs.dirs.add('file:///s/old');
+  const s = require('../lib/scans');
+  await s.loadRecent(); // the start
+  const id = s.addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a'), session: SESSION }); // the queue's
+  expect(recentIds()).toEqual(['old-5']); // its write is still under way
+  // a font-size or display-size change runs the start again, in the same JS context (the plan's call 24)
+  await s.loadRecent();
+  expect(s.recentScans().map((scan: { id: string }) => scan.id)).toEqual([id, 'old-5']);
+  await expect(s.scansWritten()).resolves.toBe(true);
+  expect(recentIds()).toEqual([id, 'old-5']);
+
+  // the next start reads it
+  memoryFs.dirs.add('file:///s/a');
+  jest.resetModules();
+  const next = require('../lib/scans');
+  await next.loadRecent();
+  expect(next.recentScans().map((scan: { id: string }) => scan.id)).toEqual([id, 'old-5']);
 });
 
 test('deleting an unsaved scan forgets it and its folder; a saved one is refused', async () => {

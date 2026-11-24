@@ -1,4 +1,4 @@
-import { failureDialog } from '../lib/scanFlow';
+import { failureDialog } from '../lib/readFailures';
 
 // Ruling T16-1: a failure that stops a capture shows in a dialog with today's words, split in two. The reason is the
 // title, and what to do is the message, since Android stops a dialog's title at two lines with an ellipsis. Ruling

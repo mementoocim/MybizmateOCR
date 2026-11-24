@@ -2,15 +2,27 @@ import { router } from 'expo-router';
 import { act, renderRouter, screen } from 'expo-router/testing-library';
 import { type StyleProp, StyleSheet, Text, type ViewStyle } from 'react-native';
 
+import { setStarted, useStarted } from '../lib/startup';
 import { colors } from '../lib/theme';
 
 // The root layout (app/_layout): one native Stack, anchored on Home (ruling T24-1). A link opened cold
 // (mybizmatescan://camera?test=…, mybizmatescan://speed, or any other route) has Home under it, so the screen's Back,
 // or the camera's Close, has somewhere to go. No screen shows the Stack's own header, since each draws its Header, and
-// each sits on paper, the camera on black. The app's routes stand in as their names: their own tests cover them.
+// each sits on paper, the camera on black. The app's routes stand in as their names: their own tests cover them. Once
+// its splash has gone, the app is started (the camera may start) and the queue reads what a closed app left.
+
+const mockResume = jest.fn(async () => {});
+let mockEndSplash: () => void = () => {};
 
 jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(async () => {}) }));
-jest.mock('../components/BrandSplash', () => ({ BrandSplash: () => null })); // the scanner's start (splash.test)
+// the scanner's start (splash.test): it ends when a test says so, calling onReady as the real one does once it's ready
+jest.mock('../components/BrandSplash', () => ({
+  BrandSplash: ({ onReady }: { onReady: () => void }) => {
+    mockEndSplash = onReady;
+    return null;
+  },
+}));
+jest.mock('../lib/captureQueue', () => ({ resumeQueue: () => mockResume() })); // its reads (captureQueue.test)
 
 const named = (name: string) =>
   function Route() {
@@ -88,4 +100,20 @@ test("no screen shows the Stack's own header; each sits on paper, the camera on 
   // the Stack's options hold for every route, so a screen added later needs no line in the layout
   await act(() => router.push('/later'));
   expect(stackScreen('A screen added later')).toMatchObject({ header: { hidden: true }, background: colors.paper });
+});
+
+test('once the splash has gone, the app is started and the queue resumes', async () => {
+  function Started() {
+    return <Text>{useStarted() ? 'Started' : 'Not started'}</Text>;
+  }
+  // as the root before this one left it: a new font size or display size mounts the root anew in the same JS context
+  setStarted(true);
+  mockResume.mockClear();
+  await renderRouter({ ...ROUTES, index: Started }, { initialUrl: '/' });
+  expect(screen.getByText('Not started')).toBeOnTheScreen(); // its splash is up: nothing starts behind it
+  expect(mockResume).not.toHaveBeenCalled();
+
+  await act(async () => mockEndSplash());
+  expect(screen.getByText('Started')).toBeOnTheScreen();
+  expect(mockResume).toHaveBeenCalledTimes(1);
 });
