@@ -96,10 +96,17 @@ export function statusOf(m: Member, state: ScanState | null): Status {
   }
 }
 
-/** What's in a session, by status. A member with no status (none computed yet) counts nowhere. */
+/** Samples are made up: they count nowhere (call 9). */
+const isSample = (m: Member) => m.scan?.source === 'sample';
+
+/**
+ * What's in a session, by status. A sample counts nowhere (call 9, ruling T4-1): it can never be saved, so its badge
+ * would never go. Nor does a member with no status (none computed yet).
+ */
 export function tallyOf(s: Session, statuses: ReadonlyMap<string, Status>): Tally {
   const t: Tally = { ready: 0, toCheck: 0, retake: 0, saved: 0, exported: 0 };
   for (const m of s.members) {
+    if (isSample(m)) continue;
     const status = statuses.get(m.id);
     if (status === 'ready') t.ready++;
     else if (status === 'to_check') t.toCheck++;
@@ -195,9 +202,6 @@ export function nextToCheck(s: Session, statuses: ReadonlyMap<string, Status>, e
   return s.members.find((m) => m.id !== except && toCheck(statuses.get(m.id)))?.id ?? null;
 }
 
-/** Samples are made up: they count nowhere (call 9). */
-const isSample = (m: Member) => m.scan?.source === 'sample';
-
 /** Home's counts (§6.5, call 9): the unsaved scans whose form was found, and the ones to retake; no samples. */
 export function homeCounts(
   sessions: readonly Session[],
@@ -284,8 +288,8 @@ export function trayOf(
 }
 
 /**
- * What Sessions' search looks in (matchesScan): the party shown, else the label; the invoice's number; and the TIN, an
- * invoice's box, else its list party's, or a 2307's payor's. A summary alone has its party and its row's number, and
+ * What Sessions' search looks in (matchesScan): the party shown, else the label; the invoice's number; and the TIN: a
+ * sale's box, else its list party's; a purchase's chosen supplier's; a 2307's payor's. A summary alone has its party and its row's number, and
  * no TIN: the stored formats don't keep one (call 12).
  */
 export function scanFields(m: Member, theLists: Lists, theSettings: Settings): { name: string; number: string; tin: string } {
@@ -293,10 +297,12 @@ export function scanFields(m: Member, theLists: Lists, theSettings: Settings): {
   if (scan && isInvoice(scan)) {
     const sale = saleOf(scan, theLists, theSettings);
     const named = sale.party.status !== 'missing' && sale.party.shown !== '';
+    const listTin = sale.party.listParty?.tin ?? '';
     return {
       name: named ? sale.party.shown : labelOf(m),
       number: sale.final.invoice_no,
-      tin: (boxValue(scan, 'customer_tin') ?? '').trim() || (sale.party.listParty?.tin ?? ''),
+      // a purchase's customer_tin box is the buyer's, the person's own business: only its supplier's (ruling T4-2)
+      tin: scan.kind === 'purchase' ? listTin : (boxValue(scan, 'customer_tin') ?? '').trim() || listTin,
     };
   }
   if (scan && is2307(scan)) {

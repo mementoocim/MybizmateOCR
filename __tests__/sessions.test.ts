@@ -318,6 +318,20 @@ test('badges: at most two, from N to check, N retake, All saved and Exported', (
       ]),
     ),
   ).toEqual({ ...NONE, ready: 1, retake: 1, exported: 1 });
+
+  // samples count nowhere (call 9, ruling T4-1): a sample's session has no badges and no card line
+  const passing = scanOf('inv_0007', { source: 'sample', label: 'Sample 0007', at: at(24, 9, 4) });
+  const blankSample = scanOf('blank_page', { source: 'sample', label: 'Sample 0000', at: at(24, 9, 5) });
+  const sampleStatuses = statuses([
+    [passing, 'ready'],
+    [blankSample, 'retake'],
+  ]);
+  for (const sample of [passing, blankSample]) {
+    const own = sessionsOf(membersOf([sample], []))[0];
+    expect(tallyOf(own, sampleStatuses)).toEqual(NONE);
+    expect(sessionBadges(tallyOf(own, sampleStatuses))).toEqual([]);
+    expect(cardLine(tallyOf(own, sampleStatuses), 0)).toBe('');
+  }
 });
 
 test("the card's line: 1 ready · 1 to check · 1 to retake, failed reads among the retakes; All saved.", () => {
@@ -327,6 +341,7 @@ test("the card's line: 1 ready · 1 to check · 1 to retake, failed reads among 
   expect(cardLine({ ...NONE, saved: 2 }, 0)).toBe('All saved.');
   expect(cardLine({ ...NONE, saved: 1, exported: 1 }, 0)).toBe('All saved.');
   expect(cardLine({ ...NONE, saved: 1 }, 1)).toBe('1 to retake'); // a failed read is left too
+  expect(cardLine(NONE, 0)).toBe(''); // nothing at all: no line
 });
 
 test('the next to check: the first unsaved scan whose form was found, past a retake and the one open', () => {
@@ -454,6 +469,21 @@ test("a scan's fields for search: its party, its number and its TIN", async () =
     number: '0007655',
     tin: '111222333',
   });
+  // a purchase: its customer_tin box is the buyer's, the person's own business, so only the chosen supplier's TIN
+  // counts (ruling T4-2); with none chosen, its name is its label, not "Not chosen yet"
+  const supplierLists: Lists = {
+    ...lists(),
+    parties: [party({ id: 's1', type: 'supplier', registeredName: 'Some Supplier', tin: '999888777' })],
+  };
+  const bought = scanOf('inv_0007', { change: { kind: 'purchase', party: { listId: 's1' } } });
+  expect(scanFields(member(bought), supplierLists, settings())).toEqual({
+    name: 'Some Supplier',
+    number: '0007655',
+    tin: '999888777',
+  });
+  const unchosen = scanOf('inv_0007', { change: { kind: 'purchase' } });
+  expect(saleOf(unchosen, lists(), settings()).party.shown).toBe('Not chosen yet');
+  expect(scanFields(member(unchosen), lists(), settings())).toEqual({ name: 'Camera photo', number: '0007655', tin: '' });
   const cert = scanOf('bir2307_text_0', { source: 'pdf', label: 'PDF: bir2307_text_0.pdf' });
   expect(scanFields(member(cert), lists(), settings())).toEqual({
     name: 'Reyes Sari-Sari Store',
