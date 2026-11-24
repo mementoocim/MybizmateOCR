@@ -7,10 +7,11 @@ import { Check, ChevronRight } from './icons';
 import { Tap } from './Tap';
 
 // Design B §5.6: a row of a list (Home's recent scans and exports, Saved, Your lists, the pickers, Settings). What
-// leads (a sample's thumbnail), a title and a sub-line, then on the right an amount with a badge under it, then a
-// chevron, or a check when the row's step is done. A white row on a hairline. Pressable or not, it's one stop for
-// TalkBack: its label says the title, the sub-line, the amount and the badge (§7). Its ref is the row's own view (the
-// pressable, when it has a press): a sheet the row opens gives TalkBack focus back to it.
+// leads (a sample's thumbnail), a title and a sub-line, then on the right an amount with a badge under it (or several,
+// side by side: Sessions' rows), then a chevron, or a check when the row's step is done. A white row on a hairline.
+// Pressable or not, it's one stop for TalkBack: its label says the title, the sub-line, the amount and the badges
+// (§7). Its ref is the row's own view (the pressable, when it has a press): a sheet the row opens gives TalkBack focus
+// back to it.
 
 export function ListRow({
   title,
@@ -20,6 +21,7 @@ export function ListRow({
   leading,
   amount,
   badge,
+  badges = [],
   chevron = false,
   checked,
   onPress,
@@ -35,6 +37,7 @@ export function ListRow({
   leading?: ReactNode; // a sample's thumbnail, a check
   amount?: string | null;
   badge?: BadgeSpec | null; // under the amount
+  badges?: readonly BadgeSpec[]; // several (Sessions' rows), side by side under the amount, after `badge`
   chevron?: boolean;
   checked?: boolean; // a step: done shows a check in place of the chevron
   onPress?: () => void;
@@ -43,7 +46,8 @@ export function ListRow({
   testID?: string;
   ref?: Ref<ViewInstance>; // the row's own view (a sheet's returnFocus)
 }) {
-  const label = [title, sub, amount, badge?.label].filter(Boolean).join(', ');
+  const shown = [...(badge ? [badge] : []), ...badges];
+  const label = [title, sub, amount, ...shown.map((b) => b.label)].filter(Boolean).join(', ');
   const a11y = {
     accessibilityLabel: label,
     accessibilityHint,
@@ -60,13 +64,19 @@ export function ListRow({
           <Text style={[subMono ? type.figureSmall : type.label, styles.sub, subCaps && styles.caps]}>{sub}</Text>
         ) : null}
       </View>
-      {amount || badge ? (
+      {amount || shown.length > 0 ? (
         <View style={styles.trailing}>
           {amount ? <Text style={[type.figure, styles.amount]}>{amount}</Text> : null}
-          {badge ? (
-            // in the row's label, so not a stop of its own
-            <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-              <Badge {...badge} />
+          {shown.length > 0 ? (
+            // in the row's label, so not a stop of its own; several sit side by side, and wrap when there's no room
+            <View
+              testID="row-badges"
+              importantForAccessibility="no-hide-descendants"
+              accessibilityElementsHidden
+              style={styles.badges}>
+              {shown.map((b) => (
+                <Badge key={b.label} {...b} />
+              ))}
             </View>
           ) : null}
         </View>
@@ -119,4 +129,5 @@ const styles = StyleSheet.create({
   // Its own width up to half the row, so a long title keeps room; past that, the amount and the badge wrap.
   trailing: { alignItems: 'flex-end', gap: space.xs, flexShrink: 1, maxWidth: '50%' },
   amount: { color: colors.ink, textAlign: 'right' },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: space.xs },
 });

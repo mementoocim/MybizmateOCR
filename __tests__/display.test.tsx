@@ -199,6 +199,46 @@ test('ListRow: what leads, the amount with its badge under it, then a chevron, o
   expect(sample.children[0]).toBe(screen.getByTestId('thumbnail'));
 });
 
+test("ListRow's badges sit side by side, each in its spoken label", async () => {
+  // Sessions' rows (spec §6.6): a session's two badges, in a wrapping row on the right, each part of the row's label
+  await render(
+    <ListRow
+      title="9:41 AM · 3 invoices"
+      badges={[
+        { label: '2 to check', tone: 'warning' },
+        { label: '1 retake', tone: 'warning' },
+      ]}
+      chevron
+      onPress={noop}
+    />,
+  );
+  const row = screen.getByRole('button', { name: '9:41 AM · 3 invoices, 2 to check, 1 retake' });
+  const toCheck = screen.getByText('2 to check', { includeHiddenElements: true });
+  const retake = screen.getByText('1 retake', { includeHiddenElements: true });
+  expect(toCheck).toHaveStyle({ color: colors.warning });
+  expect(hiddenFromTalkBack(toCheck)).toBe(true);
+  expect(hiddenFromTalkBack(retake)).toBe(true);
+  expect(hiddenFromTalkBack(row)).toBe(false);
+  // one row, side by side, wrapping when the row has no room, at the right
+  const [badgeRow] = row.queryAll((n) => n.props.testID === 'row-badges');
+  expect(badgeRow).toHaveStyle({ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: space.xs });
+  expect(badgeRow.queryAll((n) => n.type === 'Text').map((n) => n.props.children)).toEqual(['2 to check', '1 retake']);
+  expect(iconsIn(row, colors.chevron)).toHaveLength(1);
+
+  // with an amount, under it; none at all, nothing drawn; and `badge` still works beside them
+  await render(
+    <>
+      <ListRow title="Store A" amount="100.00" badges={[{ label: 'Saved', tone: 'success' }]} onPress={noop} />
+      <ListRow title="Store B" badges={[]} onPress={noop} />
+      <ListRow title="Store C" badge={{ label: 'Exported', tone: 'neutral' }} onPress={noop} />
+    </>,
+  );
+  expect(screen.getByRole('button', { name: 'Store A, 100.00, Saved' })).toBeOnTheScreen();
+  const none = screen.getByRole('button', { name: 'Store B' });
+  expect(none.queryAll((n) => n.props.testID === 'row-badges')).toHaveLength(0);
+  expect(screen.getByRole('button', { name: 'Store C, Exported' })).toBeOnTheScreen();
+});
+
 test('a flagged LedgerRow: bar, Check badge, reason, and its spoken label', async () => {
   const onPress = jest.fn();
   const reason = 'Could also be read as Oct 28, 2026. Check the date.';
