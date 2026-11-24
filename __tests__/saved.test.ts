@@ -67,6 +67,21 @@ test("saving moves the scan's folder out of scans/ and rewrites its files' URIs"
   expect(m.scans.getScan(id)!.saved).toMatchObject({ details: DETAILS });
 });
 
+test("a scan whose folder isn't one of the scanner's numbered folders is saved where it is: nothing moves (ruling T2-3)", async () => {
+  const m = load();
+  const { Directory } = require('expo-file-system'); // the one lib/saved uses until the next reset
+  const move = jest.spyOn(Directory.prototype, 'move');
+  // on the phone, a "." or ".." (or "%2e%2e") in a folder's URI resolves to files/scans/ itself, or the files above it
+  for (const dir of ['..', '.', '%2e%2e'].map((name) => `file:///docs/scans/${name}`)) {
+    const id = cameraScan(m, dir);
+    await m.saved.saveScan(id, DETAILS); // as a scan that kept no files is
+    expect(m.scans.getScan(id)!.result.scanDir).toBe(dir);
+    expect(m.saved.savedSummary(id)).toBeDefined();
+  }
+  expect(move).not.toHaveBeenCalled();
+  jest.restoreAllMocks();
+});
+
 test('the summary', async () => {
   const m = load();
   await m.lists.importPartiesCsv(PARTIES, 'customer');

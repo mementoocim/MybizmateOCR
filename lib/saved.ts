@@ -15,6 +15,7 @@ import {
   type KeptResult,
   type Kind,
   type SaveDetails,
+  scannerFolder,
   type SourceTag,
   type StoredScan,
   updateScan,
@@ -150,9 +151,8 @@ export function marksOf(scan: Pick<StoredScan, 'edits' | 'confirmed'>): string {
 /** Moves a scan's folder out of the scanner's scans/ to saved/<id>/, and points every file of its result there. */
 async function moveToSaved(scan: StoredScan): Promise<ScanResult> {
   const r = scan.result;
-  if (!r.scanDir) return r;
-  const from = trimSlash(r.scanDir);
-  if (!/\/scans\/[^/]+$/.test(from)) return r; // already saved (or not a folder the scanner cleans up)
+  const from = scannerFolder(r);
+  if (from === null) return r; // already saved, kept no files, or not a folder the scanner made (lib/scans)
   const root = new Directory(Paths.document, 'saved');
   if (!root.exists) root.create({ intermediates: true });
   const folder = new Directory(from);

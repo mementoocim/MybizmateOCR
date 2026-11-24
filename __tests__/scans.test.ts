@@ -332,3 +332,30 @@ test('deleting an unsaved scan forgets it and its folder; a saved one is refused
   await scansWritten();
   expect(recentIds()).toEqual([kept]);
 });
+
+test("only the scanner's own numbered folder is ever deleted, never one a dot segment resolves above it (ruling T2-3)", async () => {
+  const { addScan, deleteScan, getScan, scansWritten } = require('../lib/scans');
+  const { Directory } = require('expo-file-system'); // the one lib/scans uses until the next reset
+  // On the phone, expo-file-system resolves ".", ".." and "%2e%2e" in a folder's URI: files/scans/ itself, or the
+  // app's whole files folder, which exist. This file system doesn't, so each folder exists here.
+  jest.spyOn(Directory.prototype, 'exists', 'get').mockReturnValue(true);
+  const del = jest.spyOn(Directory.prototype, 'delete');
+  const dirs = [
+    ...['..', '.', '%2e%2e', '%2E.', '1/2'].map((name) => `file:///docs/scans/${name}`),
+    'file:///s/scans/1795000000004', // numbered, but not in the app's files/scans/
+  ];
+  for (const dir of dirs) {
+    const id = addScan({ label: 'Camera photo', source: 'camera', result: result(dir) });
+    deleteScan(id);
+    expect(getScan(id)).toBeUndefined(); // forgotten all the same
+  }
+  expect(del).not.toHaveBeenCalled();
+
+  // the scanner's own folder, named by its time in ms, is
+  const id = addScan({ label: 'Camera photo', source: 'camera', result: result('file:///docs/scans/1795000000003') });
+  deleteScan(id);
+  expect(del).toHaveBeenCalledTimes(1);
+  expect(del.mock.contexts[0]).toMatchObject({ uri: 'file:///docs/scans/1795000000003/' });
+  await scansWritten();
+  jest.restoreAllMocks();
+});

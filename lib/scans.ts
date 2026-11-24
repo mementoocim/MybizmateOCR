@@ -224,15 +224,17 @@ export function forgetScan(id: string): void {
 }
 
 /**
- * The folder the scanner wrote a scan's files to, files/scans/<ms>/ (ScannerModule's scan and readPdf, which keep only
- * the newest KEEP), as the result's scanDir gives it; null when it kept no files, or when they're anywhere else.
+ * The scan's folder of files, as the result's scanDir gives it with no trailing slash, when it's one the scanner made:
+ * files/scans/<ms>, named by the time in ms (ScannerModule's scan and readPdf, which keep only the newest KEEP). Null
+ * when it kept no files, or for any other folder: saved/<id>, or a name that isn't all digits. A name such as "." or
+ * ".." (or "%2e%2e") would resolve to files/scans/ itself or the folder above it (ruling T2-3). deleteScan deletes only
+ * this folder, and saveScan moves only this one (lib/saved).
  */
-function scannerFolder(r: ScanResult): Directory | null {
-  if (!r.scanDir) return null;
-  const scans = new Directory(Paths.document, 'scans').uri.replace(/\/+$/, '');
-  const dir = r.scanDir.replace(/\/+$/, '');
-  const name = dir.startsWith(`${scans}/`) ? dir.slice(scans.length + 1) : '';
-  return name !== '' && !name.includes('/') ? new Directory(dir) : null;
+export function scannerFolder(r: Pick<ScanResult, 'scanDir'>): string | null {
+  const dir = (r.scanDir ?? '').replace(/\/+$/, '');
+  if (!/\/scans\/\d+$/.test(dir)) return null;
+  const root = new Directory(Paths.document, 'scans').uri.replace(/\/+$/, '');
+  return dir.slice(0, dir.lastIndexOf('/')) === root ? dir : null;
 }
 
 /**
@@ -245,7 +247,10 @@ export function deleteScan(id: string): void {
   if (!scan) return;
   if (scan.saved) throw new Error('saved');
   const folder = scannerFolder(scan.result);
-  if (folder?.exists) folder.delete();
+  if (folder !== null) {
+    const dir = new Directory(folder);
+    if (dir.exists) dir.delete();
+  }
   forgetScan(id);
 }
 
