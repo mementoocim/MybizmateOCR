@@ -1,5 +1,5 @@
 import type { ListItem } from '../lib/lists';
-import { fold, matchesItem, matchesParty } from '../lib/search';
+import { fold, matchesItem, matchesParty, matchesScan } from '../lib/search';
 import { party } from '../test-utils/packLists';
 
 // Design B §9.5: a search over the person's lists (the party pickers, and Your lists) ignores case and accents, so
@@ -100,4 +100,20 @@ test('items match by name', () => {
   expect(matchesItem(coffee, 'pack')).toBe(false); // by its name, not its unit
   expect(matchesItem(coffee, 'tea')).toBe(false);
   expect(matchesItem(coffee, '')).toBe(true);
+});
+
+test("a scan is found by its party, its number, or its TIN's digits", () => {
+  // Sessions' search (spec §6.6): a scan's fields as scanFields gives them, matched as a party is
+  const scan = { name: 'Peña Hardware', number: '0007655', tin: '223-344-556' };
+  for (const query of ['pena', 'PEÑA hard', '0007655', '7655', '223344556', '223-344-556', '344 556', '', '  ']) {
+    expect([query, matchesScan(scan, query)]).toEqual([query, true]);
+  }
+  for (const query of ['santos', 'SI 0007655', '999', 'C0']) {
+    expect([query, matchesScan(scan, query)]).toEqual([query, false]);
+  }
+  // a summary alone has no TIN: its digits find it by its number only
+  const alone = { name: 'Cruz Trading', number: '0000888', tin: '' };
+  expect(matchesScan(alone, '888')).toBe(true);
+  expect(matchesScan(alone, '223')).toBe(false);
+  expect(matchesScan({ name: 'Cruz Trading', number: '', tin: '' }, '0')).toBe(false);
 });

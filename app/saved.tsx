@@ -15,11 +15,12 @@ import { SectionHeader } from '../components/SectionHeader';
 import { useLingering } from '../components/Sheet';
 import { confirmDeleteSaved } from '../lib/confirmDelete';
 import { waitingOf } from '../lib/exportFile';
-import { amount, monthDay, monthYear } from '../lib/format';
+import { amount, monthYear } from '../lib/format';
 import { lists, newParties, subscribeLists } from '../lib/lists';
 import { usePushOnce } from '../lib/navigation';
 import { openSaved, type SavedSummary, savedList, subscribeSaved } from '../lib/saved';
 import type { Kind } from '../lib/scans';
+import { savedSub } from '../lib/sessions';
 import { space } from '../lib/theme';
 import { toast } from '../lib/toast';
 
@@ -147,7 +148,7 @@ export default function SavedScreen() {
           renderItem={({ item }) => (
             <ListRow
               title={item.partyName || item.label}
-              sub={subOf(item)}
+              sub={savedSub(item)}
               subMono
               subCaps
               amount={amount(item.kind === '2307' ? item.tax : item.gross)}
@@ -187,17 +188,6 @@ function byMonth(list: readonly SavedSummary[]): Month[] {
     else months.push({ month, key: month, data: [s] });
   }
   return months;
-}
-
-/**
- * A row's sub-line, in caps by its style: an invoice's kind, date and number ("Sale · Nov 22 · SI 5184138",
- * "Purchase · Nov 18 · Inv 0007", or without the number when it has none); a 2307's quarter ("2307 · Q1 2026").
- */
-function subOf(s: SavedSummary): string {
-  if (s.kind === '2307') return `2307 · ${s.period}`;
-  const sale = s.kind === 'sale';
-  const no = s.row[sale ? 'SI/OR No.' : 'Inv No.'];
-  return `${sale ? 'Sale' : 'Purchase'} · ${monthDay(s.date)}${no ? ` · ${sale ? 'SI' : 'Inv'} ${no}` : ''}`;
 }
 
 const styles = StyleSheet.create({

@@ -41,16 +41,26 @@ const TIN_TYPED = /^[\d\s-]+$/;
  * TIN, by the digits.
  */
 export function matchesParty(p: Party, query: string): boolean {
+  return found([partyName(p), p.tradeName, p.code], p.tin, query);
+}
+
+/** Whether what's typed is in one of the words, folded; or, typed as a TIN, in the TIN, by the digits. */
+function found(words: readonly string[], tin: string, query: string): boolean {
   const text = fold(query);
   if (text === '') return true;
   const digits = TIN_TYPED.test(text) ? digitsOf(text) : '';
-  return (
-    [partyName(p), p.tradeName, p.code].some((words) => fold(words).includes(text)) ||
-    (digits !== '' && digitsOf(p.tin).includes(digits))
-  );
+  return words.some((w) => fold(w).includes(text)) || (digits !== '' && digitsOf(tin).includes(digits));
 }
 
 /** Whether an item is found by what's typed: its name contains it, folded. */
 export function matchesItem(i: ListItem, query: string): boolean {
   return fold(i.name).includes(fold(query));
+}
+
+/**
+ * Whether what's typed finds a scan (Sessions' search, spec §6.6), as a party is found: in its party's name or its
+ * number, folded; or, when it's typed as a TIN, in its TIN, by the digits. fields: lib/sessions' scanFields.
+ */
+export function matchesScan(fields: { name: string; number: string; tin: string }, query: string): boolean {
+  return found([fields.name, fields.number], fields.tin, query);
 }
