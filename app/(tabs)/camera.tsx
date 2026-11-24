@@ -2,21 +2,37 @@ import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, type ButtonProps } from '../../components/Buttons';
 import { IconButton } from '../../components/IconButton';
-import { Camera, Flashlight, FlashlightOff, ImageIcon } from '../../components/icons';
-import { ReadingOverlay } from '../../components/ReadingOverlay';
-import { useTabBarSpace } from '../../components/Screen';
+import { Camera, Flashlight, FlashlightOff } from '../../components/icons';
+import { SessionTray } from '../../components/SessionTray';
 import { Tap } from '../../components/Tap';
 import { TEAM_BUILD } from '../../lib/build';
 import { CAMERA_ERRORS, CAMERA_TEXT, PERMISSION_TEXT, statusText } from '../../lib/cameraCopy';
+import {
+  captures,
+  holdReads,
+  pendingIn,
+  queuePdf,
+  queuePhoto,
+  READ_WHILE_SHOOTING,
+  subscribeQueue,
+  whenRead,
+} from '../../lib/captureQueue';
 import { confirmHaptic } from '../../lib/haptics';
+import { useOpenOnce } from '../../lib/navigation';
+import { cameraAppPhoto, pickPdf, pickPhoto } from '../../lib/pickers';
+import { useSayWhy } from '../../lib/readFailures';
 import { sampleUri } from '../../lib/samples';
-import { useScanFlow } from '../../lib/scanFlow';
+import { recentScans, subscribeRecent } from '../../lib/scans';
+import { closeIdleSession, currentSession, endSession, subscribeSession, takeCapture } from '../../lib/session';
+import { trayOf } from '../../lib/sessions';
+import { setShutter } from '../../lib/shutter';
+import { useStarted } from '../../lib/startup';
 import { colors, radius, space, touch, type } from '../../lib/theme';
 import {
   type CameraErrorCode,
@@ -26,14 +42,20 @@ import {
   type ScannerCameraRef,
 } from '../../modules/scanner';
 
-// Design B §9.3, on the test app's layout (activity_camera.xml and CameraActivity.java). The live picture, its form's
-// outline, auto-capture and the checks are the native view's. Over the picture's top band, with no title (the pill
-// names the form once it's found): the Auto switch and the flashlight switch. No Close: the camera is a tab (camera
-// first, call 8), and Back leaves the app. At its foot, the status pill. Under
-// it, the gallery (an icon over its label) and the shutter, which waits while the camera starts or takes the photo. A
-// problem (no permission, no camera, a camera that won't start) shows a panel in the picture's place, and the gallery
-// stays. A photo Auto took gets one confirm haptic (§5.5), then the reading card. The status bar's icons are light,
-// and dark while the reading card's light wash covers the screen (§8).
+// Design B §9.3, on the test app's layout (activity_camera.xml and CameraActivity.java), and camera first (spec §6.3,
+// the plan's calls 6 to 8). The live picture, its form's outline, auto-capture and the checks are the native view's.
+// Over the picture's top band, with no title (the pill names the form once it's found): the Auto switch and the
+// flashlight switch. No Close: the camera is a tab, and Back leaves the app. Under the picture, the session's tray
+// (components/SessionTray): the gallery, the session's thumbnails and Done · N, and the PDF import; the status pill is
+// in its middle until the session has a photo, then at the picture's foot. The tabs' raised middle button is the
+// shutter (lib/shutter), which waits while the camera starts or takes the photo.
+//
+// The camera keeps shooting: every capture (Auto, the shutter, the gallery, the camera app, a PDF) joins the open
+// session (lib/session's takeCapture) and goes to the queue (lib/captureQueue), which reads while the camera stays live.
+// A read never opens a dialog: a failed one is a "!" in the tray. Done ends the session, waits for its reads, then opens
+// the session screen, or a lone scan's Scan screen. A problem (no permission, no camera, a camera that won't start)
+// shows a panel in the picture's place, and the tray stays. A photo Auto took gets one confirm haptic (§5.5). The status
+// bar's icons are light. Nothing starts, and no permission is asked for, until the splash has gone (call 8).
 
 type Permission = 'checking' | 'granted' | 'ask' | 'settings'; // ask: refused, may ask again; settings: refused for good
 type Status = { status: CameraStatus | 'starting'; form: FormName | null };
@@ -43,10 +65,11 @@ type Panel = 'ask' | 'settings' | Problem['code'];
 const STARTING: Status = { status: 'starting', form: null };
 const ERROR_MS = 3000; // how long a capture error stays in the pill
 const DOT = 8; // dp: the Auto switch's dot
-const RING = 3; // dp: the shutter's brand ring
-const DISC = touch.shutter - 2 * (RING + space.xs); // the shutter's white disc, a little inside its ring
 const SLOP = (touch.target - touch.chip) / 2; // the Auto pill's hitSlop, above and below, to a 48 dp target
 const CAMERA_APP = "Use the phone's camera app instead";
+const PHOTO_ERROR = "Couldn't open that photo.";
+const PDF_ERROR = "Couldn't open that PDF.";
+const NO_PERMISSION = 'The camera app needs the camera permission too. Choose a photo from the gallery instead.';
 
 const TITLE: Record<Panel, string> = {
   ask: CAMERA_TEXT.allowTitle,
@@ -59,15 +82,31 @@ function toPermission(p: ImagePicker.CameraPermissionResponse): Permission {
   return p.granted ? 'granted' : p.canAskAgain ? 'ask' : 'settings';
 }
 
+/** A photo that won't be read isn't kept either. */
+function discard(uri: string) {
+  try {
+    new File(uri).delete();
+  } catch {
+    // already gone
+  }
+}
+
 export default function CameraScreen() {
-  const flow = useScanFlow();
+  const started = useStarted();
+  const startedRef = useRef(started);
+  const { sayWhy, sayingWhy } = useSayWhy();
+  const open = useOpenOnce();
   const insets = useSafeAreaInsets();
-  const tabBar = useTabBarSpace(); // the tabs' floating bar, over the foot of the screen
   const focused = useIsFocused();
   const focusedRef = useRef(focused);
   useEffect(() => {
     focusedRef.current = focused;
-  }, [focused]);
+    startedRef.current = started;
+  }, [focused, started]);
+
+  const session = useSyncExternalStore(subscribeSession, currentSession);
+  const waiting = useSyncExternalStore(subscribeQueue, captures);
+  const recent = useSyncExternalStore(subscribeRecent, recentScans);
 
   // Development builds: /camera?test=<sample id or file:// URI> shows that photo in place of the camera. Its scans are
   // test images: they can be saved, but never become training data.
@@ -88,9 +127,13 @@ export default function CameraScreen() {
   const [torch, setTorch] = useState(false);
   const camera = useRef<ScannerCameraRef>(null);
   const shutterPressed = useRef(false); // the photo on its way is the shutter's, not one Auto took
+  const pickingRef = useRef(false); // set at once, so a second picker is refused before the re-render
+  const [picking, setPicking] = useState(false);
+  const [finishing, setFinishing] = useState<string | null>(null); // Done: the session it waits for
+  const finishingRef = useRef(false);
 
   // The permission: checked each time the screen is shown and when the app comes back (from the settings, say),
-  // and asked for once.
+  // and asked for once; never behind the splash.
   const checkPermission = useCallback(async () => {
     if (testParam || checking.current) return;
     checking.current = true;
@@ -108,21 +151,26 @@ export default function CameraScreen() {
     }
   }, [testParam]);
 
+  // On focus: a session left for 30 minutes has closed, and the permission is checked again.
   useFocusEffect(
     useCallback(() => {
+      if (!started) return;
+      closeIdleSession(new Date());
       void checkPermission();
-    }, [checkPermission]),
+    }, [checkPermission, started]),
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && focusedRef.current) void checkPermission();
+      if (state !== 'active' || !focusedRef.current || !startedRef.current) return;
+      closeIdleSession(new Date());
+      void checkPermission();
     });
     return () => subscription.remove();
   }, [checkPermission]);
 
   useEffect(() => {
-    if (!testParam) return;
+    if (!testParam || !started) return;
     let live = true;
     (testParam.startsWith('file://') ? Promise.resolve(testParam) : sampleUri(testParam))
       .then((uri) => live && setTestImage(uri))
@@ -130,7 +178,7 @@ export default function CameraScreen() {
     return () => {
       live = false;
     };
-  }, [testParam]);
+  }, [testParam, started]);
 
   useEffect(() => () => clearTimeout(errorTimer.current), []);
 
@@ -163,45 +211,185 @@ export default function CameraScreen() {
     else setProblem({ code, message });
   }
 
-  /** A photo that won't be read isn't kept either. */
-  function discard(uri: string) {
-    try {
-      new File(uri).delete();
-    } catch {
-      // already gone
-    }
-  }
+  const testImages = testParam !== null;
 
+  /** A photo the camera took: into the open session's queue, unless the camera wasn't on top (ruling P-F9). */
   function onPhoto(uri: string) {
     const byAuto = auto && !shutterPressed.current; // the person's eyes are on the paper, not the screen
     shutterPressed.current = false;
-    if (!focusedRef.current) {
-      discard(uri); // taken as the screen was left
+    // taken as the screen was left, as a picker opened, or after Done: no session takes it
+    if (!focusedRef.current || pickingRef.current || finishingRef.current) {
+      discard(uri);
       return;
     }
-    if (byAuto) confirmHaptic(); // before the reading card
-    // taken just as the gallery opened: the scan flow is busy and doesn't take it
-    void flow
-      .scanUri(uri, 'Camera photo', 'camera', { deletePhoto: true, testImage: testParam !== null })
-      .then((taken) => taken || discard(uri));
+    if (byAuto) confirmHaptic();
+    const now = new Date();
+    const { session: id, replaces } = takeCapture(now);
+    void queuePhoto(uri, { session: id, source: 'camera', testImage: testImages, replaces }, now).catch(() => {});
+  }
+
+  /** A picker, one at a time, with the camera off while it's open. A cancel opens no session (ruling P-F9). */
+  async function whilePicking(pick: () => Promise<void>): Promise<void> {
+    if (pickingRef.current || finishingRef.current) return;
+    pickingRef.current = true;
+    setPicking(true);
+    try {
+      await pick();
+    } finally {
+      pickingRef.current = false;
+      setPicking(false);
+    }
+  }
+
+  /** A picked photo joins the session the way the camera's do: takeCapture only once there's a photo. */
+  function queuePicked(uri: string, source: 'gallery' | 'camera_app') {
+    const now = new Date();
+    const { session: id, replaces } = takeCapture(now);
+    void queuePhoto(uri, { session: id, source, testImage: testImages, replaces }, now).catch(() => {});
+  }
+
+  const fromGallery = () =>
+    whilePicking(async () => {
+      let uri: string | null;
+      try {
+        uri = await pickPhoto();
+      } catch {
+        sayWhy(PHOTO_ERROR);
+        return;
+      }
+      if (uri !== null) queuePicked(uri, 'gallery');
+    });
+
+  const fromCameraApp = () =>
+    whilePicking(async () => {
+      let taken: string | null | 'no_permission';
+      try {
+        taken = await cameraAppPhoto();
+      } catch {
+        sayWhy(PHOTO_ERROR);
+        return;
+      }
+      if (taken === 'no_permission') sayWhy(NO_PERMISSION);
+      else if (taken !== null) queuePicked(taken, 'camera_app');
+    });
+
+  const fromPdf = () =>
+    whilePicking(async () => {
+      let picked: Awaited<ReturnType<typeof pickPdf>>;
+      try {
+        picked = await pickPdf();
+      } catch {
+        sayWhy(PDF_ERROR);
+        return;
+      }
+      if (picked === 'not_pdf') sayWhy('Choose a PDF file.');
+      else if (picked !== null) {
+        const now = new Date();
+        const { session: id, replaces } = takeCapture(now);
+        queuePdf(picked, { session: id, replaces }, now);
+      }
+    });
+
+  // The tray: the open session's, or the one Done waits for. Its failed reads are that session's own.
+  const trayId = finishing ?? (session?.open ? session.id : null);
+  const failed = session !== null && session.id === trayId ? session.failed : [];
+  const tray = trayId === null ? [] : trayOf(trayId, recent, waiting, failed);
+  const items = tray.length > 0 ? tray : null;
+
+  /**
+   * Done: the session ends, its reads go on (and are let go, under approach 2), and once they're all read it opens the
+   * session screen, or the Scan screen when it kept one scan and no read failed. Its Button runs it once.
+   */
+  async function done(id: string): Promise<void> {
+    finishingRef.current = true;
+    setFinishing(id);
+    try {
+      endSession(id);
+      holdReads(false);
+      await whenRead(id);
+      if (!focusedRef.current) return; // left while it read: the session waits in Sessions
+      const kept = recentScans().filter((s) => s.session === id);
+      const ended = currentSession();
+      const theFailed = ended?.id === id ? ended.failed : [];
+      if (kept.length === 1 && theFailed.length === 0) {
+        open.push({ pathname: '/result', params: { id: kept[0].id, session: id } });
+      } else {
+        open.navigate({ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }); // Sessions under it
+      }
+    } finally {
+      finishingRef.current = false;
+      setFinishing(null);
+    }
   }
 
   const panel: Panel | null =
     !testParam && (permission === 'ask' || permission === 'settings') ? permission : (problem?.code ?? null);
-  const ready = testParam ? testImage !== null : permission === 'granted';
-  const shutterOff = status.status === 'starting' || status.status === 'capturing' || flow.busy;
+  const ready = started && (testParam ? testImage !== null : permission === 'granted');
+  const viewUp = !panel && ready;
+  // Live while it reads (approach 1): off behind the splash, on another tab, while a picker or a dialog is up, and once
+  // Done has ended the session.
+  const live = started && focused && !picking && !sayingWhy && finishing === null;
+  const shutterOff =
+    !viewUp || !live || status.status === 'starting' || status.status === 'capturing';
+
+  // The tabs' middle button is the shutter while the camera is on top; on another tab it's Camera again.
+  const owner = useRef(null); // this camera, as lib/shutter knows it: a stable object
+  const takeRef = useRef(takePhoto);
+  useEffect(() => {
+    takeRef.current = takePhoto;
+  });
+  useFocusEffect(
+    useCallback(() => {
+      setShutter(owner, { take: () => takeRef.current(), disabled: shutterOff });
+      return () => setShutter(owner, null);
+    }, [owner, shutterOff]),
+  );
+  useEffect(() => () => setShutter(owner, null), [owner]);
+
+  // Approach 2 (spec §5): no read starts while the camera is live.
+  useEffect(() => {
+    if (READ_WHILE_SHOOTING) return;
+    holdReads(live);
+    return () => holdReads(false); // left, or gone: the reads go on
+  }, [live]);
+
+  // A Retake: the camera opens with the session's link, so Auto stops waiting for the last sheet to leave, and takes
+  // the one in view (ruling T1-1). Once per link. A build without rearm never crashes the camera for it.
+  const link = session?.open ? session.replaces : null;
+  const rearmed = useRef<string | null>(null);
+  useEffect(() => {
+    if (link === null) {
+      rearmed.current = null;
+      return;
+    }
+    if (!focused || !viewUp || rearmed.current === link) return;
+    rearmed.current = link;
+    try {
+      void camera.current?.rearm().catch(() => {});
+    } catch {
+      // a build from before rearm: the camera goes on as it was
+    }
+  }, [link, focused, viewUp]);
+
   const action: Record<Panel, Pick<ButtonProps, 'label' | 'onPress'>> = {
     ask: { label: 'Allow the camera', onPress: allow },
     settings: { label: 'Open settings', onPress: () => Linking.openSettings() },
-    no_camera: { label: 'Choose from gallery', onPress: () => flow.fromGallery() },
+    no_camera: { label: 'Choose from gallery', onPress: fromGallery },
     start: { label: 'Try again', onPress: tryAgain },
   };
 
+  const pill = panel ? null : (
+    <View testID="status-pill" style={styles.pill}>
+      <Text style={[type.body, styles.pillText]}>{pillError ?? statusText(status.status, status.form)}</Text>
+    </View>
+  );
+  const pending = trayId === null ? 0 : pendingIn(trayId);
+
   return (
     <View style={styles.screen}>
-      {/* light icons on the camera; dark over the reading card's light wash while it shows (§8: dark on light). Only
-          while the camera is on top: a tab left stays mounted, and the last status bar mounted wins over the root's. */}
-      {focused && <StatusBar style={flow.reading ? 'dark' : 'light'} />}
+      {/* light icons on the camera, only while it's on top: a tab left stays mounted, and the last status bar mounted
+          wins over the root's */}
+      {focused && <StatusBar style="light" />}
       <View style={[styles.top, { paddingTop: insets.top + space.xs }]}>
         <View style={styles.grow} />
         {!panel && (
@@ -234,13 +422,12 @@ export default function CameraScreen() {
       </View>
 
       <View style={styles.picture}>
-        {!panel && ready && (
+        {viewUp && (
           <ScannerCameraView
             key={mount}
             ref={camera}
             style={styles.fill}
-            // off while a photo is picked or read, and behind its failure's dialog, where Auto would take another
-            active={focused && !flow.busy && !flow.sayingWhy}
+            active={live}
             auto={auto}
             torch={torch}
             testImage={testImage}
@@ -250,13 +437,7 @@ export default function CameraScreen() {
             onCameraError={(e) => onCameraError(e.nativeEvent.code, e.nativeEvent.message)}
           />
         )}
-        {!panel && (
-          <View style={styles.pillRow}>
-            <View testID="status-pill" style={styles.pill}>
-              <Text style={[type.body, styles.pillText]}>{pillError ?? statusText(status.status, status.form)}</Text>
-            </View>
-          </View>
-        )}
+        {pill && items !== null && <View style={styles.pillRow}>{pill}</View>}
         {panel && (
           // It scrolls when large text makes it taller than the picture.
           <ScrollView style={StyleSheet.absoluteFill} contentContainerStyle={styles.panelArea}>
@@ -276,12 +457,7 @@ export default function CameraScreen() {
               <View style={styles.panelActions}>
                 <Button {...action[panel]} />
                 {panel !== 'no_camera' && (
-                  <Button
-                    label={CAMERA_APP}
-                    variant="text"
-                    tone="camera"
-                    onPress={() => flow.fromCameraApp()}
-                  />
+                  <Button label={CAMERA_APP} variant="text" tone="camera" onPress={fromCameraApp} />
                 )}
               </View>
             </View>
@@ -289,36 +465,22 @@ export default function CameraScreen() {
         )}
       </View>
 
-      <View style={[styles.bottom, { paddingBottom: space.xl + Math.max(insets.bottom, tabBar) }]}>
-        <View style={styles.side}>
-          <Tap
-            accessibilityRole="button"
-            accessibilityLabel="Gallery"
-            ripple="dark"
-            onPress={() => void flow.fromGallery()}
-            style={styles.gallery}>
-            <ImageIcon size={touch.icon} color={colors.cameraText} />
-            <Text style={[type.label, styles.galleryText]}>Gallery</Text>
-          </Tap>
-        </View>
-        <View style={styles.shutterSlot}>
-          {!panel && (
-            <Tap
-              accessibilityRole="button"
-              accessibilityLabel="Take the photo"
-              disabled={shutterOff}
-              ripple="dark"
-              focusRadius={touch.shutter / 2}
-              onPress={takePhoto}
-              style={styles.shutter}>
-              <View testID="shutter-disc" style={styles.disc} />
-            </Tap>
-          )}
-        </View>
-        <View style={styles.side} />
-      </View>
-
-      <ReadingOverlay visible={flow.reading} what={flow.readingWhat ?? 'photo'} />
+      <SessionTray
+        items={items}
+        hint={pill}
+        done={
+          trayId === null
+            ? null
+            : {
+                label: finishing !== null && pending > 0 ? `Reading ${pending} more…` : `Done · ${tray.length}`,
+                busy: finishing !== null,
+                onPress: () => done(trayId),
+              }
+        }
+        onGallery={() => void fromGallery()}
+        onPdf={() => void fromPdf()}
+        disabled={picking || finishing !== null}
+      />
     </View>
   );
 }
@@ -326,7 +488,7 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.camera },
   top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.xs, paddingBottom: space.xs },
-  grow: { flex: 1, minHeight: touch.target }, // the band keeps Close's height, with or without the switches
+  grow: { flex: 1, minHeight: touch.target }, // the band keeps a target's height, with or without the switches
   auto: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -359,26 +521,4 @@ const styles = StyleSheet.create({
   panelTitle: { color: colors.cameraText, textAlign: 'center' },
   panelBody: { color: colors.cameraMute, textAlign: 'center' },
   panelActions: { gap: space.xs },
-  bottom: { flexDirection: 'row', alignItems: 'center', paddingTop: space.xl, paddingHorizontal: space.xl },
-  side: { flex: 1, alignItems: 'flex-start' },
-  gallery: {
-    minWidth: touch.target,
-    minHeight: touch.target,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.xs,
-    borderRadius: radius.button,
-  },
-  galleryText: { color: colors.cameraMute },
-  shutterSlot: { width: touch.shutter, height: touch.shutter },
-  shutter: {
-    width: touch.shutter,
-    height: touch.shutter,
-    borderRadius: touch.shutter / 2,
-    borderWidth: RING,
-    borderColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  disc: { width: DISC, height: DISC, borderRadius: DISC / 2, backgroundColor: colors.cameraText },
 });

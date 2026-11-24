@@ -1,3 +1,6 @@
+import { useCallback, useState } from 'react';
+import { Alert } from 'react-native';
+
 import { TEAM_BUILD } from './build';
 
 // Why a read failed, in plain words. A capture read straight away (a sample, a Retake's pick) says it in a dialog with
@@ -64,6 +67,22 @@ export function failureDialog(words: string): [title: string, message?: string] 
   if (!split) return [words];
   const reasonEnd = split[0] === ': ' ? split.index : split.index + 1; // a sentence keeps its full stop; a colon goes
   return [words.slice(0, reasonEnd), words.slice(split.index + split[0].length)];
+}
+
+/**
+ * A failure that stops a capture, said in a dialog (design B §9.2, the plan's call 16), with Android's one OK: sayWhy.
+ * From the failure until that OK, or the dialog's dismissal, sayingWhy is true: the camera stays off behind it, as Auto
+ * would take another photo there (the final review's Minor 5). lib/scanFlow and the camera tab share it (ruling P-F7).
+ */
+export function useSayWhy(): { sayWhy: (words: string) => void; sayingWhy: boolean } {
+  const [sayingWhy, setSayingWhy] = useState(false);
+  const sayWhy = useCallback((words: string) => {
+    const [title, message] = failureDialog(words);
+    const closed = () => setSayingWhy(false);
+    setSayingWhy(true);
+    Alert.alert(title, message, [{ text: 'OK', onPress: closed }], { onDismiss: closed });
+  }, []);
+  return { sayWhy, sayingWhy };
 }
 
 /** The reason a session's failed read gives (lib/session's FailedRead): plain words only, never the scanner's own. */

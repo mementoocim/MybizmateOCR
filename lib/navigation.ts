@@ -33,10 +33,14 @@ export function useGoBackOrHome(): () => void {
  * - navigate: a tab, or a screen in one. From inside the tabs, it navigates: the tabs switch. From a screen above them
  *   (the Scan screen), it's expo-router's dismissTo: the screens over the tabs go, and the tabs switch, since navigate
  *   would push a second tabs over the first, and Back would show the screen just left (while dismissTo does nothing
- *   from inside the tabs).
+ *   from inside the tabs). Its options are the router's: withAnchor puts a tab's own list under a screen opened in it
+ *   (Done's session screen, with Sessions under it).
  * On the live root's router, useRouter(), as useGoBackOrHome goes to the camera (ruling T26-4).
  */
-export function useOpenOnce(): { push: (href: Href) => void; navigate: (href: Href) => void } {
+export function useOpenOnce(): {
+  push: (href: Href) => void;
+  navigate: (href: Href, options?: NavigateOptions) => void;
+} {
   const router = useRouter();
   const navigation = useNavigation();
   const opened = useRef(false); // set at once, so a second press is refused before the screen or tab is up
@@ -52,9 +56,16 @@ export function useOpenOnce(): { push: (href: Href) => void; navigate: (href: Hr
   };
   return {
     push: (href) => once(() => router.push(href)),
-    navigate: (href) => once(() => (inTabs(navigation) ? router.navigate(href) : router.dismissTo(href))),
+    navigate: (href, options) =>
+      once(() => {
+        const tabs = inTabs(navigation);
+        if (!options) return tabs ? router.navigate(href) : router.dismissTo(href);
+        return tabs ? router.navigate(href, options) : router.dismissTo(href, options);
+      }),
   };
 }
+
+type NavigateOptions = Parameters<ReturnType<typeof useRouter>['navigate']>[1];
 
 /** useOpenOnce's push, for a screen that only pushes. */
 export function usePushOnce(): (href: Href) => void {

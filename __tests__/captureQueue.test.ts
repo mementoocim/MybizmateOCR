@@ -610,6 +610,56 @@ test("a scan that can't be kept leaves the queue, and its photo stays for the ne
   expect(queued()).toEqual([]);
 });
 
+test("a scan that can't be kept is the session's failed read too: the scanner stopped (ruling T7-1)", async () => {
+  const { queue, scans, session } = m;
+  const { session: id } = session.takeCapture(T);
+  jest.spyOn(scans, 'addScan').mockImplementation(() => {
+    throw new Error('out of memory');
+  });
+  await queue.queuePhoto(photo('capture_1.jpg'), { session: id, source: 'camera' }, T);
+  jest.setSystemTime(at(4));
+  await read(result());
+  expect(session.currentSession()?.failed).toEqual([{ at: at(4).toISOString(), reason: STOPPED }]);
+  expect(queued()).toEqual([`${id}/${T.getTime()}-1-camera.jpg`]); // the photo still stays for the next start
+
+  // a PDF the same: it's no longer silently gone
+  queue.queuePdf({ uri: `${LINK}54`, name: 'si.pdf' }, { session: id }, at(5));
+  jest.setSystemTime(at(6));
+  await read(result());
+  expect(session.currentSession()?.failed.map((f) => f.reason)).toEqual([STOPPED, STOPPED]);
+  expect(memoryFs.files.get(SESSION_FILE)).not.toMatch(/out of memory/);
+});
+
+test('a failed Retake never deletes the scan it was for: a read that throws, or a scan that can\'t be kept', async () => {
+  // The user's check: the old scan (replaces) goes only once its new scan is kept; the session shows the failure as a
+  // failed read (the tray's "!"), and the Retake's link is spent
+  const { queue, scans, session } = m;
+  const old = scans.addScan({ label: 'Camera photo', source: 'camera', result: result('blank_page'), session: A });
+  const oldDir = scans.getScan(old)!.result.scanDir!;
+  const retake = async (seconds: number, name: string) => {
+    session.retakeIn(A, old, at(seconds));
+    const { session: id, replaces } = session.takeCapture(at(seconds));
+    await queue.queuePhoto(photo(name), { session: id, source: 'camera', replaces }, at(seconds));
+  };
+
+  await retake(1, 'capture_1.jpg');
+  await fail(new Error('boom'));
+  expect(scans.getScan(old)).toBeDefined();
+  expect(filesIn(oldDir)).not.toEqual([]);
+  expect(session.currentSession()).toMatchObject({ id: A, replaces: null });
+  expect(session.currentSession()?.failed.map((f) => f.reason)).toEqual([STOPPED]);
+
+  await retake(2, 'capture_2.jpg');
+  jest.spyOn(scans, 'addScan').mockImplementationOnce(() => {
+    throw new Error('out of memory');
+  });
+  await read(result());
+  expect(scans.getScan(old)).toBeDefined();
+  expect(filesIn(oldDir)).not.toEqual([]);
+  expect(session.currentSession()?.failed.map((f) => f.reason)).toEqual([STOPPED, STOPPED]);
+  expect(scans.recentScans().map((s) => s.id)).toEqual([old]);
+});
+
 test("a photo that can't be moved is read where it is", async () => {
   const { queue, scans, fs } = m;
   jest.spyOn(fs.File.prototype, 'move').mockRejectedValueOnce(new Error('No space left on device'));

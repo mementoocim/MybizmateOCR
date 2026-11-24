@@ -1,23 +1,22 @@
 import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
 
 import { readPdf, scanPhoto, type ScanResult } from '../modules/scanner';
 import { useGoBackOrHome } from './navigation';
 import { cameraAppPhoto, letGoOfPdf, pickPdf, pickPhoto } from './pickers';
-import { failureDialog, pdfFailed, photoFailed } from './readFailures';
+import { pdfFailed, photoFailed, useSayWhy } from './readFailures';
 import { SAMPLES, sampleUri } from './samples';
 import { addScan, type ScanSource, type StoredScan } from './scans';
 
-// testImage: a photo from the camera's test hook (development builds), kept marked so it never becomes training data
-type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean; testImage?: boolean };
+type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean };
 
 /**
- * Getting a photo or a PDF read: from the camera, the phone's camera app, the gallery, a sample or the file picker,
- * then on to its result. One at a time: while one is being picked or read (busy), another does nothing. While one is
- * read, readingWhat says what it is (a photo, a sample's too, or a PDF), for the reading card. A failure that stops a
- * capture is said in a dialog, in plain words (sayWhy): the scanner's own message shows in team builds only. From the
- * failure until the dialog's OK, or its dismissal, sayingWhy is true: the camera stays off behind it.
+ * Getting a photo or a PDF read straight away: a sample, or a Retake's pick from the Scan screen (the phone's camera
+ * app, the gallery or the file picker), then on to its result. The camera tab doesn't read here: its captures go to
+ * the queue (lib/captureQueue). One at a time: while one is being picked or read (busy), another does nothing. While
+ * one is read, readingWhat says what it is (a photo, a sample's too, or a PDF), for the reading card. A failure that
+ * stops a capture is said in a dialog, in plain words (lib/readFailures' useSayWhy, with sayingWhy while it's up): the
+ * scanner's own message shows in team builds only.
  */
 export function useScanFlow() {
   const router = useRouter();
@@ -25,7 +24,7 @@ export function useScanFlow() {
   const busyRef = useRef(false);
   const leaving = useRef(false); // set at once, so a second Retake is refused before the screen has gone
   const [busy, setBusy] = useState(false);
-  const [sayingWhy, setSayingWhy] = useState(false);
+  const { sayWhy, sayingWhy } = useSayWhy();
   const [readingWhat, setReading] = useState<'photo' | 'pdf' | null>(null);
   // false once the screen is left: a read that ends after that is kept in Recent scans, and nothing opens.
   const focused = useIsFocused();
@@ -39,18 +38,6 @@ export function useScanFlow() {
     },
     [],
   );
-
-  /**
-   * A failure that stops a capture, said in a dialog (design B §9.2, the plan's call 16), with Android's one OK. It's
-   * up until that OK, or its dismissal: the camera stays off meanwhile, as Auto would take another photo behind it (the
-   * final review's Minor 5).
-   */
-  function sayWhy(words: string): void {
-    const [title, message] = failureDialog(words);
-    const closed = () => setSayingWhy(false);
-    setSayingWhy(true);
-    Alert.alert(title, message, [{ text: 'OK', onPress: closed }], { onDismiss: closed });
-  }
 
   /** One pick and read; false when another was under way, so this one wasn't started. */
   async function oneAtATime(task: () => Promise<void>): Promise<boolean> {
@@ -70,7 +57,7 @@ export function useScanFlow() {
   /** Reads it, keeps it in Recent scans and opens its result. A failure is told in its own words. */
   async function readAndOpen(
     read: () => Promise<ScanResult>,
-    scan: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'testImage'>,
+    scan: Pick<StoredScan, 'label' | 'source' | 'sampleId'>,
     replace: boolean | undefined,
     failed: (e: unknown) => string,
     what: 'photo' | 'pdf',
@@ -103,17 +90,12 @@ export function useScanFlow() {
       const photo = uri;
       await readAndOpen(
         () => scanPhoto(photo, { deletePhoto: opts.deletePhoto ?? false }),
-        { label, source, sampleId: opts.sampleId, testImage: opts.testImage },
+        { label, source, sampleId: opts.sampleId },
         opts.replace,
         photoFailed,
         'photo',
       );
     });
-  }
-
-  /** Reads a photo the app already has; false when another one was being picked or read, so this one wasn't. */
-  function scanUri(uri: string, label: string, source: ScanSource, opts: ReadOptions = {}): Promise<boolean> {
-    return run(async () => uri, label, source, opts, "Couldn't open the photo.");
   }
 
   async function fromGallery(opts: { replace?: boolean } = {}): Promise<void> {
@@ -206,7 +188,6 @@ export function useScanFlow() {
     sayingWhy,
     reading,
     readingWhat,
-    scanUri,
     fromGallery,
     fromCameraApp,
     fromSample,

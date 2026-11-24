@@ -13,8 +13,16 @@ import { appRoutes, standIn } from '../test-utils/routes';
 // apart from the camera where its status bar is what's tested. The global router is the test's, never the app's.
 
 jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(async () => {}) }));
-jest.mock('../components/BrandSplash', () => ({ BrandSplash: () => null })); // the scanner's start (splash.test)
-jest.mock('../lib/captureQueue', () => ({ resumeQueue: async () => {} })); // its reads (captureQueue.test)
+// the scanner's start (splash.test): ready once the root has mounted, so the app has started and the camera may start
+jest.mock('../components/BrandSplash', () => ({
+  BrandSplash: ({ onReady }: { onReady: () => void }) => {
+    // after the commit's effects, the root's own among them (renderRouter's timers are fake)
+    require('react').useEffect(() => void Promise.resolve().then(onReady), [onReady]);
+    return null;
+  },
+}));
+// its reads (captureQueue.test): the camera's queue is the real one, with nothing left from a last run
+jest.mock('../lib/captureQueue', () => ({ ...jest.requireActual('../lib/captureQueue'), resumeQueue: async () => {} }));
 // expo-status-bar's StatusBar stands in as a plain view carrying its style, as in the camera's suite.
 jest.mock('expo-status-bar', () => {
   const React = require('react');

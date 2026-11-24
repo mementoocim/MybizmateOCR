@@ -2,7 +2,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 
 import { readPdf, scanPhoto, type ScanResult } from '../modules/scanner';
 import { letGoOfPdf, type PickedPdf } from './pickers';
-import { failedReadReason } from './readFailures';
+import { failedReadReason, SCANNER_STOPPED } from './readFailures';
 import { addScan, deleteScan, recentScans, type ScanSource, scansWritten } from './scans';
 import { addFailedRead, touchSession } from './session';
 
@@ -242,8 +242,11 @@ async function read(entry: Entry): Promise<void> {
     try {
       addScan({ label: labelOf(c), source: c.source, result, testImage: c.testImage, session: c.session, at: c.at });
     } catch {
-      // it couldn't be kept: it leaves the queue, and its photo stays for the next start to read (ruling T3-3)
+      // it couldn't be kept: it leaves the queue, and its photo stays for the next start to read (ruling T3-3). The
+      // session shows it as a failed read, so it's never just gone from the tray (ruling T7-1); a Retake's old scan
+      // stays, as after any failed read.
       remove(entry);
+      addFailedRead(c.session, SCANNER_STOPPED, new Date());
       if (c.kind === 'photo') unkept.add(c.uri);
       return;
     }
