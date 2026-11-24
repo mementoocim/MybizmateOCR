@@ -35,12 +35,25 @@ import { typeStylesOf } from '../test-utils/typeStyles';
 
 let mockParams: { kind?: string } = {};
 const mockPush = jest.fn();
+const mockDismissTo = jest.fn(); // down to a tab, the camera (lib/navigation's useNavigateOnce)
 const mockToast = jest.fn();
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
-  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
-  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
+  // Saved is above the tabs (lib/navigation: going back, and whether a screen is in the tabs)
+  useNavigation: () => ({
+    canGoBack: () => true,
+    goBack: jest.fn(),
+    getState: () => ({ type: 'stack' }),
+    getParent: () => undefined,
+  }),
+  useRouter: () => ({
+    push: mockPush,
+    dismissTo: mockDismissTo,
+    navigate: jest.fn(),
+    back: jest.fn(),
+    replace: jest.fn(),
+  }),
   // a screen's pushes run once until it's focused again (lib/navigation)
   useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
   useIsFocused: () => true,
@@ -670,7 +683,8 @@ test('nothing saved: the empty state with Take photo', async () => {
   expect(screen.queryByRole('radiogroup')).toBeNull();
   expect(screen.queryByTestId('bottom-bar')).toBeNull();
   await press(button('Take photo'));
-  expect(mockPush).toHaveBeenCalledWith('/camera');
+  expect(mockDismissTo).toHaveBeenCalledWith('/camera'); // down to the camera tab, Saved gone
+  expect(mockPush).not.toHaveBeenCalled();
 
   // the last one deleted: the same
   await screen.unmount();

@@ -172,7 +172,7 @@ export function useScanFlow() {
   /**
    * Retake: the same source again (for a PDF, the picker again); back after a sample or a scan opened from Home's
    * Recent scans or Saved (Home when there's nothing to go back to: useGoBackOrHome). Going back, or to the camera,
-   * leaves the screen at once, and runs once (ruling T25b-2), as the header's Back and the camera's Close do: going
+   * leaves the screen at once, and runs once (ruling T25b-2), as the header's Back does: going
    * back queues a GO_BACK per call, so a fast double tap would leave the screen under this one too. A picker can run
    * again once it's done (oneAtATime).
    */
@@ -185,11 +185,12 @@ export function useScanFlow() {
   }
 
   /**
-   * The in-app camera in this screen's place, once (ruling T25b-2): a Retake straight from the camera, and the
-   * not-found layout's Retake for a gallery photo or a PDF (the final review's Minor 2).
+   * Back to the camera tab, once (ruling T25b-2), this screen gone: a Retake straight from the camera, and the
+   * not-found layout's Retake for a gallery photo or a PDF (the final review's Minor 2). The Scan screen is above the
+   * tabs, so it's dismissTo: navigate would push a second tabs over the first (lib/navigation's useNavigateOnce).
    */
   function toCamera(): void {
-    leaveOnce(() => router.replace('/camera'));
+    leaveOnce(() => router.dismissTo('/camera'));
   }
 
   /** Leaves the screen, once: a second tap before it has gone does nothing. */

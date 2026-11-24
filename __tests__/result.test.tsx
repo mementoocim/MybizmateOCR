@@ -30,7 +30,7 @@ import { pinToday } from '../test-utils/today';
 
 let mockParams: { id?: string; from?: string } = {};
 let mockTeam = false;
-const mockRouter = { replace: jest.fn(), push: jest.fn() };
+const mockRouter = { replace: jest.fn(), push: jest.fn(), dismissTo: jest.fn() }; // dismissTo: down to the camera tab
 /** The screen's own navigation: going back (lib/navigation's useGoBackOrHome) is its. */
 const mockNavigation = { canGoBack: jest.fn(() => true), goBack: jest.fn() };
 const mockEnhance = jest.fn(async (_uri: string, mode: string) => `file:///x/${mode}.img`);
@@ -672,7 +672,7 @@ test('not found: the photo, the reason, three numbered lines, Choose a photo and
   await press(button('Choose a photo'));
   expect(mockLibrary).toHaveBeenCalledTimes(1);
   await press(button('Retake')); // a gallery photo: the in-app camera
-  expect(mockRouter.replace).toHaveBeenCalledWith('/camera');
+  expect(mockRouter.dismissTo).toHaveBeenCalledWith('/camera');
   expect(screen.queryByText('Save')).toBeNull();
 });
 
@@ -693,7 +693,7 @@ test('not found: a PDF chooses a PDF; Retake opens the camera, the camera app ag
   await press(button('Choose a PDF'));
   expect(mockPick).toHaveBeenCalledWith({ mimeTypes: ['application/pdf'] });
   await press(button('Retake'));
-  expect(mockRouter.replace).toHaveBeenLastCalledWith('/camera');
+  expect(mockRouter.dismissTo).toHaveBeenLastCalledWith('/camera');
 
   // a photo keeps its words, whatever brought it in
   await show('blank_page', { source: 'pdf' });
@@ -1181,7 +1181,7 @@ test('retake', async () => {
 
   await show('inv_0007', { source: 'camera' });
   await press(screen.getByText('Retake'));
-  expect(mockRouter.replace).toHaveBeenCalledWith('/camera');
+  expect(mockRouter.dismissTo).toHaveBeenCalledWith('/camera');
 
   // a PDF: the picker again, and the new read takes this screen's place
   await show('sales_text_0', { source: 'pdf' });
@@ -1219,19 +1219,20 @@ test('Retake runs once, however fast it is tapped twice (ruling T25b-2)', async 
   await doubleTap();
   expect(mockRouter.replace.mock.calls).toEqual([['/']]);
 
-  // straight from the camera: the camera again, once
+  // straight from the camera: down to the camera tab again, this screen gone, once
   mockRouter.replace.mockClear();
   await show('inv_0007', { source: 'camera' });
   await doubleTap();
-  expect(mockRouter.replace.mock.calls).toEqual([['/camera']]);
+  expect(mockRouter.dismissTo.mock.calls).toEqual([['/camera']]);
+  expect(mockRouter.replace).not.toHaveBeenCalled();
   expect(mockNavigation.goBack).toHaveBeenCalledTimes(2);
 
-  // the form not found in a gallery photo or a PDF: the in-app camera in this screen's place, once too ([802]/[810])
+  // the form not found in a gallery photo or a PDF: down to the camera tab, this screen gone, once too ([802]/[810])
   for (const source of ['gallery', 'pdf'] as const) {
-    mockRouter.replace.mockClear();
+    mockRouter.dismissTo.mockClear();
     await show('blank_page', { source });
     await doubleTap();
-    expect(mockRouter.replace.mock.calls).toEqual([['/camera']]);
+    expect(mockRouter.dismissTo.mock.calls).toEqual([['/camera']]);
   }
 });
 

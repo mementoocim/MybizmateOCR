@@ -6,29 +6,30 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, type ButtonProps } from '../components/Buttons';
-import { IconButton } from '../components/IconButton';
-import { Camera, Close, Flashlight, FlashlightOff, ImageIcon } from '../components/icons';
-import { ReadingOverlay } from '../components/ReadingOverlay';
-import { Tap } from '../components/Tap';
-import { TEAM_BUILD } from '../lib/build';
-import { CAMERA_ERRORS, CAMERA_TEXT, PERMISSION_TEXT, statusText } from '../lib/cameraCopy';
-import { confirmHaptic } from '../lib/haptics';
-import { useGoBackOrHome } from '../lib/navigation';
-import { sampleUri } from '../lib/samples';
-import { useScanFlow } from '../lib/scanFlow';
-import { colors, radius, space, touch, type } from '../lib/theme';
+import { Button, type ButtonProps } from '../../components/Buttons';
+import { IconButton } from '../../components/IconButton';
+import { Camera, Flashlight, FlashlightOff, ImageIcon } from '../../components/icons';
+import { ReadingOverlay } from '../../components/ReadingOverlay';
+import { useTabBarSpace } from '../../components/Screen';
+import { Tap } from '../../components/Tap';
+import { TEAM_BUILD } from '../../lib/build';
+import { CAMERA_ERRORS, CAMERA_TEXT, PERMISSION_TEXT, statusText } from '../../lib/cameraCopy';
+import { confirmHaptic } from '../../lib/haptics';
+import { sampleUri } from '../../lib/samples';
+import { useScanFlow } from '../../lib/scanFlow';
+import { colors, radius, space, touch, type } from '../../lib/theme';
 import {
   type CameraErrorCode,
   type CameraStatus,
   type FormName,
   ScannerCameraView,
   type ScannerCameraRef,
-} from '../modules/scanner';
+} from '../../modules/scanner';
 
 // Design B §9.3, on the test app's layout (activity_camera.xml and CameraActivity.java). The live picture, its form's
-// outline, auto-capture and the checks are the native view's. Over the picture's top band: Close, with no title (the
-// pill names the form once it's found), the Auto switch and the flashlight switch. At its foot, the status pill. Under
+// outline, auto-capture and the checks are the native view's. Over the picture's top band, with no title (the pill
+// names the form once it's found): the Auto switch and the flashlight switch. No Close: the camera is a tab (camera
+// first, call 8), and Back leaves the app. At its foot, the status pill. Under
 // it, the gallery (an icon over its label) and the shutter, which waits while the camera starts or takes the photo. A
 // problem (no permission, no camera, a camera that won't start) shows a panel in the picture's place, and the gallery
 // stays. A photo Auto took gets one confirm haptic (§5.5), then the reading card. The status bar's icons are light,
@@ -60,8 +61,8 @@ function toPermission(p: ImagePicker.CameraPermissionResponse): Permission {
 
 export default function CameraScreen() {
   const flow = useScanFlow();
-  const goBackOrHome = useGoBackOrHome();
   const insets = useSafeAreaInsets();
+  const tabBar = useTabBarSpace(); // the tabs' floating bar, over the foot of the screen
   const focused = useIsFocused();
   const focusedRef = useRef(focused);
   useEffect(() => {
@@ -87,7 +88,6 @@ export default function CameraScreen() {
   const [torch, setTorch] = useState(false);
   const camera = useRef<ScannerCameraRef>(null);
   const shutterPressed = useRef(false); // the photo on its way is the shutter's, not one Auto took
-  const closing = useRef(false);
 
   // The permission: checked each time the screen is shown and when the app comes back (from the settings, say),
   // and asked for once.
@@ -133,16 +133,6 @@ export default function CameraScreen() {
   }, [testParam]);
 
   useEffect(() => () => clearTimeout(errorTimer.current), []);
-
-  /**
-   * Back, once: going back queues a GO_BACK per call, so a fast double tap would leave the next screen too. With
-   * nothing to go back to, Home (ruling T24-1: lib/navigation).
-   */
-  function close() {
-    if (closing.current) return;
-    closing.current = true;
-    goBackOrHome();
-  }
 
   async function allow() {
     setPermission(toPermission(await ImagePicker.requestCameraPermissionsAsync()));
@@ -192,7 +182,7 @@ export default function CameraScreen() {
     if (byAuto) confirmHaptic(); // before the reading card
     // taken just as the gallery opened: the scan flow is busy and doesn't take it
     void flow
-      .scanUri(uri, 'Camera photo', 'camera', { deletePhoto: true, replace: true, testImage: testParam !== null })
+      .scanUri(uri, 'Camera photo', 'camera', { deletePhoto: true, testImage: testParam !== null })
       .then((taken) => taken || discard(uri));
   }
 
@@ -203,16 +193,16 @@ export default function CameraScreen() {
   const action: Record<Panel, Pick<ButtonProps, 'label' | 'onPress'>> = {
     ask: { label: 'Allow the camera', onPress: allow },
     settings: { label: 'Open settings', onPress: () => Linking.openSettings() },
-    no_camera: { label: 'Choose from gallery', onPress: () => flow.fromGallery({ replace: true }) },
+    no_camera: { label: 'Choose from gallery', onPress: () => flow.fromGallery() },
     start: { label: 'Try again', onPress: tryAgain },
   };
 
   return (
     <View style={styles.screen}>
-      {/* light icons on the camera; dark over the reading card's light wash while it shows (§8: dark on light) */}
-      <StatusBar style={flow.reading ? 'dark' : 'light'} />
+      {/* light icons on the camera; dark over the reading card's light wash while it shows (§8: dark on light). Only
+          while the camera is on top: a tab left stays mounted, and the last status bar mounted wins over the root's. */}
+      {focused && <StatusBar style={flow.reading ? 'dark' : 'light'} />}
       <View style={[styles.top, { paddingTop: insets.top + space.xs }]}>
-        <IconButton icon={Close} label="Close" tone="camera" onPress={close} />
         <View style={styles.grow} />
         {!panel && (
           <Tap
@@ -290,7 +280,7 @@ export default function CameraScreen() {
                     label={CAMERA_APP}
                     variant="text"
                     tone="camera"
-                    onPress={() => flow.fromCameraApp({ replace: true })}
+                    onPress={() => flow.fromCameraApp()}
                   />
                 )}
               </View>
@@ -299,13 +289,13 @@ export default function CameraScreen() {
         )}
       </View>
 
-      <View style={[styles.bottom, { paddingBottom: space.xl + insets.bottom }]}>
+      <View style={[styles.bottom, { paddingBottom: space.xl + Math.max(insets.bottom, tabBar) }]}>
         <View style={styles.side}>
           <Tap
             accessibilityRole="button"
             accessibilityLabel="Gallery"
             ripple="dark"
-            onPress={() => void flow.fromGallery({ replace: true })}
+            onPress={() => void flow.fromGallery()}
             style={styles.gallery}>
             <ImageIcon size={touch.icon} color={colors.cameraText} />
             <Text style={[type.label, styles.galleryText]}>Gallery</Text>
@@ -336,7 +326,7 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.camera },
   top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.xs, paddingBottom: space.xs },
-  grow: { flex: 1 },
+  grow: { flex: 1, minHeight: touch.target }, // the band keeps Close's height, with or without the switches
   auto: {
     flexDirection: 'row',
     alignItems: 'center',

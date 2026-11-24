@@ -42,7 +42,7 @@ export function Header({
   const hasRight = Boolean(right);
 
   /**
-   * The default Back, once, as the camera's Close: going back queues a GO_BACK per call, so a fast double tap would
+   * The default Back, once: going back queues a GO_BACK per call, so a fast double tap would
    * leave the screen under this one too. With nothing to go back to, Home (lib/navigation).
    */
   function goBack() {

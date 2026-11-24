@@ -1,23 +1,26 @@
 import { router } from 'expo-router';
 import { act, fireEvent, renderRouter, screen, within } from 'expo-router/testing-library';
-import { Text } from 'react-native';
 
 import { clearParties } from '../lib/lists';
 import { loadSaved } from '../lib/saved';
 import { addScan } from '../lib/scans';
 import { updateSettings } from '../lib/settings';
 import { currentSnack, dismissSnack } from '../lib/snackbar';
-import { space } from '../lib/theme';
+import { bar, space } from '../lib/theme';
+import { toast } from '../lib/toast';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 import { memoryFs } from '../test-utils/memoryFs';
+import { appRoutes } from '../test-utils/routes';
 import { pinToday } from '../test-utils/today';
 
 // Ruling T19-5: the root host's message clears the bottom bar of the screen on top. A bar counts only while its screen
 // is focused, so one that mounts on a screen under the top one doesn't move the message. Saved with nothing to export
 // has no bar; it gets one when a save, or a customer added, on the Scan screen over it gives it something to export.
-// The app's own Stack (app/_layout, with the root host), Saved and the Scan screen as they are; Home and the camera
-// stand in. jest has no layout: each bar's height is given as Android would report it. No insets here.
+// On a tab, the tabs' floating bar is the bar the message clears; on the Scan screen over the tabs, that screen's. The
+// app's own layouts (test-utils/routes: app/_layout, with the root host, and the tabs with their bar), Saved and the
+// Scan screen as they are; the tabs' screens stand in. jest has no layout: each bar's height is given as Android would
+// report it. No insets here.
 
 jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(async () => {}) }));
 jest.mock('../components/BrandSplash', () => ({ BrandSplash: () => null })); // the scanner's start (splash.test)
@@ -38,23 +41,12 @@ jest.mock('expo-asset', () => ({ Asset: { fromModule: () => ({ downloadAsync: as
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 jest.mock('expo-sharing', () => ({ shareAsync: async () => undefined, isAvailableAsync: async () => true }));
 
-function Home() {
-  return <Text>Home</Text>;
-}
-function Camera() {
-  return <Text>Camera</Text>;
-}
-const ROUTES = {
-  _layout: require('../app/_layout'),
-  index: Home,
-  camera: Camera,
-  saved: require('../app/saved'),
-  result: require('../app/result'),
-};
+const ROUTES = appRoutes({ saved: require('../app/saved'), result: require('../app/result') });
 
-/** The Scan screen's bar's height, and Saved's. */
+/** The Scan screen's bar's height, and Saved's; and the tabs' floating bar's, as laid out, under its raised button. */
 const SCAN_BAR = 80;
 const SAVED_BAR = 120;
+const TAB_BAR = 72;
 
 type Instance = ReturnType<typeof screen.getByTestId>;
 const press = (el: Instance) => act(async () => fireEvent.press(el));
@@ -81,6 +73,30 @@ async function scanOverEmptySaved(): Promise<string> {
   await layout('Retake', SCAN_BAR);
   return id;
 }
+
+test("on a tab, the message clears the floating bar; on the Scan screen over it, that screen's bar", async () => {
+  const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('inv_0007')) });
+  await renderRouter(ROUTES, { initialUrl: '/camera' });
+  // the tabs' bar reports its height, the raised button too
+  const tabBar = { nativeEvent: { layout: { x: 0, y: 0, width: 360, height: TAB_BAR } } };
+  await act(async () => fireEvent(screen.getByTestId('tab-bar'), 'layout', tabBar));
+  await act(async () => toast('Changes saved'));
+  expect(snackbar()).toHaveStyle({ bottom: TAB_BAR + bar.raise + space.s });
+
+  // another tab: the same bar
+  await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Home' })));
+  expect(snackbar()).toHaveStyle({ bottom: TAB_BAR + bar.raise + space.s });
+
+  // the Scan screen over the tabs: the floating bar is under it, so it no longer counts; the Scan screen's does
+  await act(() => router.push({ pathname: '/result', params: { id } }));
+  expect(snackbar()).toHaveStyle({ bottom: space.s }); // no bar on top has laid out yet
+  await layout('Retake', SCAN_BAR);
+  expect(snackbar()).toHaveStyle({ bottom: SCAN_BAR + space.s });
+
+  // back on the tabs, the floating bar again
+  await act(() => router.back());
+  expect(snackbar()).toHaveStyle({ bottom: TAB_BAR + bar.raise + space.s });
+});
 
 beforeAll(() => pinToday(new Date(2026, 10, 18, 10, 0))); // a scan that isn't a sample is checked as of the day it's read
 afterAll(() => jest.useRealTimers());

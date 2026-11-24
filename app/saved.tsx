@@ -17,7 +17,7 @@ import { confirmDeleteSaved } from '../lib/confirmDelete';
 import { waitingOf } from '../lib/exportFile';
 import { amount, monthYear } from '../lib/format';
 import { lists, newParties, subscribeLists } from '../lib/lists';
-import { usePushOnce } from '../lib/navigation';
+import { useNavigateOnce, usePushOnce } from '../lib/navigation';
 import { openSaved, type SavedSummary, savedList, subscribeSaved } from '../lib/saved';
 import type { Kind } from '../lib/scans';
 import { savedSub } from '../lib/sessions';
@@ -55,6 +55,7 @@ type Month = { month: string; key: string; data: SavedSummary[] };
 
 export default function SavedScreen() {
   const push = usePushOnce();
+  const navigateOnce = useNavigateOnce(); // the camera, a tab under this screen
   const { kind } = useLocalSearchParams<{ kind?: Kind }>();
   const all = useSyncExternalStore(subscribeSaved, savedList);
   const theLists = useSyncExternalStore(subscribeLists, lists);
@@ -138,7 +139,7 @@ export default function SavedScreen() {
               <EmptyState
                 title="Nothing saved yet"
                 body="Save a scan and it shows up here, ready to export."
-                actions={[{ label: 'Take photo', onPress: () => push('/camera') }]}
+                actions={[{ label: 'Take photo', onPress: () => navigateOnce('/camera') }]}
               />
             ) : filter === 'all' ? undefined : (
               <EmptyState title={`No ${PLURALS[filter]} saved`} />

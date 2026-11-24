@@ -1,27 +1,27 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Image, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 
-import { ButtonRow } from '../components/BottomBar';
-import { Button } from '../components/Buttons';
-import { Header } from '../components/Header';
-import { IconButton } from '../components/IconButton';
-import { Camera, FileText, ImageIcon, ListIcon, Lock, SettingsIcon } from '../components/icons';
-import { ListRow } from '../components/ListRow';
-import { ReadingOverlay } from '../components/ReadingOverlay';
-import { RecentRow } from '../components/RecentRow';
-import { Screen } from '../components/Screen';
-import { SectionHeader } from '../components/SectionHeader';
-import { Sheet } from '../components/Sheet';
-import { totalOf, waitingOf } from '../lib/exportFile';
-import { peso } from '../lib/format';
-import { lists, subscribeLists } from '../lib/lists';
-import { usePushOnce } from '../lib/navigation';
-import { type SavedSummary, savedList, subscribeSaved } from '../lib/saved';
-import { SAMPLES } from '../lib/samples';
-import { useScanFlow } from '../lib/scanFlow';
-import { type Kind, recentScans, subscribeRecent } from '../lib/scans';
-import { settings, subscribeSettings, updateSettings } from '../lib/settings';
-import { colors, radius, space, touch, type } from '../lib/theme';
+import { ButtonRow } from '../../components/BottomBar';
+import { Button } from '../../components/Buttons';
+import { Header } from '../../components/Header';
+import { IconButton } from '../../components/IconButton';
+import { Camera, FileText, ImageIcon, ListIcon, Lock, SettingsIcon } from '../../components/icons';
+import { ListRow } from '../../components/ListRow';
+import { ReadingOverlay } from '../../components/ReadingOverlay';
+import { RecentRow } from '../../components/RecentRow';
+import { Screen } from '../../components/Screen';
+import { SectionHeader } from '../../components/SectionHeader';
+import { Sheet } from '../../components/Sheet';
+import { totalOf, waitingOf } from '../../lib/exportFile';
+import { peso } from '../../lib/format';
+import { lists, subscribeLists } from '../../lib/lists';
+import { useNavigateOnce, usePushOnce } from '../../lib/navigation';
+import { type SavedSummary, savedList, subscribeSaved } from '../../lib/saved';
+import { SAMPLES } from '../../lib/samples';
+import { useScanFlow } from '../../lib/scanFlow';
+import { type Kind, recentScans, subscribeRecent } from '../../lib/scans';
+import { settings, subscribeSettings, updateSettings } from '../../lib/settings';
+import { colors, radius, space, touch, type } from '../../lib/theme';
 
 // Design B §9.2: Home as a workspace. The header has the wordmark, and Your lists and Settings as icon buttons. Then,
 // top to bottom: capture (Take photo; From gallery and Import PDF; what the app reads); on a first run, the tips; "Get
@@ -43,7 +43,8 @@ const LOCK = 16; // dp: the footer's lock, beside its overline
 const handwriting = (font: string) => `${font === 'PatrickHand' ? 'Patrick Hand' : font} handwriting`;
 
 export default function Home() {
-  const push = usePushOnce();
+  const push = usePushOnce(); // a screen over the tabs
+  const navigateOnce = useNavigateOnce(); // another tab: the camera, Profile
   const flow = useScanFlow();
   const recent = useSyncExternalStore(subscribeRecent, recentScans); // a scan read on any screen shows at once
   const saved = useSyncExternalStore(subscribeSaved, savedList);
@@ -73,7 +74,7 @@ export default function Home() {
       right={
         <>
           <IconButton icon={ListIcon} label="Your lists" onPress={() => push('/lists')} />
-          <IconButton icon={SettingsIcon} label="Settings" onPress={() => push('/settings')} />
+          <IconButton icon={SettingsIcon} label="Settings" onPress={() => navigateOnce('/profile')} />
         </>
       }
     />
@@ -88,7 +89,7 @@ export default function Home() {
             size="large"
             icon={Camera}
             disabled={flow.reading}
-            onPress={() => push('/camera')}
+            onPress={() => navigateOnce('/camera')}
           />
           <ButtonRow
             buttons={[
@@ -130,7 +131,7 @@ export default function Home() {
               sub="VAT status and accounts for MyBizMate"
               chevron
               checked={defaultsDone}
-              onPress={() => push('/settings')}
+              onPress={() => navigateOnce('/profile')}
             />
           </>
         )}

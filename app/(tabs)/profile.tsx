@@ -2,27 +2,29 @@ import type { Href } from 'expo-router';
 import { useRef, useState, useSyncExternalStore } from 'react';
 import { StyleSheet, Switch, Text, View, type ViewInstance } from 'react-native';
 
-import { ChoiceChips } from '../components/ChoiceChips';
-import { Header } from '../components/Header';
-import { ListRow } from '../components/ListRow';
-import { VAT_STATUS } from '../components/SaveSheet';
-import { Screen } from '../components/Screen';
-import { SectionHeader } from '../components/SectionHeader';
-import { Sheet } from '../components/Sheet';
-import { Tap } from '../components/Tap';
-import { codeKeyboard, TextField } from '../components/TextField';
-import { TEAM_BUILD } from '../lib/build';
-import { usePushOnce } from '../lib/navigation';
-import { settings, subscribeSettings, updateSettings } from '../lib/settings';
-import { colors, space, touch, type } from '../lib/theme';
-import { versionLine } from '../lib/versions';
+import { ChoiceChips } from '../../components/ChoiceChips';
+import { Header } from '../../components/Header';
+import { ListRow } from '../../components/ListRow';
+import { VAT_STATUS } from '../../components/SaveSheet';
+import { Screen } from '../../components/Screen';
+import { SectionHeader } from '../../components/SectionHeader';
+import { Sheet } from '../../components/Sheet';
+import { Tap } from '../../components/Tap';
+import { codeKeyboard, TextField } from '../../components/TextField';
+import { TEAM_BUILD } from '../../lib/build';
+import { customersOf, type Lists, lists, subscribeLists, suppliersOf } from '../../lib/lists';
+import { usePushOnce } from '../../lib/navigation';
+import { settings, subscribeSettings, updateSettings } from '../../lib/settings';
+import { colors, space, touch, type } from '../../lib/theme';
+import { versionLine } from '../../lib/versions';
 
-// Design B §9.10: Settings, in groups. Your business: VAT-registered or not, which suggests each sale's tax type.
-// Export defaults: what MyBizMate's imports need that isn't on the paper (lib/settings.ts), in figures. A field is
+// Design B §9.10: Settings, in groups, as the Profile tab (camera first, spec §6.8, call 17), so with no Back. Your
+// business: VAT-registered or not, which suggests each sale's tax type. Export defaults: what MyBizMate's imports need that isn't on the paper (lib/settings.ts), in figures. A field is
 // saved as it's typed: going back while a field still has the cursor doesn't blur it (React Native calls no onBlur on
 // unmount), so saving when it's left would lose the change. An ATC that isn't 2 letters and 3 digits gets a warning in
 // place of its helper, and is saved all the same. The fields scroll into view above the keyboard through the Screen.
-// About: Privacy, in plain words in a sheet; the open-source licenses; the version. In team builds, Team tools (§9.11).
+// Your lists: Customers and items, with their counts, opens Your lists. About: Privacy, in plain words in a sheet; the
+// open-source licenses; the version. In team builds, Team tools (§9.11).
 
 const NOTE =
   "These fill in what MyBizMate's import needs that isn't on the paper. You can change them on each invoice when you save it. Changes save as you type.";
@@ -37,9 +39,20 @@ const PRIVACY = [
 ];
 const ANNOTATION_NOTE = 'Every box must be checked before a scan saves, and each scan gets a client and writer code.';
 
-export default function SettingsScreen() {
+/** Your lists' counts: "12 customers · 3 suppliers · 1 item". A party that's both counts in both. */
+function listsLine(l: Lists): string {
+  const count = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
+  return [
+    count(customersOf(l).length, 'customer'),
+    count(suppliersOf(l).length, 'supplier'),
+    count(l.items.length, 'item'),
+  ].join(' · ');
+}
+
+export default function ProfileScreen() {
   const push = usePushOnce(); // one for the screen's every row, the team tools' too
   const s = useSyncExternalStore(subscribeSettings, settings);
+  const theLists = useSyncExternalStore(subscribeLists, lists);
   const [revenue, setRevenue] = useState(s.revenueAccount);
   const [expense, setExpense] = useState(s.expenseAccount);
   const [atc, setAtc] = useState(s.atc);
@@ -51,7 +64,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.root}>
-      <Screen header={<Header title="Settings" />}>
+      <Screen header={<Header title="Profile" onBack={null} />}>
         <SectionHeader title="Your business" />
         <View style={styles.group}>
           <ChoiceChips
@@ -108,6 +121,16 @@ export default function SettingsScreen() {
           />
         </View>
         <Text style={[type.label, styles.note]}>{NOTE}</Text>
+
+        <SectionHeader title="Your lists" />
+        <ListRow
+          title="Customers and items"
+          sub={listsLine(theLists)}
+          subMono
+          subCaps
+          chevron
+          onPress={() => push('/lists')}
+        />
 
         <SectionHeader title="About" />
         <ListRow ref={privacyRow} title="Privacy" chevron onPress={() => setPrivacyOpen(true)} />

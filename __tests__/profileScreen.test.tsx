@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { AccessibilityInfo, Platform, ScrollView, TextInput, View } from 'react-native';
 
-import SettingsScreen from '../app/settings';
+import ProfileScreen from '../app/(tabs)/profile';
+import { addItem, addParty, clearItems, clearParties } from '../lib/lists';
 import * as store from '../lib/settings';
 import { loadSettings, settings, updateSettings } from '../lib/settings';
 import { colors, space, touch } from '../lib/theme';
@@ -10,11 +11,12 @@ import { memoryFs } from '../test-utils/memoryFs';
 import { focusAgain } from '../test-utils/screenFocus';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
-// Design B §9.10: Settings, in groups. Your business: VAT-registered or not, which suggests each sale's tax type.
-// Export defaults: the accounts and the ATC MyBizMate's imports need that aren't on the paper, in figures, each saved as
-// it's typed; an ATC that isn't 2 letters and 3 digits gets a gentle warning. About: Privacy in plain words, the
-// open-source licenses, and the version. In team builds, Team tools (§9.11): annotation mode as one switch row, the
-// training data and the speed test.
+// Design B §9.10: Settings, in groups, as the Profile tab (camera first, spec §6.8, call 17): with no Back. Your
+// business: VAT-registered or not, which suggests each sale's tax type. Export defaults: the accounts and the ATC
+// MyBizMate's imports need that aren't on the paper, in figures, each saved as it's typed; an ATC that isn't 2 letters
+// and 3 digits gets a gentle warning. Your lists: Customers and items, with its counts, opens Your lists. About: Privacy
+// in plain words, the open-source licenses, and the version. In team builds, Team tools (§9.11): annotation mode as one
+// switch row, the training data and the speed test.
 
 let mockTeam = false;
 const mockPush = jest.fn();
@@ -60,7 +62,7 @@ const FIELDS: readonly [label: string, helper: string | undefined][] = [
 type Instance = ReturnType<typeof screen.getByText>;
 const press = (el: Instance) => act(async () => fireEvent.press(el));
 const typeIn = (el: Instance, text: string) => act(async () => fireEvent.changeText(el, text));
-const button = (name: string) => screen.getByRole('button', { name });
+const button = (name: string | RegExp) => screen.getByRole('button', { name });
 const header = (name: string) => screen.getByRole('header', { name });
 /** A field's input, by the name TalkBack says. */
 const field = (label: string) => screen.getByLabelText(label);
@@ -108,10 +110,62 @@ afterEach(() => {
   jest.restoreAllMocks(); // Platform.OS, where a test replaced it
 });
 
-test('three groups, each field with its helper', async () => {
+const PARTY = {
+  code: '',
+  entity: 'company',
+  lastName: '',
+  firstName: '',
+  middleName: '',
+  tradeName: '',
+  tin: '',
+  address: '',
+  vatStatus: '',
+  terms: '',
+  fromScan: false,
+} as const;
+
+test('Profile: the settings as a tab, with no Back', async () => {
+  await render(<ProfileScreen />);
+  expect(header('Profile')).toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+  expect(screen.queryByText('Settings')).toBeNull();
+});
+
+test('Customers and items, with its counts, opens Your lists', async () => {
+  await clearParties('customer');
+  await clearParties('supplier');
+  await clearItems();
+  await render(<ProfileScreen />);
+  // with nothing imported yet: the counts at 0, in figures and capitals as the row's sub-line
+  const row = () => button(/^Customers and items, /);
+  expect(row().props.accessibilityLabel).toBe('Customers and items, 0 customers · 0 suppliers · 0 items');
+  const sub = within(row()).getByText('0 customers · 0 suppliers · 0 items');
+  expect(typeStylesOf(sub)).toEqual(['figureSmall']);
+  expect(sub).toHaveStyle({ textTransform: 'uppercase' });
+  expect(chevronsIn(row())).not.toHaveLength(0);
+
+  // one of each: "customer", "supplier", "item"; a party that's both counts in both
+  await act(async () => {
+    await addParty({ ...PARTY, type: 'both', registeredName: 'Torres Construction Supply' });
+    await addItem({ name: 'Cement 40kg', unit: 'bag', price: 250 });
+  });
+  expect(row().props.accessibilityLabel).toBe('Customers and items, 1 customer · 1 supplier · 1 item');
+  await act(async () => {
+    await addParty({ ...PARTY, type: 'customer', registeredName: 'Reyes Hardware' });
+    await addParty({ ...PARTY, type: 'customer', registeredName: 'Lim Trading' });
+    await addItem({ name: 'Rebar 10mm', unit: 'pc', price: 180 });
+  });
+  expect(row().props.accessibilityLabel).toBe('Customers and items, 3 customers · 1 supplier · 2 items');
+
+  await press(row());
+  expect(mockPush).toHaveBeenCalledTimes(1);
+  expect(mockPush).toHaveBeenLastCalledWith('/lists');
+});
+
+test('four groups, each field with its helper', async () => {
   await updateSettings({ vatRegistered: null }); // not answered yet
-  await render(<SettingsScreen />);
-  expect(headers()).toEqual(['Settings', 'Your business', 'Export defaults', 'About']);
+  await render(<ProfileScreen />);
+  expect(headers()).toEqual(['Profile', 'Your business', 'Export defaults', 'Your lists', 'About']);
 
   // Your business: the two chips, neither chosen until one is, and what the answer does
   const business = screen.getByRole('radiogroup', { name: 'Your business is' });
@@ -141,7 +195,7 @@ test('three groups, each field with its helper', async () => {
   const note = screen.getByText(NOTE);
   expect(note).toHaveStyle({ color: colors.mute });
 
-  // top to bottom: each group under its strip, the note after the fields, then About's three rows
+  // top to bottom: each group under its strip, the note after the fields, Your lists' row, then About's three rows
   expectInOrder(
     header('Your business'),
     business,
@@ -149,6 +203,8 @@ test('three groups, each field with its helper', async () => {
     header('Export defaults'),
     ...FIELDS.map(([label]) => field(label)),
     note,
+    header('Your lists'),
+    button(/^Customers and items, /),
     header('About'),
     button('Privacy'),
     button('Open-source licenses'),
@@ -159,7 +215,7 @@ test('three groups, each field with its helper', async () => {
 test('the ATC is a code: capitals, on the keyboard with a number row; the accounts are words or codes', async () => {
   // the plan's call 15: Android's visible-password keyboard for a code, the default one for words; autocorrect off
   jest.replaceProperty(Platform, 'OS', 'android');
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   const keyboardOf = (label: string) => {
     const { keyboardType, autoCapitalize, autoCorrect } = field(label).props;
     return [keyboardType, autoCapitalize, autoCorrect];
@@ -171,7 +227,7 @@ test('the ATC is a code: capitals, on the keyboard with a number row; the accoun
 });
 
 test('the settings show what the phone keeps', async () => {
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   expect(header('Export defaults')).toBeTruthy();
   expect(field('Revenue account for sales').props.value).toBe('4010');
   expect(screen.getByRole('radio', { name: 'VAT-registered', checked: true })).toBeTruthy();
@@ -179,7 +235,7 @@ test('the settings show what the phone keeps', async () => {
 });
 
 test('a field is saved as it is typed, and the VAT answer at once', async () => {
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   await typeIn(field('Expense account for purchases'), ' 5010 ');
   expect(settings().expenseAccount).toBe('5010');
   await typeIn(field('Withholding tax ATC'), 'wc158');
@@ -190,26 +246,26 @@ test('a field is saved as it is typed, and the VAT answer at once', async () => 
 });
 
 test('the offset account is kept as typed', async () => {
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   expect(field('Offset account for 2307s').props.value).toBe('');
   await typeIn(field('Offset account for 2307s'), ' 1205 CWT Receivable ');
   expect(settings().offsetAccount).toBe('1205 CWT Receivable');
   await screen.unmount(); // left while the field still has the cursor
   expect(settings().offsetAccount).toBe('1205 CWT Receivable');
   // and shown when the screen opens again
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   expect(field('Offset account for 2307s').props.value).toBe('1205 CWT Receivable');
 });
 
 test('what was typed is kept when the screen is left from the field', async () => {
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   await typeIn(field('Revenue account for sales'), '4000 Sales Revenue');
   await screen.unmount(); // going back while the field still has the cursor: React Native doesn't blur it
   expect(settings().revenueAccount).toBe('4000 Sales Revenue');
 });
 
 test('the ATC hint warns without blocking, and the value saves as typed', async () => {
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   const atc = () => field('Withholding tax ATC');
   // empty: the helper
   expect(screen.getByText(ATC_HELPER)).toBeOnTheScreen();
@@ -242,13 +298,13 @@ test('the ATC hint warns without blocking, and the value saves as typed', async 
   // one kept from before in another shape warns when the screen opens
   await screen.unmount();
   await updateSettings({ atc: 'WI01' });
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   expect(atc().props.value).toBe('WI01');
   expect(screen.getByText(ATC_WARNING)).toBeOnTheScreen();
 });
 
 test('a field scrolls into view above the keyboard, whole: its label, its input and its helper', async () => {
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   const atc = field('Withholding tax ATC');
   expect(within(screen.getByTestId('screen-scroll')).getByLabelText('Withholding tax ATC')).toBe(atc);
   // jest's scroll views and views have no layout, and share their native methods: Android's measurements stand in
@@ -283,7 +339,7 @@ test('a field scrolls into view above the keyboard, whole: its label, its input 
 });
 
 test('Privacy opens a sheet in plain words', async () => {
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   expect(chevronsIn(button('Privacy'))).not.toHaveLength(0);
   await press(button('Privacy'));
   expect(header('Privacy')).toBeOnTheScreen();
@@ -302,7 +358,7 @@ test('Privacy opens a sheet in plain words', async () => {
 });
 
 test('Open-source licenses opens its screen', async () => {
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   const licenses = button('Open-source licenses');
   expect(chevronsIn(licenses)).not.toHaveLength(0);
   await press(licenses);
@@ -311,7 +367,7 @@ test('Open-source licenses opens its screen', async () => {
 });
 
 test('Version shows the version', async () => {
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   // the version and the build number, in figures on the right, as one stop for TalkBack
   const version = screen.getByLabelText('Version, 1.0.0 (12)');
   expect(typeStylesOf(within(version).getByText('1.0.0 (12)'))).toEqual(['figure']);
@@ -325,7 +381,7 @@ test('Version shows the version', async () => {
 
 test('Team tools: annotation mode is one switch row that toggles from its label', async () => {
   mockTeam = true;
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   // one stop for TalkBack: the row, a 48 dp full-bleed switch
   expect(screen.getAllByRole('switch')).toHaveLength(1);
   const row = () => screen.getByRole('switch', { name: 'Annotation mode' });
@@ -364,7 +420,7 @@ test('Team tools: annotation mode is one switch row that toggles from its label'
 test('the annotation switch is kept', async () => {
   mockTeam = true;
   const update = jest.spyOn(store, 'updateSettings'); // it still saves
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   await press(screen.getByRole('switch', { name: 'Annotation mode' }));
   expect(update).toHaveBeenCalledWith({ annotation: true });
   expect(screen.getByRole('switch', { name: 'Annotation mode', checked: true })).toBeTruthy();
@@ -373,14 +429,14 @@ test('the annotation switch is kept', async () => {
   await screen.unmount();
   await act(async () => loadSettings()); // read again from the phone, as at the next start
   expect(settings().annotation).toBe(true);
-  await render(<SettingsScreen />);
+  await render(<ProfileScreen />);
   expect(screen.getByRole('switch', { name: 'Annotation mode', checked: true })).toBeTruthy();
 });
 
 test('team builds show the team tools, after About', async () => {
   mockTeam = true;
-  await render(<SettingsScreen />);
-  expect(headers()).toEqual(['Settings', 'Your business', 'Export defaults', 'About', 'Team tools']);
+  await render(<ProfileScreen />);
+  expect(headers()).toEqual(['Profile', 'Your business', 'Export defaults', 'Your lists', 'About', 'Team tools']);
   const note = screen.getByText(ANNOTATION_NOTE);
   expect(note).toHaveStyle({ color: colors.mute });
   expectInOrder(
@@ -394,7 +450,7 @@ test('team builds show the team tools, after About', async () => {
   for (const name of ['Training data', 'Speed test']) expect(chevronsIn(button(name))).not.toHaveLength(0);
   await press(button('Training data'));
   expect(mockPush).toHaveBeenLastCalledWith('/training');
-  // as the screen's other rows: once, until Settings is on top again (lib/navigation's usePushOnce)
+  // as the screen's other rows: once, until Profile is on top again (lib/navigation's usePushOnce)
   await press(button('Speed test'));
   expect(mockPush).toHaveBeenCalledTimes(1);
   await act(async () => focusAgain());
@@ -405,8 +461,8 @@ test('team builds show the team tools, after About', async () => {
 test('client builds show no team tools', async () => {
   // not even on a phone that had annotation mode on in a team build: the setting stays, unseen (milestone 4)
   await updateSettings({ annotation: true });
-  await render(<SettingsScreen />);
-  expect(headers()).toEqual(['Settings', 'Your business', 'Export defaults', 'About']);
+  await render(<ProfileScreen />);
+  expect(headers()).toEqual(['Profile', 'Your business', 'Export defaults', 'Your lists', 'About']);
   expect(screen.queryByRole('switch')).toBeNull();
   expect(screen.queryByTestId('annotation-switch', { includeHiddenElements: true })).toBeNull();
   expect(screen.queryByText('Annotation mode')).toBeNull();

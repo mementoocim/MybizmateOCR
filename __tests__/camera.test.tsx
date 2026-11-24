@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react-n
 import * as Haptics from 'expo-haptics';
 import { Alert, AppState, Linking, StyleSheet } from 'react-native';
 
-import CameraScreen from '../app/camera';
+import CameraScreen from '../app/(tabs)/camera';
 import { CAMERA_ERRORS, CAMERA_TEXT, PERMISSION_TEXT, statusText } from '../lib/cameraCopy';
 import { saveScan } from '../lib/saved';
 import { getScan } from '../lib/scans';
@@ -12,10 +12,10 @@ import { coreJson } from '../test-utils/coreJson';
 import { dialogWords } from '../test-utils/dialogs';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
-// Design B §9.3: the camera. The preview, its outline, auto-capture and the checks are native. Over them: Close, with
-// no title, the Auto switch and the flashlight switch; the status pill; the gallery (an icon over its label) and the
-// shutter, which waits while the camera starts or takes the photo. A problem shows a panel in the picture's place. An
-// auto-captured photo gets one confirm haptic (§5.5), then the reading card (§9.4).
+// Design B §9.3: the camera, a tab (camera first). The preview, its outline, auto-capture and the checks are native.
+// Over them, with no title and no Close: the Auto switch and the flashlight switch; the status pill; the gallery (an
+// icon over its label) and the shutter, which waits while the camera starts or takes the photo. A problem shows a
+// panel in the picture's place. An auto-captured photo gets one confirm haptic (§5.5), then the reading card (§9.4).
 
 let mockFocused = true;
 let mockParams: Record<string, string> = {};
@@ -214,17 +214,19 @@ test('an error stays in the pill for 3 s, then the status shows again', async ()
   }
 });
 
-test('no title; Close, the Auto switch and the flashlight switch', async () => {
+test('no Close: the camera is a tab', async () => {
+  // camera first (call 8): Back leaves the app from the camera, so nothing on it goes back
+  await open();
+  expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+  expect(mockNavigation.goBack).not.toHaveBeenCalled();
+  expect(mockRouter.replace).not.toHaveBeenCalled();
+});
+
+test('no title; the Auto switch and the flashlight switch', async () => {
   await open();
   expect(screen.queryByText('Scan an invoice')).toBeNull();
   expect(screen.queryByRole('header')).toBeNull();
-
-  // Close: a 48 dp icon button in the camera's tone
-  const close = button('Close');
-  expect(close).toHaveStyle({ width: touch.target, height: touch.target });
-  expect(kids(close)[0].props).toMatchObject({ width: touch.icon, stroke: colors.cameraText });
-  await press(close);
-  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
 
   // Auto: a switch, on at first, a pill holding AUTO and a dot (brand when on, a hollow ring when off)
   expect(autoSwitch()).toBeChecked();
@@ -253,28 +255,6 @@ test('no title; Close, the Auto switch and the flashlight switch', async () => {
   await press(flashlight());
   expect(flashlight()).not.toBeChecked();
   expect(camera().props.torch).toBe(false);
-});
-
-test('Close goes back once, however fast it is tapped twice', async () => {
-  // Going back queues one GO_BACK per call: a second would leave the screen under this one too
-  await open();
-  await act(async () => {
-    await fireEvent.press(button('Close'));
-    await fireEvent.press(button('Close'));
-  });
-  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
-});
-
-test('with nothing under it, Close goes Home, once (ruling T24-1)', async () => {
-  // Opened first, with nothing under it: the Stack is anchored on Home (app/_layout), so this is the fallback.
-  mockNavigation.canGoBack.mockReturnValue(false);
-  await open();
-  await act(async () => {
-    await fireEvent.press(button('Close'));
-    await fireEvent.press(button('Close'));
-  });
-  expect(mockRouter.replace.mock.calls).toEqual([['/']]);
-  expect(mockNavigation.goBack).not.toHaveBeenCalled();
 });
 
 test('the shutter is disabled while the camera starts', async () => {
@@ -464,7 +444,19 @@ test('a photo is read', async () => {
   expect(screen.getByText('Reading…')).toBeTruthy();
   expect(screen.getByText('Straightening the photo and reading every box')).toBeTruthy();
   await act(async () => finish(parseScanResult(coreJson('inv_0007'))));
-  expect(mockRouter.replace).toHaveBeenCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
+  expect(mockRouter.push).toHaveBeenCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
+});
+
+test('a photo opens its Scan screen over the tabs', async () => {
+  // pushed, not in the camera's place: the camera is a tab under it, and Back from the Scan screen comes back to it
+  await open();
+  await send('photo', { uri: 'file:///cache/camera/capture_6.jpg' });
+  expect(mockRouter.push.mock.calls).toEqual([[{ pathname: '/result', params: { id: expect.any(String) } }]]);
+  // and so does a photo from the gallery
+  mockLibrary.mockResolvedValue({ canceled: false, assets: [{ uri: 'content://media/1' }] });
+  await press(button('Gallery'));
+  expect(mockRouter.push).toHaveBeenCalledTimes(2);
+  expect(mockRouter.replace).not.toHaveBeenCalled();
 });
 
 test("light status icons on the camera, dark over the reading card's light wash, then light again", async () => {
@@ -481,6 +473,18 @@ test("light status icons on the camera, dark over the reading card's light wash,
   await act(async () => finish(parseScanResult(coreJson('inv_0007'))));
   expect(screen.queryByLabelText('Reading')).toBeNull();
   expect(statusBar()).toEqual({ style: 'light' });
+});
+
+test("the status bar is the camera's only while it's on top", async () => {
+  // a tab left stays mounted under the others: its light icons would win over the root's dark ones (Review Focus 4)
+  const view = await open();
+  expect(screen.getByTestId('status-bar').props.statusBar).toEqual({ style: 'light' });
+  mockFocused = false;
+  await act(async () => view.rerender(<CameraScreen />));
+  expect(screen.queryByTestId('status-bar')).toBeNull();
+  mockFocused = true;
+  await act(async () => view.rerender(<CameraScreen />));
+  expect(screen.getByTestId('status-bar').props.statusBar).toEqual({ style: 'light' });
 });
 
 test('auto-capture confirms with one haptic; a shutter photo has none', async () => {
@@ -576,7 +580,7 @@ test('the development test hook: a sample stands in for the camera, with no perm
 });
 
 test('a camera test image is marked', async () => {
-  const opened = () => getScan(mockRouter.replace.mock.calls.at(-1)![0].params.id)!;
+  const opened = () => getScan(mockRouter.push.mock.calls.at(-1)![0].params.id)!;
   // a photo the camera took is no test image
   await open();
   await send('photo', { uri: 'file:///cache/camera/capture_3.jpg' });

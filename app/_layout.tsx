@@ -15,11 +15,13 @@ import { colors } from '../lib/theme';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 /**
- * Home is always at the bottom of the Stack (ruling T24-1): a link opened cold (mybizmatescan://camera?test=…,
- * mybizmatescan://speed) has Home under it, so Back and Close have somewhere to go. expo-router 58 calls this the
- * anchor; its older name, initialRouteName, still works but warns that it's deprecated.
+ * The tabs are always at the bottom of the Stack (ruling T24-1's anchor, moved to the tabs group by camera first,
+ * spec §6.1): a link opened cold (mybizmatescan://speed, mybizmatescan://lists) has the tabs under it, on the camera,
+ * the tabs' own anchor, so Back has somewhere to go. The Scan screen, Saved, Your lists, the licenses and the team
+ * screens open above the tabs, with no bar. expo-router 58 calls this the anchor; its older name, initialRouteName,
+ * still works but warns that it's deprecated.
  */
-export const unstable_settings = { anchor: 'index' };
+export const unstable_settings = { anchor: '(tabs)' };
 
 export default function RootLayout() {
   useState(resetStarted); // before its screens render: not started until its splash has gone (ruling T3-1)
@@ -43,10 +45,8 @@ export default function RootLayout() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
       <StatusBar style="dark" />
-      {/* Every screen draws its own Header, so no route shows the Stack's. */}
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.paper } }}>
-        <Stack.Screen name="camera" options={{ contentStyle: { backgroundColor: colors.camera } }} />
-      </Stack>
+      {/* Every screen draws its own Header, so no route shows the Stack's. The camera's black is its tab's scene's. */}
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.paper } }} />
       {/* The snackbar's root host, over every screen; an open sheet or the photo viewer has its own. */}
       <SnackbarHost />
       {!ready && <BrandSplash onReady={onReady} />}

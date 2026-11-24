@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 
-import Home from '../app/index';
+import Home from '../app/(tabs)/index';
 import { addItem, addParty, clearItems, clearParties } from '../lib/lists';
 import { loadSaved } from '../lib/saved';
 import { SAMPLES } from '../lib/samples';
@@ -22,14 +22,27 @@ import { typeStylesOf } from '../test-utils/typeStyles';
 
 let mockTeam = false;
 const mockPush = jest.fn();
+const mockNavigate = jest.fn(); // another tab: the camera, Profile (lib/navigation's useNavigateOnce)
 const mockScanPhoto = jest.fn();
 const mockLibrary = jest.fn();
 const mockPick = jest.fn();
 const mockReadPdf = jest.fn();
 
 jest.mock('expo-router', () => ({
-  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
-  useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
+  // Home is a tab (lib/navigation: going back, and whether it's in the tabs)
+  useNavigation: () => ({
+    canGoBack: () => true,
+    goBack: jest.fn(),
+    getState: () => ({ type: 'tab' }),
+    getParent: () => undefined,
+  }),
+  useRouter: () => ({
+    push: mockPush,
+    navigate: mockNavigate,
+    dismissTo: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+  }),
   // a screen's pushes run once until it's focused again (lib/navigation)
   useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
   useIsFocused: () => true,
@@ -137,7 +150,7 @@ const CUSTOMER = {
   fromScan: false,
 } as const;
 
-test('the header: the wordmark, Your lists and Settings; no menu', async () => {
+test('the header: the wordmark, Your lists and Settings, which opens Profile; no menu', async () => {
   for (const team of [false, true]) {
     mockTeam = team; // a team build has the speed test in Settings › Team tools, never on Home
     await render(<Home />);
@@ -159,7 +172,8 @@ test('the header: the wordmark, Your lists and Settings; no menu', async () => {
   expect(mockPush).toHaveBeenLastCalledWith('/lists');
   await backHome();
   await press(top.getByRole('button', { name: 'Settings' }));
-  expect(mockPush).toHaveBeenLastCalledWith('/settings');
+  expect(mockNavigate).toHaveBeenLastCalledWith('/profile'); // the Profile tab
+  expect(mockPush).toHaveBeenCalledTimes(1);
 });
 
 test('a press opens its screen once, until Home is on top again (final review, Minor 4)', async () => {
@@ -170,14 +184,15 @@ test('a press opens its screen once, until Home is on top again (final review, M
     await fireEvent.press(button('Take photo'));
     await fireEvent.press(button('Take photo'));
   });
-  expect(mockPush.mock.calls).toEqual([['/camera']]);
-  // the screen's other presses too, while the camera opens over it
+  expect(mockNavigate.mock.calls).toEqual([['/camera']]); // the camera tab
+  // the screen's other tab presses too, while the camera opens
   await press(within(screen.getByTestId('header')).getByRole('button', { name: 'Settings' }));
-  expect(mockPush.mock.calls).toEqual([['/camera']]);
+  expect(mockNavigate.mock.calls).toEqual([['/camera']]);
   // back on Home, a press opens its screen again
   await backHome();
   await press(button('Take photo'));
-  expect(mockPush.mock.calls).toEqual([['/camera'], ['/camera']]);
+  expect(mockNavigate.mock.calls).toEqual([['/camera'], ['/camera']]);
+  expect(mockPush).not.toHaveBeenCalled();
 });
 
 test('capture: Take photo, From gallery, Import PDF, and what it reads', async () => {
@@ -186,7 +201,7 @@ test('capture: Take photo, From gallery, Import PDF, and what it reads', async (
   const take = button('Take photo');
   expect(take).toHaveStyle({ minHeight: 56, backgroundColor: colors.brand });
   await press(take);
-  expect(mockPush).toHaveBeenLastCalledWith('/camera');
+  expect(mockNavigate).toHaveBeenLastCalledWith('/camera'); // the camera tab
 
   // under it, side by side: From gallery and Import PDF, both secondary
   const row = within(screen.getByTestId('button-row'));
@@ -279,7 +294,7 @@ test('Get set up: two rows, each checked when done, then gone for good', async (
   expect(mockPush).toHaveBeenLastCalledWith('/lists');
   await backHome();
   await press(defaultsRow());
-  expect(mockPush).toHaveBeenLastCalledWith('/settings');
+  expect(mockNavigate).toHaveBeenLastCalledWith('/profile'); // the Profile tab
 
   // the lists: any row in them, an item as much as a party
   await act(async () => {
