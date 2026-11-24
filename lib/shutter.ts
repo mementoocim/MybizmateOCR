@@ -5,6 +5,13 @@
 
 export type Shutter = { take: () => void; disabled: boolean };
 
+/**
+ * How long Done waits, once it has ended the session, for a photo Auto or the middle button had just started taking:
+ * its 'capturing' can still be on its way from the camera as Done is tapped (ruling T7-8). Then Done waits for that
+ * photo, or for the capture to end without one.
+ */
+export const CAPTURE_GRACE_MS = 250;
+
 let holder: object | null = null; // whose shutter it is
 let current: Shutter | null = null;
 const listeners = new Set<() => void>();

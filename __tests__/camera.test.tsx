@@ -8,7 +8,7 @@ import { captures, pendingIn } from '../lib/captureQueue';
 import { saveScan } from '../lib/saved';
 import { getScan, recentScans } from '../lib/scans';
 import { currentSession, loadSession, retakeIn } from '../lib/session';
-import { currentShutter } from '../lib/shutter';
+import { CAPTURE_GRACE_MS, currentShutter } from '../lib/shutter';
 import { setStarted } from '../lib/startup';
 import { colors, radius, touch, type } from '../lib/theme';
 import type { ScanResult } from '../modules/scanner';
@@ -151,6 +151,9 @@ beforeEach(async () => {
 });
 
 afterEach(() => alert.mockRestore());
+
+/** Done's grace for a 'capturing' still on its way (lib/shutter) passes. */
+const grace = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, CAPTURE_GRACE_MS + 20)));
 
 async function settle() {
   for (let i = 0; i < 10; i++) await act(async () => {});
@@ -621,6 +624,8 @@ test('Done waits for the queue, saying Reading 2 more…, then opens the session
   await read();
   expect(doneButton().props.accessibilityLabel).toBe('Reading 1 more…');
   await read();
+  await grace(); // Done's grace for a photo on its way
+  await settle();
   expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
   expect(mockRouter.push).not.toHaveBeenCalled();
   // back on the camera: no session open, the hint in the middle again
@@ -636,6 +641,8 @@ test("a session of one photo opens that photo's Scan screen", async () => {
   await press(doneButton());
   await settle();
   const scan = recentScans().find((s) => s.session === id)!;
+  await grace(); // Done's grace for a photo on its way
+  await settle();
   expect(mockRouter.push.mock.calls).toEqual([[{ pathname: '/result', params: { id: scan.id, session: id } }]]);
   expect(mockRouter.navigate).not.toHaveBeenCalled();
 
@@ -646,6 +653,8 @@ test("a session of one photo opens that photo's Scan screen", async () => {
   expect(second).not.toBe(id); // Done ended the first
   await fail();
   await press(doneButton());
+  await settle();
+  await grace(); // Done's grace for a photo on its way
   await settle();
   expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id: second } }, { withAnchor: true }]]);
 });
@@ -662,6 +671,8 @@ test('Done runs once on a double tap', async () => {
   });
   await read();
   await read();
+  await grace(); // Done's grace for a photo on its way
+  await settle();
   expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
   // and with nothing left to read, a double tap still opens one screen
   await refocus(view); // back from the session screen
@@ -674,6 +685,8 @@ test('Done runs once on a double tap', async () => {
     await fireEvent.press(doneButton());
     await fireEvent.press(doneButton());
   });
+  await settle();
+  await grace(); // Done's grace for a photo on its way
   await settle();
   expect(mockRouter.navigate.mock.calls).toEqual([
     [{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }],
@@ -711,6 +724,8 @@ test('Done waits while a photo is being taken; a photo that lands as Done waits 
   expect(doneButton().props.accessibilityLabel).toBe('Reading 4 more…');
   for (let i = 0; i < 4; i++) await read();
   expect(recentScans().filter((s) => s.session === id)).toHaveLength(4);
+  await grace(); // Done's grace for a photo on its way
+  await settle();
   expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
 });
 
@@ -723,6 +738,73 @@ test('a press whose photo the stopped camera dropped never leaves Done or the mi
   await refocus(view); // another tab: the camera stopped, and its photo was dropped natively
   expect(doneButton()).toBeEnabled();
   expect(currentShutter()?.disabled).toBe(false);
+
+  // Manual: a press, then a panel takes the camera's place; its photo went with it. Try again: nothing waits (T7-7)
+  await press(autoSwitch());
+  await send('status', { status: 'looking', form: null });
+  await take();
+  await send('status', { status: 'capturing', form: null });
+  expect(doneButton()).toBeDisabled();
+  await send('cameraError', { code: 'start', message: '' });
+  expect(screen.queryByTestId('camera')).toBeNull();
+  expect(doneButton()).toBeEnabled(); // no camera, no photo coming
+  await press(button('Try again'));
+  await send('status', { status: 'looking', form: null });
+  expect(doneButton()).toBeEnabled();
+  expect(currentShutter()?.disabled).toBe(false);
+});
+
+test("Done waits for a 'capturing' that arrives just after it was tapped, and for its photo (ruling T7-8)", async () => {
+  await open();
+  await send('status', { status: 'looking', form: null });
+  await photo('capture_1.jpg');
+  const id = sessionId()!;
+  await read(); // nothing left to read
+  await press(doneButton());
+  await send('status', { status: 'capturing', form: 'sales_invoice' }); // Auto's, on its way as Done was tapped
+  await grace();
+  await settle();
+  expect(mockRouter.navigate).not.toHaveBeenCalled();
+  expect(mockRouter.push).not.toHaveBeenCalled();
+  await photo('capture_2.jpg');
+  expect(captures().map((c) => c.session)).toEqual([id]); // the finishing session, not a new one
+  expect(mockRouter.navigate).not.toHaveBeenCalled(); // until it's read
+  await read();
+  expect(mockRouter.navigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id } }, { withAnchor: true }]]);
+  expect(recentScans().filter((s) => s.session === id)).toHaveLength(2);
+});
+
+test('Done never hangs on a capture that ends without a photo: an error, or the camera stopping', async () => {
+  const view = await open();
+  await send('status', { status: 'looking', form: null });
+  await photo('capture_1.jpg');
+  await photo('capture_2.jpg');
+  const first = sessionId()!;
+  await read();
+  await read();
+  await press(doneButton());
+  await send('status', { status: 'capturing', form: null });
+  await grace();
+  await send('cameraError', { code: 'capture', message: 'x' }); // no photo comes
+  await settle();
+  expect(mockRouter.navigate.mock.calls).toEqual([
+    [{ pathname: '/sessions/[id]', params: { id: first } }, { withAnchor: true }],
+  ]);
+
+  // the camera stopping: Done ends, and opens nothing from behind another tab
+  await refocus(view);
+  await photo('capture_3.jpg');
+  await read();
+  await press(doneButton());
+  await send('status', { status: 'capturing', form: null });
+  await grace();
+  mockFocused = false;
+  await act(async () => view.rerender(<CameraScreen />));
+  await settle();
+  expect(mockRouter.navigate).toHaveBeenCalledTimes(1);
+  mockFocused = true;
+  await act(async () => view.rerender(<CameraScreen />));
+  expect(screen.queryByRole('button', { name: /^Reading/ })).toBeNull(); // Done is over
 });
 
 test('leaving keeps the session and the queue; coming back continues it; 30 minutes later it has closed', async () => {

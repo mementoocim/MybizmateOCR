@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
 
 import { currentSession, loadSession } from '../lib/session';
-import { currentShutter } from '../lib/shutter';
+import { CAPTURE_GRACE_MS, currentShutter } from '../lib/shutter';
 import type { ScanResult } from '../modules/scanner';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
@@ -82,6 +82,11 @@ async function shoot() {
   await send('photo', { uri });
   await settle();
 }
+/** Done's grace for a photo on its way (lib/shutter) passes, on renderRouter's fake timers. */
+async function grace() {
+  await act(async () => jest.advanceTimersByTime(CAPTURE_GRACE_MS));
+  await settle();
+}
 async function read() {
   await act(async () => mockReads.shift()!.resolve(parseScanResult(coreJson('inv_0007', `file:///docs/scans/${photos}`))));
   await settle();
@@ -106,6 +111,7 @@ test('Done opens the session screen in the Sessions tab, with the bar; Back goes
   expect(screen.getByRole('button', { name: 'Reading 2 more…' })).toBeTruthy();
   await read();
   await read();
+  await grace();
   expect(screen).toHavePathname(`/sessions/${id}`);
   expect(onTop()).toEqual(['Session: on top']);
   expect(screen.getByTestId('tab-bar')).toBeOnTheScreen();
@@ -147,6 +153,7 @@ test("Done on a second session, with the first one's screen left in Sessions, sh
   await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Done · 2' })));
   await read();
   await read();
+  await grace();
   expect(screen).toHavePathname(`/sessions/${a}`);
 
   // back to the camera by its tab, session A's screen still in the Sessions tab
@@ -161,6 +168,7 @@ test("Done on a second session, with the first one's screen left in Sessions, sh
   await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Done · 2' })));
   await read();
   await read();
+  await grace();
   expect(screen).toHavePathname(`/sessions/${b}`);
   expect(onTop()).toEqual(['Session: on top']);
   expect(tab('Sessions')).toBeSelected();

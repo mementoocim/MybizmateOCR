@@ -31,7 +31,7 @@ import { sampleUri } from '../../lib/samples';
 import { recentScans, subscribeRecent } from '../../lib/scans';
 import { closeIdleSession, currentSession, endSession, subscribeSession, takeCapture } from '../../lib/session';
 import { trayOf } from '../../lib/sessions';
-import { setShutter } from '../../lib/shutter';
+import { CAPTURE_GRACE_MS, setShutter } from '../../lib/shutter';
 import { useStarted } from '../../lib/startup';
 import { colors, radius, space, touch, type } from '../../lib/theme';
 import {
@@ -128,6 +128,9 @@ export default function CameraScreen() {
   const camera = useRef<ScannerCameraRef>(null);
   const shutterPressed = useRef(false); // the photo on its way is the shutter's, not one Auto took
   const [shooting, setShooting] = useState(false); // the middle button was pressed, and its photo isn't back yet
+  const [captureOver, setCaptureOver] = useState(true); // the last 'capturing' ended: its photo, an error or a stop
+  const capturingRef = useRef(false); // a photo on its way, for Done (below)
+  const landed = useRef<(() => void)[]>([]); // Done, waiting for that photo
   const pickingRef = useRef(false); // set at once, so a second picker is refused before the re-render
   const [picking, setPicking] = useState(false);
   const [finishing, setFinishing] = useState<string | null>(null); // Done: the session it waits for
@@ -188,6 +191,8 @@ export default function CameraScreen() {
   }
 
   function tryAgain() {
+    setShooting(false); // the camera that went took its photo with it (ruling T7-7)
+    setCaptureOver(true);
     setProblem(null);
     setStatus(STARTING);
     setHasTorch(false);
@@ -197,6 +202,7 @@ export default function CameraScreen() {
   function takePhoto() {
     shutterPressed.current = true;
     setShooting(true);
+    setCaptureOver(false);
     void camera.current?.takePhoto();
   }
 
@@ -210,6 +216,7 @@ export default function CameraScreen() {
     if (code === 'capture' || code === 'keep') {
       shutterPressed.current = false; // no photo comes for that press
       setShooting(false);
+      setCaptureOver(true);
     }
     if (code === 'capture') showError(CAMERA_ERRORS.capture);
     else if (code === 'keep') showError(CAMERA_ERRORS.keep);
@@ -227,6 +234,7 @@ export default function CameraScreen() {
     const byAuto = auto && !shutterPressed.current; // the person's eyes are on the paper, not the screen
     shutterPressed.current = false;
     setShooting(false);
+    setCaptureOver(true);
     // taken as the screen was left, or as a picker opened: no session takes it
     if (!focusedRef.current || pickingRef.current) {
       discard(uri);
@@ -317,6 +325,9 @@ export default function CameraScreen() {
     try {
       endSession(id);
       holdReads(false);
+      // a 'capturing' still on its way arrives, then its photo lands in this session, or the capture ends (T7-8)
+      await new Promise<void>((resolve) => setTimeout(resolve, CAPTURE_GRACE_MS));
+      if (capturingRef.current) await new Promise<void>((resolve) => landed.current.push(resolve));
       await whenRead(id);
       if (!focusedRef.current) return; // left while it read: the session waits in Sessions
       const kept = recentScans().filter((s) => s.session === id);
@@ -342,15 +353,35 @@ export default function CameraScreen() {
   // Done waits it stays on, with Auto off and the middle button waiting: stopping it would drop a photo still being
   // saved (ScannerCameraView.kt deletes one that lands once it has stopped), and none new is taken (ruling T7-2).
   const live = started && focused && !picking && !sayingWhy;
-  const capturing = status.status === 'capturing' || shooting; // a photo on its way: Done waits for it
+  const cameraOn = live && viewUp; // a view, running: one that stops or goes drops a photo on its way
+  // a photo on its way: Done waits for it
+  const capturing = cameraOn && ((status.status === 'capturing' && !captureOver) || shooting);
   const shutterOff = !viewUp || !live || finishing !== null || status.status === 'starting' || capturing;
 
-  // A camera that stops drops a photo on its way: nothing is coming back for the middle button's press.
-  const [wasLive, setWasLive] = useState(live);
-  if (live !== wasLive) {
-    setWasLive(live);
-    if (!live) setShooting(false);
+  // A camera that stops, or whose view goes for a panel, drops a photo on its way: nothing is coming back for the middle
+  // button's press, nor for a 'capturing' (ruling T7-7).
+  const [wasOn, setWasOn] = useState(cameraOn);
+  if (cameraOn !== wasOn) {
+    setWasOn(cameraOn);
+    if (!cameraOn) {
+      setShooting(false);
+      setCaptureOver(true);
+    }
   }
+  // Done, waiting for a photo on its way, goes on once there's none (its photo landed, or the capture ended), and when
+  // the camera goes.
+  useEffect(() => {
+    capturingRef.current = capturing;
+    if (capturing) return;
+    landed.current.splice(0).forEach((resolve) => resolve());
+  }, [capturing]);
+  useEffect(
+    () => () => {
+      capturingRef.current = false;
+      landed.current.splice(0).forEach((resolve) => resolve());
+    },
+    [],
+  );
 
   // The tabs' middle button is the shutter while the camera is on top; on another tab it's Camera again.
   const owner = useRef(null); // this camera, as lib/shutter knows it: a stable object
@@ -452,7 +483,10 @@ export default function CameraScreen() {
             torch={torch}
             testImage={testImage}
             onReady={(e) => setHasTorch(e.nativeEvent.hasTorch)}
-            onStatus={(e) => setStatus(e.nativeEvent)}
+            onStatus={(e) => {
+              setStatus(e.nativeEvent);
+              if (e.nativeEvent.status === 'capturing') setCaptureOver(false);
+            }}
             onPhoto={(e) => onPhoto(e.nativeEvent.uri)}
             onCameraError={(e) => onCameraError(e.nativeEvent.code, e.nativeEvent.message)}
           />
