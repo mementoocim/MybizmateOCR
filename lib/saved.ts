@@ -39,6 +39,7 @@ type SummaryBase = {
   exportedAt: string | null; // when it went out in an import file
   // when it went out in a training export (team builds); a summary kept before milestone 4 has none, and loads as null
   trainingExportedAt?: string | null;
+  session?: string; // the session its scan was taken in; none for a scan from before camera first
 };
 /** A saved sale or purchase: its row of the Sales or Purchases import. */
 export type InvoiceSummary = SummaryBase & { kind: InvoiceKind; gross: number; row: ExportRow };
@@ -85,13 +86,13 @@ function checksOf(scan: StoredScan): SaleView | CertView | null {
 }
 
 /**
- * A saved scan's summary, with the marks of the one it replaces: when it went out in an import file, and in a training
- * export.
+ * A saved scan's summary, with the session it was taken in, and the marks of the one it replaces: when it went out in an
+ * import file, and in a training export.
  */
 function summaryOf(scan: StoredScan, before?: SavedSummary): SavedSummary {
   const { savedAt, details } = scan.saved!;
   const marks = { exportedAt: before?.exportedAt ?? null, trainingExportedAt: before?.trainingExportedAt ?? null };
-  const base = { id: scan.id, label: scan.label, savedAt, ...marks };
+  const base = { id: scan.id, label: scan.label, savedAt, ...marks, session: scan.session };
   if (is2307(scan)) {
     const view = certOf(scan, lists(), settings());
     const { cert, payor } = view;

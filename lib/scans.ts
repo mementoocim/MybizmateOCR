@@ -1,4 +1,4 @@
-import { Directory } from 'expo-file-system';
+import { Directory, Paths } from 'expo-file-system';
 
 import type { BoxRead, ScanResult } from '../modules/scanner';
 import type { Terms } from './checks/finalize';
@@ -49,6 +49,7 @@ export type StoredScan = {
   // a hash of the edits and checks as last saved (marksOf in lib/saved.ts), never what a box says; '' when it has none:
   // not saved yet, or saved before the save kept one
   savedMarks?: string;
+  session?: string; // the session it was taken in (lib/session); none on a scan kept before camera first, nor a sample
 };
 
 /**
@@ -86,6 +87,7 @@ let recent: readonly StoredScan[] = []; // replaced, never changed in place: scr
 const opened = new Map<string, StoredScan>(); // saved scans opened from Saved
 let counter = 0;
 const listeners = new Set<() => void>();
+let written: Promise<void> = Promise.resolve(); // recent.json's latest write, its failure caught: scansWritten
 
 function changed(): void {
   listeners.forEach((listener) => listener());
@@ -99,12 +101,18 @@ export function subscribeRecent(listener: () => void): () => void {
   };
 }
 
-async function save(): Promise<void> {
-  try {
-    await writeJson(FILE, recent.map((s) => ({ ...s, at: s.at.toISOString() })));
-  } catch {
+function save(): void {
+  written = writeJson(FILE, recent.map((s) => ({ ...s, at: s.at.toISOString() }))).catch(() => {
     // the list is a convenience: a scan still shows when it can't be saved
-  }
+  });
+}
+
+/**
+ * Resolves once recent.json holds every change made so far, or its write failed: its writes go one at a time
+ * (lib/jsonFile), so the latest one lands last.
+ */
+export function scansWritten(): Promise<void> {
+  return written;
 }
 
 const FRESH = {
@@ -123,7 +131,13 @@ const FRESH = {
 /** A BIR Form 2307 (its form found) is a 2307; any other scan keeps its kind, a sale until the person says otherwise. */
 const kindOf = (r: ScanResult, kept: Kind = 'sale'): Kind => (r.aligned && r.form === 'bir_2307' ? '2307' : kept);
 
-export function addScan(s: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'result' | 'testImage'>): string {
+/**
+ * Keeps a scan just read as the newest, with the session it was taken in, if any. It's kept as of now, or as of the time
+ * given: a queued photo's, when it was taken (ruling P-F2).
+ */
+export function addScan(
+  s: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'result' | 'testImage' | 'session'> & { at?: Date },
+): string {
   const scan: StoredScan = {
     ...FRESH,
     ...s,
@@ -131,11 +145,11 @@ export function addScan(s: Pick<StoredScan, 'label' | 'source' | 'sampleId' | 'r
     kind: kindOf(s.result),
     made: { app: APP_VERSION, model: modelVersion() },
     id: `${Date.now()}-${++counter}`,
-    at: new Date(),
+    at: s.at ?? new Date(),
   };
   recent = [scan, ...recent].slice(0, KEEP);
   changed();
-  void save();
+  save();
   return scan.id;
 }
 
@@ -157,7 +171,7 @@ export function updateScan(
   const scan: StoredScan = { ...old, ...change };
   if (recent.some((s) => s.id === id)) {
     recent = recent.map((s) => (s.id === id ? scan : s));
-    void save();
+    save();
   }
   if (opened.has(id)) opened.set(id, scan);
   changed();
@@ -203,10 +217,36 @@ export function cacheScan(scan: StoredScan): void {
 export function forgetScan(id: string): void {
   if (recent.some((s) => s.id === id)) {
     recent = recent.filter((s) => s.id !== id);
-    void save();
+    save();
   }
   opened.delete(id);
   changed();
+}
+
+/**
+ * The folder the scanner wrote a scan's files to, files/scans/<ms>/ (ScannerModule's scan and readPdf, which keep only
+ * the newest KEEP), as the result's scanDir gives it; null when it kept no files, or when they're anywhere else.
+ */
+function scannerFolder(r: ScanResult): Directory | null {
+  if (!r.scanDir) return null;
+  const scans = new Directory(Paths.document, 'scans').uri.replace(/\/+$/, '');
+  const dir = r.scanDir.replace(/\/+$/, '');
+  const name = dir.startsWith(`${scans}/`) ? dir.slice(scans.length + 1) : '';
+  return name !== '' && !name.includes('/') ? new Directory(dir) : null;
+}
+
+/**
+ * Deletes an unsaved scan: its folder of files in the scanner's files/scans/, then the scan, from the recent scans. A
+ * folder that can't be deleted throws, and the scan stays. A saved scan throws 'saved': its folder has moved to saved/,
+ * and deleteSaved (lib/saved) is its way out.
+ */
+export function deleteScan(id: string): void {
+  const scan = getScan(id);
+  if (!scan) return;
+  if (scan.saved) throw new Error('saved');
+  const folder = scannerFolder(scan.result);
+  if (folder?.exists) folder.delete();
+  forgetScan(id);
 }
 
 /** Newest first, KEEP at most; the same list until it changes. */

@@ -6,6 +6,11 @@ import { memoryFs } from '../test-utils/memoryFs';
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 
 const flush = () => new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
+const RECENT = 'file:///docs/recent.json';
+const SESSION = '1795000000000-ab12'; // lib/session's newSessionId
+/** The ids recent.json holds, newest first; none before its first write. */
+const recentIds = (): string[] =>
+  (JSON.parse((memoryFs.files.get(RECENT) as string | undefined) ?? '[]') as { id: string }[]).map((s) => s.id);
 /** A scan as it starts, before the person does anything to it. */
 const UNTOUCHED = {
   edits: {},
@@ -217,4 +222,113 @@ test('saves the list and loads it back, without scans whose folder is gone', asy
   expect(loaded[0].sampleId).toBe('inv_0007');
   expect(loaded[0].at).toBeInstanceOf(Date);
   expect(loaded[0].result.reads[0].text).toBe('0007655');
+});
+
+test('a scan keeps its session, in recent.json too; one kept before camera first has none', async () => {
+  // recent.json as design B wrote it: a scan from before camera first
+  const old = { id: 'old-4', label: 'Camera photo', source: 'camera', at: '2026-11-20T01:00:00.000Z', result: result('/s/old') };
+  memoryFs.files.set(RECENT, JSON.stringify([old]));
+  memoryFs.dirs.add('file:///s/old');
+  const first = require('../lib/scans');
+  await first.loadRecent();
+  const id = first.addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a'), session: SESSION });
+  const sample = first.addScan({ label: 'Sample 0007', source: 'sample', sampleId: 'inv_0007', result: result('/s/c') });
+  expect(first.getScan(id).session).toBe(SESSION);
+  expect(first.getScan(sample).session).toBeUndefined(); // a sample is never part of a session
+  await flush();
+  const kept: { id: string; session?: string }[] = JSON.parse(memoryFs.files.get(RECENT) as string);
+  expect(kept.map((s) => s.id)).toEqual([sample, id, 'old-4']);
+  expect(kept[1].session).toBe(SESSION);
+  expect(kept[0]).not.toHaveProperty('session');
+  expect(kept[2]).not.toHaveProperty('session');
+
+  memoryFs.dirs.add('file:///s/a');
+  memoryFs.dirs.add('file:///s/c');
+  jest.resetModules();
+  const second = require('../lib/scans');
+  await second.loadRecent();
+  expect(second.getScan(id).session).toBe(SESSION);
+  expect(second.getScan('old-4')).toMatchObject(UNTOUCHED);
+  expect(second.getScan('old-4').session).toBeUndefined();
+});
+
+test("a queued photo's scan keeps the time the photo was taken, not the time it was read (ruling P-F2)", async () => {
+  const { addScan, getScan } = require('../lib/scans');
+  const taken = new Date(2026, 10, 24, 9, 41, 7);
+  const id = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a'), session: SESSION, at: taken });
+  expect(getScan(id).at).toEqual(taken);
+  await flush();
+  expect(JSON.parse(memoryFs.files.get(RECENT) as string)[0].at).toBe(taken.toISOString());
+});
+
+test('scansWritten waits until recent.json holds the scan just added', async () => {
+  const { addScan, scansWritten, updateScan } = require('../lib/scans');
+  await scansWritten(); // nothing written yet
+  const a = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a'), session: SESSION });
+  const b = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/b'), session: SESSION });
+  expect(recentIds()).toEqual([]); // still being written
+  await scansWritten();
+  expect(recentIds()).toEqual([b, a]);
+
+  // a write that fails: it resolves all the same, and the next change is written
+  const { File } = require('expo-file-system'); // the one lib/jsonFile uses until the next reset
+  jest.spyOn(File.prototype, 'write').mockRejectedValueOnce(new Error('No space left on device'));
+  const c = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/c'), session: SESSION });
+  await expect(scansWritten()).resolves.toBeUndefined();
+  expect(recentIds()).toEqual([b, a]);
+  updateScan(c, { kind: 'purchase' });
+  await scansWritten();
+  expect(recentIds()).toEqual([c, b, a]);
+});
+
+test('deleting an unsaved scan forgets it and its folder; a saved one is refused', async () => {
+  const { addScan, deleteScan, getScan, recentScans, scansWritten, subscribeRecent, updateScan } = require('../lib/scans');
+  /** A scan whose files are in the folder given, as the core writes them. */
+  const scanned = (dir: string): ScanResult => {
+    const r = result(dir);
+    for (const uri of [r.pageUri, r.originalUri, ...r.reads.map((b) => b.cropUri)]) memoryFs.files.set(uri!, 'image');
+    return r;
+  };
+  const filesIn = (dir: string) => [...memoryFs.files.keys()].filter((k) => k.startsWith(`${dir}/`));
+  // two scans in the scanner's own folders, files/scans/<ms>/ (Paths.document is file:///docs/ here)
+  const GONE = 'file:///docs/scans/1795000000001';
+  const KEPT = 'file:///docs/scans/1795000000002';
+  const gone = addScan({ label: 'Camera photo', source: 'camera', result: scanned(GONE), session: SESSION });
+  const kept = addScan({ label: 'Camera photo', source: 'camera', result: scanned(KEPT), session: SESSION });
+  const keptFiles = filesIn(KEPT);
+  expect(keptFiles.length).toBeGreaterThan(0);
+  const listener = jest.fn();
+  subscribeRecent(listener);
+
+  deleteScan(gone);
+  expect(getScan(gone)).toBeUndefined();
+  expect(recentScans().map((s: { id: string }) => s.id)).toEqual([kept]);
+  expect(listener).toHaveBeenCalled();
+  expect(filesIn(GONE)).toEqual([]);
+  expect(filesIn(KEPT)).toEqual(keptFiles); // only its own folder
+  await scansWritten();
+  expect(recentIds()).toEqual([kept]);
+
+  // a scan that kept no files: forgotten, and nothing on disk goes; a folder that isn't one of the scanner's is never
+  // deleted
+  const none = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('inv_0007', null)) });
+  deleteScan(none);
+  expect(getScan(none)).toBeUndefined();
+  const ELSEWHERE = 'file:///s/e';
+  const elsewhere = addScan({ label: 'Camera photo', source: 'camera', result: scanned(ELSEWHERE) });
+  const elsewhereFiles = filesIn(ELSEWHERE);
+  deleteScan(elsewhere);
+  expect(getScan(elsewhere)).toBeUndefined();
+  expect(filesIn(ELSEWHERE)).toEqual(elsewhereFiles);
+  expect(filesIn(KEPT)).toEqual(keptFiles);
+
+  // a saved one is refused: its folder is under saved/ now, and Saved's own delete is its way out
+  updateScan(kept, { saved: { savedAt: '2026-11-24T01:41:00.000Z', details: { account: '1205' } } });
+  expect(() => deleteScan(kept)).toThrow('saved');
+  expect(getScan(kept)).toBeDefined();
+  expect(filesIn(KEPT)).toEqual(keptFiles);
+
+  deleteScan('missing'); // no such scan: nothing to do
+  await scansWritten();
+  expect(recentIds()).toEqual([kept]);
 });

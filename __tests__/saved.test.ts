@@ -30,13 +30,16 @@ const load = (): Modules => ({
   settings: require('../lib/settings'),
 });
 
-/** A camera scan of Sample 0007 whose files are in the scanner's folder, as the core writes them. */
-function cameraScan(m: Modules, dir = SCAN_DIR): string {
+/**
+ * A camera scan of Sample 0007 whose files are in the scanner's folder, as the core writes them; taken in a session, or
+ * before camera first.
+ */
+function cameraScan(m: Modules, dir = SCAN_DIR, session?: string): string {
   const result = parseScanResult(coreJson('inv_0007', dir));
   for (const uri of [result.pageUri, result.originalUri, ...result.reads.map((r) => r.cropUri)]) {
     memoryFs.files.set(uri!, 'image');
   }
-  return m.scans.addScan({ label: 'Camera photo', source: 'camera', result });
+  return m.scans.addScan({ label: 'Camera photo', source: 'camera', result, session });
 }
 
 beforeAll(() => pinToday(new Date(2026, 10, 18, 10, 0)));
@@ -292,6 +295,33 @@ test("a 2307's summary: checked as a 2307, one import row per payment", async ()
   await again.lists.loadLists();
   await again.saved.loadSaved();
   expect(again.saved.savedList()).toEqual([summary]);
+});
+
+test("a save keeps the scan's session in saved.json and scan.json; a summary from before has none, and loads", async () => {
+  const first = load();
+  const session = '1795000000000-ab12'; // lib/session's newSessionId
+  const id = cameraScan(first, SCAN_DIR, session);
+  const old = cameraScan(first, 'file:///docs/scans/124'); // as before camera first: no session
+  await first.saved.saveScan(id, DETAILS);
+  await first.saved.saveScan(old, DETAILS);
+  expect(first.saved.savedSummary(id)?.session).toBe(session);
+  expect(first.saved.savedSummary(old)?.session).toBeUndefined();
+  const index: { id: string; session?: string }[] = JSON.parse(memoryFs.files.get('file:///docs/saved.json') as string);
+  expect(index.find((s) => s.id === id)?.session).toBe(session);
+  expect(index.find((s) => s.id === old)).not.toHaveProperty('session'); // saved.json as design B wrote it
+  const scanJson = (scanId: string) => JSON.parse(memoryFs.files.get(`file:///docs/saved/${scanId}/scan.json`) as string);
+  expect(scanJson(id).session).toBe(session);
+  expect(scanJson(old)).not.toHaveProperty('session');
+
+  jest.resetModules();
+  const again = load();
+  await again.saved.loadSaved();
+  expect(again.saved.savedList().map((s) => s.id).sort()).toEqual([id, old].sort());
+  expect(again.saved.savedSummary(id)?.session).toBe(session);
+  expect(again.saved.savedSummary(old)?.session).toBeUndefined();
+  expect((await again.saved.openSaved(id))?.session).toBe(session);
+  expect(await again.saved.openSaved(old)).toMatchObject({ id: old, saved: { details: DETAILS } });
+  expect(again.scans.getScan(old)?.session).toBeUndefined();
 });
 
 test('a sample is never saved', async () => {

@@ -14,6 +14,9 @@ const PARTIES: string = require('fs').readFileSync('fixtures/lists/parties.csv',
 const ITEMS: string = require('fs').readFileSync('fixtures/lists/items.csv', 'utf8');
 const DETAILS = { taxType: 'VAT', account: '4010', terms: 'account', atc: 'WC158' } as const;
 const INDEX = 'file:///docs/saved.json';
+const SESSION_FILE = 'file:///docs/session.json';
+
+const flush = () => new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
 
 type Modules = {
   startup: typeof import('../lib/startup');
@@ -22,6 +25,7 @@ type Modules = {
   saved: typeof import('../lib/saved');
   lists: typeof import('../lib/lists');
   settings: typeof import('../lib/settings');
+  session: typeof import('../lib/session');
 };
 const load = (): Modules => ({
   startup: require('../lib/startup'),
@@ -30,15 +34,16 @@ const load = (): Modules => ({
   saved: require('../lib/saved'),
   lists: require('../lib/lists'),
   settings: require('../lib/settings'),
+  session: require('../lib/session'),
 });
 
 /** A camera scan of Sample 0007 whose files are in the scanner's folder, as the core writes them. */
-function cameraScan(m: Modules, dir: string): string {
+function cameraScan(m: Modules, dir: string, session?: string): string {
   const result = parseScanResult(coreJson('inv_0007', dir));
   for (const uri of [result.pageUri, result.originalUri, ...result.reads.map((r) => r.cropUri)]) {
     memoryFs.files.set(uri!, 'image');
   }
-  return m.scans.addScan({ label: 'Camera photo', source: 'camera', result });
+  return m.scans.addScan({ label: 'Camera photo', source: 'camera', result, session });
 }
 
 beforeAll(() => pinToday(new Date(2026, 10, 18, 10, 0)));
@@ -90,4 +95,19 @@ test('run again after a start that failed partway, nothing is there twice', asyn
   // and again, with nothing left to find: still once each
   await m.startup.loadAppData();
   once();
+});
+
+test('a session open when the app stopped is closed at the next start; its scans keep their session', async () => {
+  const before = load();
+  const { session } = before.session.takeCapture(new Date());
+  const id = cameraScan(before, 'file:///docs/scans/1', session);
+  await flush(); // recent.json and session.json are written before the app stops
+  expect(JSON.parse(memoryFs.files.get(SESSION_FILE) as string)).toMatchObject({ id: session, open: true });
+
+  jest.resetModules(); // the next start
+  const m = load();
+  await m.startup.loadAppData();
+  expect(m.session.currentSession()).toBeNull();
+  expect(memoryFs.files.get(SESSION_FILE)).toBe('null');
+  expect(m.scans.getScan(id)?.session).toBe(session);
 });
