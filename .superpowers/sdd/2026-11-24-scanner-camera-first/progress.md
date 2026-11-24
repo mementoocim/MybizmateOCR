@@ -68,3 +68,16 @@ Spec: C:/Users/Mico/Desktop/OCR with python model with machine learning/docs/202
 - To resume:
   - Resume ac4210577d3ee5f34 with SendMessage: "you were stopped at RED; your tests are uncommitted in the tree; continue Task 3 from RED". If it can't be resumed, dispatch a fresh Task 3 implementer with task-3-brief.md, the rulings P-F1, P-F2, T2-1 and T2-2 (see the Task 3 dispatch line above), and a note that the RED tests exist uncommitted, to keep or redo.
   - Then follow the normal loop: review, Task 4 (its brief is extracted), and so on.
+- 2026-11-24, at the user's word ("remove the gitignore and push it all on my github main"; then "Lahat maliban sa build outputs", "Diretso sa master"):
+  - The root .gitignore was deleted, and commit 5ef2ba84 tracks node_modules, the android/ project with its debug keystore, .expo and .superpowers.
+  - The Android build outputs are excluded locally in .git/info/exclude. They're 9.3 GB and hold all 74 files over 100 MB.
+  - master was fast-forwarded to 5ef2ba84 and pushed (3720049..5ef2ba84). camera-first is at the same commit.
+  - Task 3's RED tests were stashed for the commit, then popped back, uncommitted, on camera-first.
+  - core.longpaths is on for this repo.
+  - From now on, this ledger and .expo are tracked files, so their changes show in git status. Implementers must stage only their task's files.
+  - The fetch showed a new remote branch, origin/feat/ocr-finetune-v1.3.0, not made from this session.
+- 2026-11-24, moving to another laptop and another Claude account, at the user's word ("Push mo na"):
+  - CLAUDE.md was added at the repo root, with the project, the working agreements, the gates, the exclude list, the status and the path map.
+  - docs/ was copied in from the parent folder: the design docs, plans and rulings, plus the approved mockup in docs/mockups/. The four xlsx templates were left out, because their notes hold a real company's lists.
+  - That commit went to master and was pushed.
+  - Task 3's RED tests are committed as work in progress on camera-first only, and pushed as origin/camera-first. Resume Task 3 on that branch.
