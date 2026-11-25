@@ -4,6 +4,7 @@ import { StyleSheet, View, type ViewInstance } from 'react-native';
 
 import { Badge, type BadgeTone } from '../components/Badge';
 import { Banner } from '../components/Banner';
+import { Card } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
 import { CircleAlert, type IconComponent, TriangleAlert } from '../components/icons';
 import { LedgerRow } from '../components/LedgerRow';
@@ -648,4 +649,49 @@ test("EmptyState gives an action's ref its button's pressable", async () => {
     accessibilityRole: 'button',
     accessibilityLabel: 'How to import',
   });
+});
+
+test('Card: a header, its words, one button; attention on the warning tint', async () => {
+  // camera first (spec §6.4, the mockup's cards): plain is a panel in a line border; attention the amber card
+  const check = jest.fn();
+  await render(
+    <Card title="1 ready · 1 to check" body="From today's session." action={{ label: 'Check the next one', onPress: check }}>
+      <Banner tone="warning" text="Between the words and the button" />
+    </Card>,
+  );
+  const card = screen.getByTestId('card');
+  expect(card).toHaveStyle({
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.panel,
+    padding: space.l,
+    gap: space.s,
+    marginHorizontal: space.l,
+  });
+  const title = within(card).getByRole('header', { name: '1 ready · 1 to check' });
+  expect(typeStylesOf(title)).toEqual(['headline']);
+  expect(title).toHaveStyle({ color: colors.ink });
+  const body = within(card).getByText("From today's session.");
+  expect(typeStylesOf(body)).toEqual(['body']);
+  expect(body).toHaveStyle({ color: colors.mute });
+  // in order: the title, the words, what's between, then the one button, primary, full width (no alignSelf of its own)
+  const kids = card.children as Instance[];
+  expect(kids.map((k) => k.props.testID ?? k.props.accessibilityRole ?? k.props.children)).toEqual([
+    'header',
+    "From today's session.",
+    'alert',
+    'button',
+  ]);
+  const action = within(card).getByRole('button', { name: 'Check the next one' });
+  expect(action).toHaveStyle({ backgroundColor: colors.brand });
+  expect(card).not.toHaveStyle({ alignItems: 'center' });
+  await fireEvent.press(action);
+  expect(check).toHaveBeenCalledTimes(1);
+
+  // attention, with a title alone: the warning tint in its line, no words, no button
+  await render(<Card title="2 to retake" tone="attention" />);
+  expect(screen.getByTestId('card')).toHaveStyle({ backgroundColor: colors.warningTint, borderColor: colors.warningLine });
+  expect(screen.getByTestId('card').children).toHaveLength(1);
+  expect(screen.queryByRole('button')).toBeNull();
 });

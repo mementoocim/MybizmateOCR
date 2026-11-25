@@ -34,12 +34,13 @@ export function useGoBackOrHome(): () => void {
  *   (the Scan screen), it's expo-router's dismissTo: the screens over the tabs go, and the tabs switch, since navigate
  *   would push a second tabs over the first, and Back would show the screen just left (while dismissTo does nothing
  *   from inside the tabs). Its options are the router's: withAnchor puts a tab's own list under a screen opened in it
- *   (Done's session screen, with Sessions under it).
+ *   (Done's session screen, with Sessions under it). Its `before` runs first, and only when the guard lets the tab
+ *   open: a session screen's Retake makes that session the camera's (lib/session's retakeIn) only if the camera opens.
  * On the live root's router, useRouter(), as useGoBackOrHome goes to the camera (ruling T26-4).
  */
 export function useOpenOnce(): {
   push: (href: Href) => void;
-  navigate: (href: Href, options?: NavigateOptions) => void;
+  navigate: (href: Href, options?: NavigateOptions, before?: () => void) => void;
 } {
   const router = useRouter();
   const navigation = useNavigation();
@@ -56,8 +57,9 @@ export function useOpenOnce(): {
   };
   return {
     push: (href) => once(() => router.push(href)),
-    navigate: (href, options) =>
+    navigate: (href, options, before) =>
       once(() => {
+        before?.();
         const tabs = inTabs(navigation);
         if (!options) return tabs ? router.navigate(href) : router.dismissTo(href);
         return tabs ? router.navigate(href, options) : router.dismissTo(href, options);
