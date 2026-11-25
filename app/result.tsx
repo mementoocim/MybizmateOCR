@@ -213,26 +213,36 @@ export default function Result() {
   /**
    * ⋮ › Delete saved scan, or Delete this scan for one not saved, asked as a session's rows ask it (lib/confirmDelete).
    * Delete first leaves, then deletes, in the one press: the screen shows only its header from then on, so the scan's
-   * going, once saved.json or recent.json is written, never shows as "This scan is no longer here".
+   * going, once saved.json or recent.json is written, never shows as "This scan is no longer here". Behind the screen's
+   * one guard, as a session screen's delete is (ruling T6-1): not asked while a press is opening or leaving, and the
+   * going back is the guard's.
    */
   function confirmDelete(it: StoredScan) {
-    void confirmDeleteScan(it, () => {
-      setLeaving({ title, subtitle });
-      goBackOrHome();
-    });
+    if (once.busy()) return;
+    void confirmDeleteScan(it, () =>
+      once.leave(() => {
+        setLeaving({ title, subtitle });
+        goBackOrHome();
+      }),
+    );
   }
 
   const retake = () => flow.retake(scan, { back, session: session ?? null });
   const group = inSession ? sessions.find((s) => s.id === session) : undefined;
   const next = group ? nextToCheck(group, statuses, scan.id) : null;
-  /** Saved and unchanged, in a session: on to its next scan to check, in this screen's place, or back to it. */
+  /**
+   * Saved and unchanged, in a session: on to its next scan to check, in this screen's place, or back to it. It takes
+   * Save's place, and its ref: the save sheet gives TalkBack focus back to it once it has gone.
+   */
   const onward: ButtonProps =
     next !== null
       ? {
+          ref: saveButton,
           label: 'Next invoice',
           onPress: () => once.replace({ pathname: '/result', params: { id: next, from: 'session', session } }),
         }
       : {
+          ref: saveButton,
           label: 'Back to session',
           // the session's screen in the Sessions tab, with Sessions under it, and nothing above it
           onPress: () => once.navigate({ pathname: '/sessions/[id]', params: { id: session ?? '' } }, { withAnchor: true }),

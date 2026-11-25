@@ -1456,3 +1456,87 @@ test('⋮ deletes an unsaved scan from before the update, with no session (rulin
   await show('blank_page', { source: 'gallery' });
   expect(within(screen.getByTestId('header')).getByRole('button', { name: 'More options' })).toBeOnTheScreen();
 });
+
+test('in a session, after a save, TalkBack goes back to Next invoice, or Back to session for the last one', async () => {
+  // the sheet gives focus back to what took Save's place in the bar (the review's T11-1)
+  await act(async () => updateSettings({ vatRegistered: false, revenueAccount: '4010' }));
+  const lastFocus = () => focus.mock.calls.at(-1);
+  const saveInSheet = async () => {
+    await press(screen.getByTestId('save-open'));
+    focus.mockClear();
+    await press(screen.getByTestId('save-confirm'));
+    expect(screen.queryByTestId('sheet-panel')).toBeNull();
+  };
+  const s = newSession();
+  const a = s.take('inv_0007', 0);
+  const b = s.take('inv_0007', 1);
+  await openIn(s.id, a);
+  await saveInSheet();
+  expect(barButtons()).toEqual(['Retake', 'Next invoice']);
+  expect(lastFocus()).toEqual([
+    expect.objectContaining({ props: expect.objectContaining({ accessibilityLabel: 'Next invoice' }) }),
+    'focus',
+  ]);
+
+  await openIn(s.id, b);
+  await saveInSheet();
+  expect(barButtons()).toEqual(['Retake', 'Back to session']);
+  expect(lastFocus()).toEqual([
+    expect.objectContaining({ props: expect.objectContaining({ accessibilityLabel: 'Back to session' }) }),
+    'focus',
+  ]);
+  await act(async () => updateSettings({ vatRegistered: null, revenueAccount: '' }));
+});
+
+test("a saved scan in a session, from Done's one photo: Retake follows its source, and links no camera", async () => {
+  // only an unsaved scan's Retake opens the camera in its session (lib/scanFlow); a saved one keeps today's by source
+  await loadSession();
+  const relink = jest.spyOn(sessionStore, 'retakeIn');
+  const s = newSession();
+  const photo = s.take('inv_0007', 0); // from the in-app camera
+  await saveScan(photo, DETAILS);
+  await openIn(s.id, photo, 'done');
+  expect(barButtons()).toEqual(['Retake', 'Back to session']);
+  await press(button('Retake'));
+  expect(mockRouter.dismissTo.mock.calls).toEqual([['/camera']]);
+  expect(mockNavigation.goBack).not.toHaveBeenCalled();
+
+  const picked = await act(async () =>
+    addScan({ label: 'Photo', source: 'gallery', session: s.id, result: parseScanResult(coreJson('inv_0007')) }),
+  );
+  await act(async () => saveScan(picked, DETAILS));
+  await openIn(s.id, picked, 'done');
+  await press(button('Retake'));
+  expect(mockLibrary).toHaveBeenCalledTimes(1); // the gallery again, not the camera
+  expect(mockRouter.dismissTo).toHaveBeenCalledTimes(1);
+
+  expect(relink).not.toHaveBeenCalled();
+  expect(currentSession()).toBeNull();
+  relink.mockRestore();
+});
+
+test('⋮ Delete waits for a press that is opening another screen, as every open on the screen does', async () => {
+  // one guard for the screen (ruling T6-1; the review's T11-3): Next invoice has gone, so a delete asks nothing
+  const s = newSession();
+  const a = s.take('inv_0007', 0);
+  s.take('inv_0007', 1);
+  await saveScan(a, DETAILS);
+  await openIn(s.id, a);
+  await press(button('Next invoice')); // the navigator hasn't let go of this screen yet
+  expect(mockRouter.replace).toHaveBeenCalledTimes(1);
+  placeMenu();
+  await press(button('More options'));
+  await press(screen.getByRole('menuitem', { name: 'Delete saved scan' }));
+  expect(alert).not.toHaveBeenCalled();
+  expect(savedSummary(a)).toBeDefined();
+
+  // with nothing opening, it asks, and Delete goes back once
+  await openIn(s.id, a);
+  placeMenu();
+  await press(button('More options'));
+  await press(screen.getByRole('menuitem', { name: 'Delete saved scan' }));
+  expect(alert).toHaveBeenCalledTimes(1);
+  await act(async () => alertButtons()[1].onPress!());
+  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+  expect(savedSummary(a)).toBeUndefined();
+});
