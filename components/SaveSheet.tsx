@@ -99,7 +99,7 @@ export function SaveSheet({
     <Sheet
       visible={visible}
       title={isSale ? 'Save as a sale' : 'Save as a purchase'}
-      subtitle={`It becomes a row in MyBizMate's ${isSale ? 'Sales' : 'Purchases'} import. Export it from Saved.`}
+      subtitle={`It becomes a row in MyBizMate's ${isSale ? 'Sales' : 'Purchases'} import. Send it from the Export tab.`}
       onClose={onClose}
       returnFocus={returnFocus}
       actions={[
@@ -190,7 +190,7 @@ export function CertSaveSheet({
     <Sheet
       visible={visible}
       title="Save 2307"
-      subtitle="Each payment becomes a row in MyBizMate's 2307-CWT import. Export it from Saved."
+      subtitle="Each payment becomes a row in MyBizMate's 2307-CWT import. Send it from the Export tab."
       onClose={onClose}
       returnFocus={returnFocus}
       actions={[

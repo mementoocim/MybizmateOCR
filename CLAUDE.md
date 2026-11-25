@@ -121,7 +121,7 @@ Never `git add -A` without that list.
 - Task 9 is done and reviewed: the session screen (`app/(tabs)/sessions/[id].tsx`, keyed on the id so each session mounts fresh): `components/Card.tsx` with Check the next one, the failed-reads Banner, the rows, Retake and Remove, and `confirmDeleteScan` in `lib/confirmDelete.ts` (for Task 11's ⋮ Delete). `useOpenOnce` gained `navigate`'s `before` and `busy()`.
   At the user's word (2026-11-25): no "Session · 0 invoices" line, and a Retake on the failed-reads Banner retries in the same session (`retryIn`, `retries` in session.json; T9-4 to T9-6).
 - Task 10 is done and reviewed: the Export tab (`app/(tabs)/export/`: step 1, `[which]` for a file's steps 2–3, one at a time, and `invoices` for See invoices; `lib/exportSteps.ts`). `components/ExportSheet.tsx` and `app/saved.tsx` are gone. `useOpenOnce().navigate` decides from the live state (`tabsOnTop`). Don't merge to `master` before Task 11: a Scan screen opened with `from: 'list'` doesn't go back yet.
-- **Task 11 is next**, on the branch `camera-first`, after the user reviews Task 10. Its brief isn't extracted yet: take it from the plan's Task 11 section. Open for the user: the save sheets' "Export it from Saved." (suggested "Send it from the Export tab.").
+- **Task 11 is next**, on the branch `camera-first`, after the user reviews Task 10. Its brief isn't extracted yet: take it from the plan's Task 11 section. The save sheets say "Send it from the Export tab." (the user's word, 2026-11-25).
 
 **The user's answers for this plan:**
 - execution is subagent-driven, with a fresh implementer and a reviewer per task;

@@ -165,7 +165,7 @@ test('the sale sheet: title, subtitle, the summary with New, five tax types, Cas
   const id = await show('inv_0007'); // its customer, as written: there are no customers yet
   await press(screen.getByTestId('save-open'));
   expect(header('Save as a sale')).toBeOnTheScreen();
-  expect(sheet().getByText("It becomes a row in MyBizMate's Sales import. Export it from Saved.")).toBeOnTheScreen();
+  expect(sheet().getByText("It becomes a row in MyBizMate's Sales import. Send it from the Export tab.")).toBeOnTheScreen();
 
   // the summary: the date and the gross in figures, and the customer with New, since it goes out as written
   expect(sheet().getByLabelText('Date, Sep 20, 2026')).toBeOnTheScreen();
@@ -212,7 +212,7 @@ test('the purchase sheet: the supplier as typed, with New, and the expense accou
   await press(screen.getByTestId('save-open'));
   expect(header('Save as a purchase')).toBeOnTheScreen();
   expect(
-    sheet().getByText("It becomes a row in MyBizMate's Purchases import. Export it from Saved."),
+    sheet().getByText("It becomes a row in MyBizMate's Purchases import. Send it from the Export tab."),
   ).toBeOnTheScreen();
   expect(sheet().getByLabelText('Supplier, Juan Hardware, New')).toBeOnTheScreen();
   expect(screen.queryByText('Your business is')).toBeNull(); // only a sale asks
@@ -522,7 +522,7 @@ test('the 2307 sheet: Payor, Period, Tax withheld, the offset account', async ()
   await press(screen.getByTestId('save-open'));
   expect(header('Save 2307')).toBeOnTheScreen();
   expect(
-    sheet().getByText("Each payment becomes a row in MyBizMate's 2307-CWT import. Export it from Saved."),
+    sheet().getByText("Each payment becomes a row in MyBizMate's 2307-CWT import. Send it from the Export tab."),
   ).toBeOnTheScreen();
   // the summary: the payor with New, since it goes out as written; the period and the rows' tax in figures
   expect(sheet().getByLabelText('Payor, Castillo Eatery, New')).toBeOnTheScreen();
@@ -554,7 +554,7 @@ test('saving a 2307: the first save asks for the offset account', async () => {
   expect(screen.getByTestId('save-open')).toHaveTextContent('Save 2307');
   await press(screen.getByTestId('save-open'));
   expect(
-    screen.getByText("Each payment becomes a row in MyBizMate's 2307-CWT import. Export it from Saved."),
+    screen.getByText("Each payment becomes a row in MyBizMate's 2307-CWT import. Send it from the Export tab."),
   ).toBeTruthy();
   expect(screen.getByLabelText('Payor, Castillo Eatery, New')).toBeTruthy();
   expect(screen.getByText('Q4 2026')).toBeTruthy();
