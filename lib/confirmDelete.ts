@@ -4,9 +4,9 @@ import { deleteSaved } from './saved';
 import { deleteScan, type StoredScan } from './scans';
 import { toast } from './toast';
 
-// Design B §9.5: deleting a saved scan asks first, in the same words from the Scan screen's ⋮ and from Saved's long
-// press. Delete runs the caller's own step first (the Scan screen starts going back: Review Focus 4), then the delete,
-// in the same press. A delete that fails says so in the snackbar, in place of failing unseen (ruling T19-2).
+// Design B §9.5: deleting a saved scan asks first, in the same words from the Scan screen's ⋮ and from See invoices'
+// long press. Delete runs the caller's own step first (the Scan screen starts going back: Review Focus 4), then the
+// delete, in the same press. A delete that fails says so in the snackbar, in place of failing unseen (ruling T19-2).
 // Camera first (spec §6.4): any scan, saved or not, from a session screen's row or its Remove (confirmDeleteScan).
 
 /** Asks before deleting a saved scan; on Delete, runs `before` (if given), then deletes it. */

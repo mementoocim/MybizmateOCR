@@ -262,7 +262,7 @@ test('ChoiceChips: pills that wrap, ink when chosen, a helper under them', async
   expect(within(group).queryByText(SUGGESTED)).toBeNull();
   expect(kids(group.parent!)).toEqual([group, screen.getByText(SUGGESTED)]);
 
-  // Saved's filter: the label isn't shown, but it still names the group. Nothing chosen yet: no pill is checked.
+  // showLabel false: the label isn't shown, but it still names the group. Nothing chosen yet: no pill is checked.
   await screen.rerender(<ChoiceChips label="Show" showLabel={false} options={TAX_TYPES} value={null} onChange={noop} />);
   expect(screen.queryByText('Show')).toBeNull();
   expect(screen.getByRole('radiogroup', { name: 'Show' })).toBeOnTheScreen();

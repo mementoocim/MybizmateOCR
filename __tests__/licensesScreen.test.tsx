@@ -8,7 +8,7 @@ import { memoryFs } from '../test-utils/memoryFs';
 import { scrollListToEnd } from '../test-utils/scrollList';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
-// Design B §9.10: Open-source licenses, from Settings › About. A row per component, with its license and version,
+// Design B §9.10: Open-source licenses, from Profile › About. A row per component, with its license and version,
 // opens its text: the bundled .txt asset, read from the file expo-asset puts it in, and shown a paragraph at a time.
 
 let mockParams: { i?: string } = {};

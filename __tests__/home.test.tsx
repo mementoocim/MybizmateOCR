@@ -186,7 +186,7 @@ test('the header: the greeting for the time of day, and the date', async () => {
 
   // no Back, no wordmark, no icon buttons: the tabs' bar has Profile, and Get set up has the lists
   for (const team of [false, true]) {
-    mockTeam = team; // a team build has the speed test in Settings › Team tools, never on Home
+    mockTeam = team; // a team build has the speed test in Profile › Team tools, never on Home
     await render(<Home />);
     const top = within(screen.getByTestId('header'));
     expect(top.queryAllByRole('button')).toHaveLength(0);

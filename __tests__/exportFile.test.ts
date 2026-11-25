@@ -78,7 +78,8 @@ test('exportChoice: by invoice date, oldest first; "new" is what was never expor
 });
 
 test('waitingOf: what never went out in an import file, of one kind or of every kind', () => {
-  // Ruling T17-3: the one rule Home's To export, Export's files and Saved count by; savedList keeps the newest first
+  // Ruling T17-3: the one rule Home's To export, Export's files and See invoices count by; savedList keeps the
+  // newest first
   const saved = savedList();
   expect(ids(waitingOf('sale', saved))).toEqual(['a', 'c']); // b went out
   expect(ids(waitingOf('purchase', saved))).toEqual(['d']);

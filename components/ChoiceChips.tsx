@@ -4,9 +4,9 @@ import { colors, radius, space, touch, type } from '../lib/theme';
 import { Tap } from './Tap';
 
 // Design B §5.6 and §7: a labelled choice of one among a few, as pills that wrap to new lines (the tax type, the
-// terms, Export's ranges, Saved's filter). TalkBack hears a radio group named by `label`, then each pill as a radio
+// terms, Export's ranges). TalkBack hears a radio group named by `label`, then each pill as a radio
 // button, checked or not. A pill is 40 dp tall with hitSlop to a 48 dp target; chosen, it's filled ink with a paper
-// label (§5.1: selection is ink). The label shows above the pills unless showLabel is false (Saved's filter, which
+// label (§5.1: selection is ink). The label shows above the pills unless showLabel is false (a group that
 // only speaks it). A helper line can follow, under the group, so TalkBack reads it after the pills. value null: none
 // chosen yet.
 
@@ -26,7 +26,7 @@ export function ChoiceChips<T extends string>({
   value: T | null;
   onChange: (v: T) => void;
   helper?: string | null;
-  showLabel?: boolean; // default true; false: Saved's filter (spoken only)
+  showLabel?: boolean; // default true; false: the label is spoken only
 }) {
   return (
     <View style={styles.field}>

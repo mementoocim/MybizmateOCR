@@ -516,7 +516,7 @@ test("a scan's sub-line: Sale · SI 0007655, Purchase · Inv 0007655, 2307 · Q1
     'Sale · 9:41 AM',
   );
   expect(scanSub(member(scanOf('blank_page', { at: at(24, 16, 10) })))).toBe(formatClock(at(24, 16, 10)));
-  // saved: Saved's sub-line
+  // saved: a saved scan's sub-line
   await saveScan(sale.id, DETAILS);
   expect(scanSub(member(getScan(sale.id)!, savedSummary(sale.id)!))).toBe(savedSub(savedSummary(sale.id)!));
 });
@@ -533,7 +533,7 @@ test("a scan's amount: an invoice's gross, a 2307's tax withheld, a saved one's 
   expect(memberAmount(member(cert))).toBe(tax);
   expect(memberAmount(member(scanOf('blank_page')))).toBeNull();
 
-  // a saved one: its summary's, even after an edit since the save changed what it reads now (as Saved shows it)
+  // a saved one: its summary's, even after an edit since the save changed what it reads now (as See invoices shows it)
   await saveScan(sale.id, DETAILS);
   const kept = savedSummary(sale.id)!;
   expect(kept.kind === 'sale' && kept.gross).toBe(gross);
@@ -547,7 +547,7 @@ test("a scan's amount: an invoice's gross, a 2307's tax withheld, a saved one's 
   expect(memberAmount(membersOf([], [certSummary])[0])).toBe(12.5);
 });
 
-test("Saved's sub-line: kind, date and number; a 2307's quarter", () => {
+test("a saved scan's sub-line: kind, date and number; a 2307's quarter", () => {
   const scan = scanOf('inv_0007');
   const day = monthDay('2026-09-20');
   expect(savedSub(summaryLike(scan))).toBe(`Sale · ${day} · SI 0007655`);

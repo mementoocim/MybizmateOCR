@@ -153,8 +153,8 @@ test("a delete writes saved.json first: one that can't be written keeps the scan
   await m.saved.saveScan(id, DETAILS);
   const listener = jest.fn();
   m.saved.subscribeSaved(listener);
-  // a full phone: no file can be written. The caller hears it (the snackbar says so: lib/confirmDelete), and Saved
-  // still lists it, as saved.json does
+  // a full phone: no file can be written. The caller hears it (the snackbar says so: lib/confirmDelete), and See
+  // invoices still lists it, as saved.json does
   const write = jest.spyOn(File.prototype, 'write').mockRejectedValue(new Error('No space left on device'));
   await expect(m.saved.deleteSaved(id)).rejects.toThrow('No space left on device');
   expect(m.saved.savedSummary(id)).toBeDefined();
@@ -289,8 +289,8 @@ test("a 2307's summary: checked as a 2307, one import row per payment", async ()
   ]);
   // the offset account becomes the next 2307's; an invoice's accounts and ATC stay as they were
   expect(m.settings.settings()).toMatchObject({ offsetAccount: '1205', revenueAccount: '', expenseAccount: '', atc: '' });
-  // an unsure match is only the closest customer: no list party, and the name as written goes out; Saved shows that
-  // name, and the export's sheet asks to check it in MyBizMate first
+  // an unsure match is only the closest customer: no list party, and the name as written goes out; See invoices
+  // shows that name, and the export's sheet asks to check it in MyBizMate first
   const unsure = m.scans.addScan({ label: 'PDF: 2307.pdf', source: 'pdf', result: parseScanResult(coreJson('bir2307_text_0')) });
   m.scans.setEdit(unsure, 'payor_name', 'Santos Merchandising');
   m.scans.setEdit(unsure, 'payor_tin', '99988877700000');

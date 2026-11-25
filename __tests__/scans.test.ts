@@ -196,7 +196,7 @@ test('the reading itself removes the edit', () => {
   expect(getScan(id).edits).toEqual({});
 });
 
-test('a saved scan opened from Saved can be found and changed', () => {
+test('a saved scan opened again can be found and changed', () => {
   const { cacheScan, getScan, updateScan } = require('../lib/scans');
   cacheScan({ id: 'saved-1', label: 'Camera photo', source: 'camera', at: new Date(), result: result('/s/d'), edits: {},
     terms: null, kind: 'sale', party: null, saved: null });
@@ -361,7 +361,7 @@ test('deleting an unsaved scan forgets it and its folder; a saved one is refused
   expect(filesIn(ELSEWHERE)).toEqual(elsewhereFiles);
   expect(filesIn(KEPT)).toEqual(keptFiles);
 
-  // a saved one is refused: its folder is under saved/ now, and Saved's own delete is its way out
+  // a saved one is refused: its folder is under saved/ now, and deleteSaved is its way out
   updateScan(kept, { saved: { savedAt: '2026-11-24T01:41:00.000Z', details: { account: '1205' } } });
   expect(() => deleteScan(kept)).toThrow('saved');
   expect(getScan(kept)).toBeDefined();

@@ -7,7 +7,6 @@ import {
   longDay,
   monthDay,
   monthSpan,
-  monthYear,
   peso,
   prettyDate,
   qty,
@@ -23,7 +22,7 @@ test('amount: rows without the peso sign', () => {
 test('monthDay', () => {
   expect(monthDay('2026-11-22')).toBe('Nov\u00A022');
   expect(monthDay('2026-01-05')).toBe('Jan\u00A05');
-  // an empty or malformed date: a dash, as Saved's prettyDate(…) ?? '—' had it
+  // an empty or malformed date: a dash, as the old Saved screen's prettyDate(…) ?? '—' had it
   for (const date of ['', '2026-11', '2026-13-01', '2026-00-05', '2026-11-xx', '2026-11-00', 'Nov 22, 2026']) {
     expect([date, monthDay(date)]).toEqual([date, '—']);
   }
@@ -33,19 +32,6 @@ test('a short date keeps its day on its line: a no-break space, never a plain on
   // QA pass 4, at 360 dp: a saved scan's subtitle wrapped as "SAVED AS A 2307 · NOV" / "23"
   expect(monthDay('2026-11-23')).toBe('Nov\u00A023');
   expect(monthDay('2026-11-23')).not.toContain(' ');
-});
-
-test('monthYear', () => {
-  // Saved's month sections: a date's first 7 characters, the month in full
-  expect(monthYear('2026-11')).toBe('November 2026');
-  expect(monthYear('2026-03')).toBe('March 2026');
-  expect(monthYear('2026-01')).toBe('January 2026');
-  expect(monthYear('2025-12')).toBe('December 2025');
-  expect(monthYear('2026-09-20'.slice(0, 7))).toBe('September 2026');
-  // an empty or malformed one: a dash
-  for (const month of ['', '2026', '2026-13', '2026-00', '2026-1x', 'xxxx-11', 'Nov 202']) {
-    expect([month, monthYear(month)]).toEqual([month, '—']);
-  }
 });
 
 test('pesos, quantities and dates as the test app writes them', () => {

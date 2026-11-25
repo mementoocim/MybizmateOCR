@@ -19,20 +19,6 @@ export function formatClock(d: Date): string {
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
 const thousands = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 /**
@@ -73,16 +59,6 @@ export function monthDay(isoDate: string): string {
   const [, m, d] = isoDate.split('-').map(Number);
   const month = MONTHS[m - 1];
   return month && d ? `${month}\u00A0${d}` : '—';
-}
-
-/**
- * A month as an ISO date's first 7 characters ("2026-11"), in full: "November 2026" (Saved's month sections); "—" for
- * an empty or malformed one.
- */
-export function monthYear(ym: string): string {
-  const [y, m] = ym.split('-').map(Number);
-  const month = MONTH_NAMES[m - 1];
-  return month && y ? `${month} ${y}` : '—';
 }
 
 /** The months from one ISO date to another: "Oct–Dec 2026", "Oct 2026", "Dec 2025–Feb 2026". */

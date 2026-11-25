@@ -7,18 +7,17 @@ import { setBottomClearance } from '../lib/snackbar';
 import { colors, space } from '../lib/theme';
 import { Button, type ButtonProps, type ButtonVariant } from './Buttons';
 
-// Design B §5.6 and §8: the fixed bar under Scan and Saved, and the button row it holds (sheets' action rows and
-// Home's capture row use the row too). The bar is a panel on a hairline, padded 12 and by the navigation bar's inset,
-// with an optional line (a saved line, say) above its buttons. In the row, buttons sit side by side: primary 1,
-// secondary and destructive 0.8, text buttons at their own width. A button that's the only one to grow, alone or
-// beside text buttons, fills what they leave, as a primary does (the supplier sheet's Use this name, beside Add to
-// your suppliers). When any label wraps (large text, a narrow phone), they stack full width in the given order, which
-// puts the primary last. A row that stacked stays stacked for those labels at that width and font size: once full
-// width the labels fit on one line, and flipping back would loop. While its screen is the one on top (focused), the
-// bar reports its height, so the snackbar sits above it (lib/snackbar). It withdraws it when another screen goes over
-// it, and reports again when its screen is back on top. So a bar that mounts on a covered screen (Saved's, when a save
-// on the Scan screen over it gives it something to export) never moves the message on the screen on top (T19-5). A
-// new height, as it lays out again, keeps its place in the order.
+// Design B §5.6 and §8: the fixed bar under the Scan screen, and the button row it holds (sheets' action rows, the
+// session screen and Export's file screen use the row too). The bar is a panel on a hairline, padded 12 and by the
+// navigation bar's inset, with an optional line (a saved line, say) above its buttons. In the row, buttons sit side by
+// side: primary 1, secondary and destructive 0.8, text buttons at their own width. A button that's the only one to
+// grow, alone or beside text buttons, fills what they leave, as a primary does (the supplier sheet's Use this name,
+// beside Add to your suppliers). When any label wraps (large text, a narrow phone), they stack full width in the given
+// order, which puts the primary last. A row that stacked stays stacked for those labels at that width and font size:
+// once full width the labels fit on one line, and flipping back would loop. While its screen is the one on top
+// (focused), the bar reports its height, so the snackbar sits above it (lib/snackbar). It withdraws it when another
+// screen goes over it, and reports again when its screen is back on top. So a bar that mounts on a covered screen never
+// moves the message on the screen on top (T19-5). A new height, as it lays out again, keeps its place in the order.
 
 export function ButtonRow({ buttons }: { buttons: readonly ButtonProps[] }) {
   const { width, fontScale } = useWindowDimensions();

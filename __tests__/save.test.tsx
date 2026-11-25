@@ -671,7 +671,7 @@ test('a 2307 needs its payments first, and its strip says so', async () => {
   expect(screen.queryByLabelText('Offset account')).toBeNull();
 });
 
-// Annotation mode (Settings › Team tools, team builds only): each scan is saved with a source tag, a client's and a
+// Annotation mode (Profile › Team tools, team builds only): each scan is saved with a source tag, a client's and a
 // writer's code.
 
 test('codes are codes', () => {

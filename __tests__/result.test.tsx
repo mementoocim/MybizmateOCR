@@ -109,7 +109,7 @@ async function show(
 
 const DETAILS = { taxType: 'VAT', account: '4010', terms: 'account', atc: '' } as const;
 
-/** A camera photo of the fixture, saved as a sale, opened again from Saved. */
+/** A camera photo of the fixture, saved as a sale, opened again (from See invoices or a session). */
 async function showSaved(stem: string): Promise<string> {
   const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson(stem)) });
   await saveScan(id, DETAILS);
@@ -149,7 +149,7 @@ afterAll(() => jest.useRealTimers());
 
 beforeEach(async () => {
   jest.clearAllMocks();
-  mockNavigation.canGoBack.mockReturnValue(true); // a screen under this one, as when Home or Saved opened it
+  mockNavigation.canGoBack.mockReturnValue(true); // a screen under this one: a session or See invoices opened it
   memoryFs.reset();
   mockTeam = false;
   await updateSettings({ annotation: false });
@@ -840,7 +840,7 @@ test('deleting from ⋮ when the navigator lets go of the screen at once: still 
 });
 
 test('deleting from ⋮: a delete that fails says so, once the screen has gone back', async () => {
-  // Saved's long press asks the same and says the same (ruling T19-2)
+  // See invoices' long press asks the same and says the same (ruling T19-2)
   const remove = jest.spyOn(savedStore, 'deleteSaved').mockRejectedValueOnce(new Error('EACCES: permission denied'));
   const id = await showSaved('inv_0007');
   placeMenu();
@@ -854,11 +854,11 @@ test('deleting from ⋮: a delete that fails says so, once the screen has gone b
   expect(mockNavigation.goBack.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
   expect(mockToast).toHaveBeenCalledTimes(1);
   expect(mockToast).toHaveBeenCalledWith("Couldn't delete the scan.");
-  expect(savedSummary(id)).toBeDefined(); // still saved, so still in Saved
+  expect(savedSummary(id)).toBeDefined(); // still saved, so still in See invoices
   remove.mockRestore();
 });
 
-test('deleting from ⋮ with nothing under the screen goes Home, in the same order (ruling T24-1)', async () => {
+test('deleting from ⋮ with nothing under the screen goes to the camera, in the same order (ruling T24-1)', async () => {
   // The Stack is anchored on the tabs (app/_layout), so the camera is the fallback, as for the header's Back
   mockNavigation.canGoBack.mockReturnValue(false);
   const remove = jest.spyOn(savedStore, 'deleteSaved');

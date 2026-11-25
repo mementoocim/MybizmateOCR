@@ -21,7 +21,7 @@ import { toast } from '../../../lib/toast';
 // kind's saved scans, those from before the camera-first update too (summary-only, with no session: Review Focus 2).
 // The header is the kind's plural, with how many wait to export by the export's own rule (lib/exportFile's waitingOf:
 // ruling T17-3), or that all have gone out. The list (virtualized) goes by each document's date (an invoice's date, a
-// 2307's period end), newest first, then by the time saved, newest first. A row is Saved's: the party, its kind, date
+// 2307's period end), newest first, then by the time saved, newest first. A row is the party, its kind, date
 // and number, the amount (a 2307's tax withheld) and To export or Exported. It opens the scan (read back first, as a
 // saved one may no longer be among the recent ones), and a long press asks to delete it, in the Scan screen's ⋮ words
 // (lib/confirmDelete). One guard for every press (ruling T6-1); a read in flight blocks the others, and the scan opens

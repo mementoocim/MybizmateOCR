@@ -1,6 +1,6 @@
 import { coveredBy, LICENSES } from '../lib/licenses';
 
-// Design B §9.10: Settings › About › Open-source licenses lists what the app ships, each with its license and its text.
+// Design B §9.10: Profile › About › Open-source licenses lists what the app ships, each with its license and its text.
 // lib/licenses holds the entries; scripts/collect-licenses.mjs gathers their texts into assets/licenses (`npm run
 // licenses`). Jest runs from the repo's root, so the files are read from there.
 

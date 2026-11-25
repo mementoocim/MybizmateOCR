@@ -268,7 +268,7 @@ test('the search finds scans by party, number or TIN, and lists them; a result o
   // by TIN, without its dashes; two found, newest first
   await act(async () => fireEvent.changeText(searchField(), '900000'));
   expect(results().map((r: string) => r.split(',')[0])).toEqual(['Bautista Pharmacy', 'Torres Construction Supply']);
-  // a saved scan alone: Saved's sub-line, its amount and its badge
+  // a saved scan alone: its saved sub-line, its amount and its badge
   await act(async () => fireEvent.changeText(searchField(), 'castillo'));
   expect(results()).toEqual([`Castillo Eatery, Sale · ${monthDay('2026-11-20')} · SI 0042, 1,234.50, Saved`]);
   await act(async () => fireEvent.changeText(searchField(), '0042'));

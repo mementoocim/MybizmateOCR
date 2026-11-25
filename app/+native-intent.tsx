@@ -4,13 +4,15 @@ import { unwrapDevLaunchURL } from 'expo-linking';
  * Camera first (spec §6.1, call 1): a launch with no route of its own opens the camera, not Home. That's a launch
  * from the launcher (expo-router asks for the root URL, mybizmatescan:///) or a development build's launch link, which
  * names the bundler and no route. A link with a route keeps it: mybizmatescan://camera?test=…, and the team's /speed
- * and /training. A link that comes while the app runs goes on as it came, and so does anything this can't read: it
- * never throws. expo-router calls it for the initial URL and for each link after.
+ * and /training. The old mybizmatescan://settings, from before Settings moved into the Profile tab (spec §6.8), opens
+ * Profile, cold or while the app runs. Any other link that comes while the app runs goes on as it came, and so does
+ * anything this can't read: it never throws. expo-router calls it for the initial URL and for each link after.
  */
 export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }): string {
-  if (!initial) return path;
   try {
-    return routeOf(unwrapDevLaunchURL(path)) === '' ? '/camera' : path;
+    const route = routeOf(unwrapDevLaunchURL(path));
+    if (route === 'settings') return '/profile';
+    return initial && route === '' ? '/camera' : path;
   } catch {
     return path; // the link goes on as it came
   }

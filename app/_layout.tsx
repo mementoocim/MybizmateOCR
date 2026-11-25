@@ -17,7 +17,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 /**
  * The tabs are always at the bottom of the Stack (ruling T24-1's anchor, moved to the tabs group by camera first,
  * spec §6.1): a link opened cold (mybizmatescan://speed, mybizmatescan://lists) has the tabs under it, on the camera,
- * the tabs' own anchor, so Back has somewhere to go. The Scan screen, Saved, Your lists, the licenses and the team
+ * the tabs' own anchor, so Back has somewhere to go. The Scan screen, Your lists, the licenses and the team
  * screens open above the tabs, with no bar. expo-router 58 calls this the anchor; its older name, initialRouteName,
  * still works but warns that it's deprecated.
  */

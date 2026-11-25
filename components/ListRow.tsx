@@ -6,12 +6,12 @@ import { Badge, type BadgeSpec } from './Badge';
 import { Check, ChevronRight } from './icons';
 import { Tap } from './Tap';
 
-// Design B §5.6: a row of a list (Home's recent scans and exports, Saved, Your lists, the pickers, Settings). What
-// leads (a sample's thumbnail), a title and a sub-line, then on the right an amount with a badge under it (or several,
-// side by side: Sessions' rows), then a chevron, or a check when the row's step is done. A white row on a hairline.
-// Pressable or not, it's one stop for TalkBack: its label says the title, the sub-line, the amount and the badges
-// (§7). Its ref is the row's own view (the pressable, when it has a press): a sheet the row opens gives TalkBack focus
-// back to it.
+// Design B §5.6: a row of a list (Home's cards, Sessions, a session, Export's steps, See invoices, Your lists, the
+// pickers, Profile). What leads (a sample's thumbnail), a title and a sub-line, then on the right an amount with a
+// badge under it (or several, side by side: Sessions' rows), then a chevron, or a check when the row's step is done. A
+// white row on a hairline. Pressable or not, it's one stop for TalkBack: its label says the title, the sub-line, the
+// amount and the badges (§7). Its ref is the row's own view (the pressable, when it has a press): a sheet the row opens
+// gives TalkBack focus back to it.
 
 export function ListRow({
   title,

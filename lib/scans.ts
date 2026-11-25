@@ -10,7 +10,8 @@ import { APP_VERSION, modelVersion } from './versions';
 // the boxes they fixed (kept apart from the readings) or checked, the terms they picked, sale or purchase (a BIR 2307
 // is always a 2307), the customer or supplier they chose, and whether they saved it (in annotation mode, with its
 // source tag). Each scan's files live in its own folder (the scanner keeps the newest 100 folders too); the list is a
-// JSON file in the app's documents. A saved scan opened from Saved is kept here too while the app runs.
+// JSON file in the app's documents. A saved scan opened again (from See invoices or a session) is kept here too while
+// the app runs.
 
 /** How the scan came in. Not the result's own source, which is what the scanner read: a photo or a PDF. */
 export type ScanSource = 'camera' | 'camera_app' | 'gallery' | 'sample' | 'pdf';
@@ -84,7 +85,7 @@ export function withPdfFields(r: KeptResult): ScanResult {
 export const KEEP = 100;
 const FILE = 'recent.json';
 let recent: readonly StoredScan[] = []; // replaced, never changed in place: screens subscribe to it
-const opened = new Map<string, StoredScan>(); // saved scans opened from Saved
+const opened = new Map<string, StoredScan>(); // saved scans opened again
 let counter = 0;
 const listeners = new Set<() => void>();
 let written: Promise<boolean> = Promise.resolve(true); // recent.json's latest write: whether it landed (scansWritten)
@@ -214,7 +215,7 @@ export function confirmBox(id: string, box: string): void {
   if (!confirmed.includes(box)) updateScan(id, { confirmed: [...confirmed, box] });
 }
 
-/** Keeps a saved scan opened from Saved, so its screen can find and change it. */
+/** Keeps a saved scan opened again, so its screen can find and change it. */
 export function cacheScan(scan: StoredScan): void {
   opened.set(scan.id, scan);
   changed();

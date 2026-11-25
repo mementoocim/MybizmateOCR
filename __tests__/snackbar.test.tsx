@@ -214,7 +214,7 @@ test('it sits above the bottom bar', async () => {
     </>
   );
   await withInsets(ui(false));
-  await raise('Saved. Export it from Saved invoices.');
+  await raise('Saved. Send it from the Export tab.');
   expect(snackbar()).toHaveStyle({ bottom: BOTTOM + space.s }); // no bar: above the navigation bar
 
   await screen.rerender(ui(true));
@@ -273,17 +273,17 @@ test('a bar that lays out again keeps its place in the order (ruling T25b-1)', a
       nativeEvent: { layout: { x: 0, y: 0, width: 360, height } },
     });
   await withInsets(ui(true));
-  await relayout(0, 120); // Saved's
+  await relayout(0, 120); // the first bar's, on a screen under the Scan screen
   await relayout(1, 80); // then the Scan screen's
   await raise('Saved as a sale');
   expect(snackbar()).toHaveStyle({ bottom: 80 + space.s });
 
-  await relayout(0, 136); // Saved's lays out again: the Scan screen's bar still counts
+  await relayout(0, 136); // the first bar lays out again: the Scan screen's bar still counts
   expect(snackbar()).toHaveStyle({ bottom: 80 + space.s });
   await relayout(1, 96); // and the Scan screen's own new height does
   expect(snackbar()).toHaveStyle({ bottom: 96 + space.s });
 
-  await screen.rerender(ui(false)); // the Scan screen's bar goes: Saved's, as last laid out
+  await screen.rerender(ui(false)); // the Scan screen's bar goes: the first one, as last laid out
   expect(snackbar()).toHaveStyle({ bottom: 136 + space.s });
 });
 
@@ -373,7 +373,7 @@ test('the host stack: the newest host shows the message; the newest bar sets the
   root.remove();
   expect(topHost()).toBeNull();
 
-  // Bars in the order they first report: Saved's (with a line over its buttons), then the Scan screen's over it.
+  // Bars in the order they first report: a lower screen's (with a line over its buttons), then the Scan screen's over it.
   const saved = {};
   const scan = {};
   expect(bottomClearance()).toBe(0);

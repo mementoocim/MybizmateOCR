@@ -63,7 +63,7 @@ function checkCert(scan: StoredScan, lists: Lists): CertView {
   return { cert, problems: problems2307(cert), payor };
 }
 
-/** The 2307's period as Saved names it: "Q4 2026", or the months it spans when it isn't one quarter. */
+/** The 2307's period as a row's sub-line names it: "Q4 2026", or the months it spans when it isn't one quarter. */
 export function periodName(cert: Cert2307): string {
   if (cert.quarter !== null) {
     const [year, quarter] = cert.quarter.split('-');

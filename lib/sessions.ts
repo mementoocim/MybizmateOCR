@@ -238,7 +238,7 @@ export function scanBadge(m: Member, state: ScanState | null, saved: SavedState)
 }
 
 /**
- * Saved's row sub-line, in caps by its style: an invoice's kind, date and number ("Sale · Nov 22 · SI 5184138",
+ * A saved scan's row sub-line, in caps by its style: an invoice's kind, date and number ("Sale · Nov 22 · SI 5184138",
  * "Purchase · Nov 18 · Inv 0007", or without the number when it has none); a 2307's quarter ("2307 · Q1 2026").
  */
 export function savedSub(s: SavedSummary): string {
@@ -249,7 +249,7 @@ export function savedSub(s: SavedSummary): string {
 }
 
 /**
- * A scan's sub-line on Sessions and the session screen (ruling P-F11): a saved scan's is Saved's (savedSub); an
+ * A scan's sub-line on Sessions and the session screen (ruling P-F11): a saved scan's is See invoices' (savedSub); an
  * unsaved one's, its kind and number ("Sale · SI 0000186", "Purchase · Inv 0007", "2307 · Q4 2026"), with its time in
  * place of a number it hasn't; a scan whose form wasn't found, its time alone.
  */
@@ -266,8 +266,8 @@ export function scanSub(m: SessionMember): string {
 
 /**
  * A scan's amount on Sessions' search and the session screen: an invoice's gross, a 2307's tax withheld. A saved scan's
- * comes from its summary, so one edited since its save still shows the amount saved, as Saved does. A scan whose form
- * wasn't found has none.
+ * comes from its summary, so one edited since its save still shows the amount saved, as See invoices does. A scan whose
+ * form wasn't found has none.
  */
 export function memberAmount(m: Member): number | null {
   const s = m.summary;

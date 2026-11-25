@@ -2,8 +2,9 @@ import { redirectSystemPath } from '../app/+native-intent';
 
 // Camera first (spec §6.1, call 1): a launch with no route of its own, from the launcher or a development build's
 // launch link, opens the camera, the tabs' anchor, not Home. A link with a route keeps it (mybizmatescan://camera?test=…,
-// the team's /speed and /training). A link that comes while the app runs goes on as it came, and so does anything it
-// can't read: the function never throws.
+// the team's /speed and /training). The old /settings opens Profile, where Settings lives now (spec §6.8), cold or
+// warm. Any other link that comes while the app runs goes on as it came, and so does anything it can't read: the
+// function never throws.
 
 const cold = (path: string) => redirectSystemPath({ path, initial: true });
 
@@ -38,7 +39,17 @@ test('a link with a route keeps it', () => {
   expect(cold(devLink)).toBe(devLink);
 });
 
-test('a link while the app runs is never changed', () => {
+test('the old settings link opens Profile, cold or while the app runs', () => {
+  for (const path of ['mybizmatescan://settings', 'mybizmatescan:///settings', '/settings', '/settings/']) {
+    expect([path, cold(path)]).toEqual([path, '/profile']);
+    expect([path, redirectSystemPath({ path, initial: false })]).toEqual([path, '/profile']);
+  }
+  const devLink = 'exp+mybizmate-scan://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A8081%2F--%2Fsettings';
+  expect(cold(devLink)).toBe('/profile');
+  expect(cold('/settingsx')).toBe('/settingsx'); // only the route itself
+});
+
+test('any other link while the app runs is never changed', () => {
   for (const path of ['mybizmatescan:///', '/', 'mybizmatescan://camera?test=inv_0051', '/speed']) {
     expect(redirectSystemPath({ path, initial: false })).toBe(path);
   }

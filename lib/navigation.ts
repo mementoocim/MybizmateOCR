@@ -2,8 +2,8 @@ import { type Href, useFocusEffect, useNavigation, useRouter } from 'expo-router
 import { useCallback, useRef } from 'react';
 
 // Going back, the one way every screen does it: the header's Back, a Retake that goes back (a sample, or a scan opened
-// from Home or Saved), and a saved scan deleted from the Scan screen's ⋮ (Review Focus 4). And opening a screen or a
-// tab from a press, once.
+// from a session or See invoices), and a saved scan deleted from the Scan screen's ⋮ (Review Focus 4). And opening a
+// screen or a tab from a press, once.
 
 /**
  * Back to the screen under this one, or the camera when there's none (rulings T24-1 and T6-2: the root Stack is

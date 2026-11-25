@@ -28,8 +28,9 @@ import { codeKeyboard, TextField } from './TextField';
 // mode (team builds; milestone 4's behaviour), the scan's source tag, with M4's two notes. A warning banner counts
 // what's still marked to check, which saving doesn't wait for. Cancel and the save are the sheet's pinned actions
 // (ruling T7-4). The save's press returns its promise, so the button loads while the save runs and a double tap saves
-// once (Review Focus 3). After a save, the sheet closes, and a snackbar says so, with View, which opens Saved for the
-// kind (none in a session). A save that fails keeps the sheet open, and says so in it, above the scrim (Review Focus 1).
+// once (Review Focus 3). After a save, the sheet closes, and a snackbar says so, with View, which opens See invoices
+// for the kind (none in a session). A save that fails keeps the sheet open, and says so in it, above the scrim (Review
+// Focus 1).
 
 export const TAX_TYPES = [
   { value: 'VAT', label: 'VAT' },

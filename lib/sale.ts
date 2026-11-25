@@ -128,10 +128,10 @@ export function isInvoice(scan: StoredScan): boolean {
   return aligned && (form === 'sales_invoice' || form === 'service_invoice');
 }
 
-// One run of the checks per scan as it stands: Home's row, the scan's screen and Saved share it. The stores replace a
-// scan or the lists when they change, so the same objects give the same answer. Of the settings, the checks read only
-// whether the business is VAT-registered, so no other setting's change runs them again: not an account typed in
-// Settings, nor a save's new defaults (the final review's Important 1).
+// One run of the checks per scan as it stands: a session's rows, the scan's screen and the saves share it. The stores
+// replace a scan or the lists when they change, so the same objects give the same answer. Of the settings, the checks
+// read only whether the business is VAT-registered, so no other setting's change runs them again: not an account typed
+// in Settings, nor a save's new defaults (the final review's Important 1).
 const views = new WeakMap<StoredScan, { lists: Lists; vatRegistered: Settings['vatRegistered']; view: SaleView }>();
 
 /** The sale of an invoice's scan (isInvoice): a 2307 never goes through a sale's checks. */
