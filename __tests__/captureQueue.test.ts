@@ -168,6 +168,8 @@ test("a photo moves into files/queue/<session>/ before it's read, named by its t
       testImage: true,
       name: null,
       replaces: null,
+
+      retries: null,
       reading: true,
     },
   ]);
@@ -359,6 +361,8 @@ test("a PDF waits in memory, is read through readPdf, then the picker's access i
       testImage: false,
       name: 'a.pdf',
       replaces: null,
+
+      retries: null,
       reading: true,
     },
   ]);
@@ -782,4 +786,80 @@ test("failedReadReason never holds the scanner's own message, in a team build to
   expect(m.session.currentSession()?.failed).toEqual([{ at: T.toISOString(), reason: STOPPED }]);
   await flush();
   expect(memoryFs.files.get(SESSION_FILE)).not.toContain('ENOENT');
+});
+
+test("a Retake of a read that failed: stored, form found or not, that failed read goes; failed again, it takes its place", async () => {
+  // ruling T9-5: the session screen's Retake for its photos that couldn't be read (lib/session's retryIn)
+  const { queue, scans, session } = m;
+  const { session: id } = session.takeCapture(T);
+  await queue.queuePhoto(photo('capture_1.jpg'), { session: id, source: 'camera' }, T);
+  await fail(new Error('boom'));
+  jest.setSystemTime(at(1));
+  await queue.queuePhoto(photo('capture_2.jpg'), { session: id, source: 'camera' }, at(1));
+  await fail({ code: 'ERR_UNREADABLE_IMAGE' });
+  const [first, second] = session.currentSession()!.failed;
+  expect([first.reason, second.reason]).toEqual([STOPPED, UNREADABLE]);
+
+  /** The Retake, then the camera's next photo. */
+  async function retry(failedAt: string, seconds: number, name: string) {
+    session.retryIn(id, failedAt, at(seconds));
+    const link = session.takeCapture(at(seconds));
+    expect(link).toEqual({ session: id, replaces: null, retries: failedAt });
+    await queue.queuePhoto(photo(name), { source: 'camera', ...link }, at(seconds));
+    expect(queue.captures()[0].retries).toBe(failedAt);
+  }
+
+  // failed again: in its place, with its new time and words; the count stays
+  jest.setSystemTime(at(10));
+  await retry(first.at, 10, 'capture_3.jpg');
+  await fail({ code: 'ERR_UNREADABLE_IMAGE' });
+  expect(session.currentSession()!.failed).toEqual([{ at: at(10).toISOString(), reason: UNREADABLE }, second]);
+
+  // stored with no form found: it goes all the same, and the scan is there to retake
+  await retry(second.at, 11, 'capture_4.jpg');
+  await read(result('blank_page'));
+  expect(session.currentSession()!.failed).toEqual([{ at: at(10).toISOString(), reason: UNREADABLE }]);
+  expect(scans.recentScans()).toHaveLength(1);
+
+  // read, but its scan couldn't be kept: a failed read again, in that one's place (ruling T3-3)
+  jest.setSystemTime(at(12));
+  jest.spyOn(scans, 'addScan').mockImplementationOnce(() => {
+    throw new Error('No space left on device');
+  });
+  await retry(at(10).toISOString(), 12, 'capture_5.jpg');
+  await read(result());
+  expect(session.currentSession()!.failed).toEqual([{ at: at(12).toISOString(), reason: STOPPED }]);
+
+  // stored with its form: the last one goes
+  await retry(at(12).toISOString(), 13, 'capture_6.jpg');
+  await read(result());
+  expect(session.currentSession()!.failed).toEqual([]);
+  await flush();
+  expect(JSON.parse(memoryFs.files.get(SESSION_FILE) as string)).toMatchObject({ failed: [], retries: null });
+});
+
+test("a capture with no retry link, or one whose session isn't the current one any more, leaves the failed reads alone", async () => {
+  const { queue, session } = m;
+  const { session: id } = session.takeCapture(T);
+  await queue.queuePhoto(photo('capture_1.jpg'), { session: id, source: 'camera' }, T);
+  await fail(new Error('boom'));
+  const failed = session.currentSession()!.failed;
+
+  // no link: a read stored, and one that fails, each beside it
+  await queue.queuePhoto(photo('capture_2.jpg'), { session: id, source: 'camera' }, at(1));
+  await read(result());
+  expect(session.currentSession()!.failed).toEqual(failed);
+  jest.setSystemTime(at(2));
+  await queue.queuePhoto(photo('capture_3.jpg'), { session: id, source: 'camera' }, at(2));
+  await fail(new Error('boom'));
+  expect(session.currentSession()!.failed).toEqual([...failed, { at: at(2).toISOString(), reason: STOPPED }]);
+
+  // a retry whose session another one has replaced by the time it's read: nothing changes on either
+  session.retryIn(id, failed[0].at, at(3));
+  const link = session.takeCapture(at(3));
+  await queue.queuePhoto(photo('capture_4.jpg'), { source: 'camera', ...link }, at(3));
+  session.endSession(id);
+  const other = session.takeCapture(at(4)).session;
+  await read(result());
+  expect(session.currentSession()).toMatchObject({ id: other, failed: [] });
 });

@@ -3,7 +3,7 @@ import { readJson, writeJson } from './jsonFile';
 // The session the camera continues (spec §6.3 and §6.9): the invoices taken one after another until Done. The first
 // capture opens it, and every scan read in it carries its id. It keeps when it last changed (a capture, a read stored or
 // a read that failed), the reads that failed, which have no scan to show them, and a Retake's link to the scan its next
-// capture replaces (the plan's call 3). Done ends it: no capture goes in, and its failed reads stay for the session
+// capture replaces (the plan's call 3), or to the failed read it tries again (ruling T9-5). Done ends it: no capture goes in, and its failed reads stay for the session
 // screen Done opens (call 2). It closes when another one starts, 30 minutes after its last change, or when the app
 // starts again (call 24); its scans keep its id. It lives in memory, and in session.json, which the next start closes.
 
@@ -15,6 +15,9 @@ export type SessionState = {
   open: boolean; // false once Done ended it: no capture goes in, its failed reads stay for its screen
   failed: readonly FailedRead[];
   replaces: string | null; // Retake: the scan its next capture replaces
+  // Retake for a read that failed: the `at` of the failed read its next capture tries again (ruling T9-5). A session
+  // kept before it has none: read as null.
+  retries: string | null;
 };
 
 /** A session closes this long after its last change. */
@@ -53,20 +56,22 @@ export function subscribeSession(listener: () => void): () => void {
 }
 
 /**
- * A capture (a photo, a gallery pick or a PDF): the session it goes in, and the scan it replaces after a Retake. An idle
- * session closes first. An open one is touched, and its Retake's link is spent; otherwise a new session starts in place
+ * A capture (a photo, a gallery pick or a PDF): the session it goes in, the scan it replaces after a Retake, and the
+ * failed read it tries again after a Retake of one (ruling T9-5). An idle session closes first. An open one is touched,
+ * and both of its Retake links are spent; otherwise a new session starts in place
  * of whatever was there, and an ended one's failed reads go with it.
  */
-export function takeCapture(now: Date): { session: string; replaces: string | null } {
+export function takeCapture(now: Date): { session: string; replaces: string | null; retries: string | null } {
   closeIdleSession(now);
   if (current?.open) {
     const { id, replaces } = current;
-    void set({ ...current, changedAt: now.toISOString(), replaces: null });
-    return { session: id, replaces };
+    const retries = current.retries ?? null;
+    void set({ ...current, changedAt: now.toISOString(), replaces: null, retries: null });
+    return { session: id, replaces, retries };
   }
   const id = newSessionId(now);
-  void set({ id, changedAt: now.toISOString(), open: true, failed: [], replaces: null });
-  return { session: id, replaces: null };
+  void set({ id, changedAt: now.toISOString(), open: true, failed: [], replaces: null, retries: null });
+  return { session: id, replaces: null, retries: null };
 }
 
 /** A read stored in the session: its last change, while it's the current one. */
@@ -74,16 +79,31 @@ export function touchSession(id: string, now: Date): void {
   if (current?.id === id) void set({ ...current, changedAt: now.toISOString() });
 }
 
-/** A read that failed in the session, with its time and plain words, kept while it's the current one: a change too. */
-export function addFailedRead(id: string, reason: string, now: Date): void {
+/**
+ * A read that failed in the session, with its time and plain words, kept while it's the current one: a change too. A
+ * read that tried a failed one again (replacing: that one's `at`) takes its place, with the new time and words, so the
+ * count stays; one that's gone by then is added as a new one.
+ */
+export function addFailedRead(id: string, reason: string, now: Date, replacing?: string | null): void {
   if (current?.id !== id) return;
   const at = now.toISOString();
-  void set({ ...current, changedAt: at, failed: [...current.failed, { at, reason }] });
+  const i = replacing == null ? -1 : current.failed.findIndex((f) => f.at === replacing);
+  const failed = i < 0 ? [...current.failed, { at, reason }] : current.failed.map((f, j) => (j === i ? { at, reason } : f));
+  void set({ ...current, changedAt: at, failed });
+}
+
+/**
+ * A read that tried a failed one again was stored: that failed read goes (ruling T9-5). Only while it's the current
+ * session, and only when the entry is still there.
+ */
+export function clearFailedRead(id: string, at: string): void {
+  if (current?.id !== id || !current.failed.some((f) => f.at === at)) return;
+  void set({ ...current, failed: current.failed.filter((f) => f.at !== at) });
 }
 
 /** Done: no capture goes in from now on, and a Retake's link is spent. Its failed reads stay for its screen. */
 export function endSession(id: string): void {
-  if (current?.id === id) void set({ ...current, open: false, replaces: null });
+  if (current?.id === id) void set({ ...current, open: false, replaces: null, retries: null });
 }
 
 /**
@@ -92,7 +112,17 @@ export function endSession(id: string): void {
  */
 export function retakeIn(id: string, scanId: string, now: Date): void {
   const failed = current?.id === id ? current.failed : [];
-  void set({ id, changedAt: now.toISOString(), open: true, failed, replaces: scanId });
+  void set({ id, changedAt: now.toISOString(), open: true, failed, replaces: scanId, retries: null });
+}
+
+/**
+ * Retake for a read that failed (ruling T9-5): as retakeIn, the session is the camera's again, open, with its failed
+ * reads; its next capture tries that failed read (its `at`) again. Stored, the failed read goes; failed again, it takes
+ * that one's place.
+ */
+export function retryIn(id: string, at: string, now: Date): void {
+  const failed = current?.id === id ? current.failed : [];
+  void set({ id, changedAt: now.toISOString(), open: true, failed, replaces: null, retries: at });
 }
 
 /** Closes the session, open or ended, once IDLE_MS have passed since its last change; true when it closed one. */

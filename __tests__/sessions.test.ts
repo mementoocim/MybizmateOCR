@@ -433,6 +433,7 @@ test('the tray: read, retake and reading, in the order taken', () => {
     testImage: false,
     name: kind === 'pdf' ? 'a.pdf' : null,
     replaces: null,
+    retries: null,
     reading: false,
   });
   const waiting = [

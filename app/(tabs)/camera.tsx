@@ -243,9 +243,14 @@ export default function CameraScreen() {
     }
     if (byAuto) confirmHaptic();
     const now = new Date();
-    const { session: id, replaces } =
-      finishingRef.current !== null ? { session: finishingRef.current, replaces: null } : takeCapture(now);
-    void queuePhoto(uri, { session: id, source: 'camera', testImage: testImages, replaces }, now).catch(() => {});
+    // finishing (Done waits for this photo): it joins that session, with no Retake link to spend
+    const { session: id, replaces, retries } =
+      finishingRef.current !== null
+        ? { session: finishingRef.current, replaces: null, retries: null }
+        : takeCapture(now);
+    void queuePhoto(uri, { session: id, source: 'camera', testImage: testImages, replaces, retries }, now).catch(
+      () => {},
+    );
   }
 
   /** A picker, one at a time, with the camera off while it's open. A cancel opens no session (ruling P-F9). */
@@ -264,8 +269,8 @@ export default function CameraScreen() {
   /** A picked photo joins the session the way the camera's do: takeCapture only once there's a photo. */
   function queuePicked(uri: string, source: 'gallery' | 'camera_app') {
     const now = new Date();
-    const { session: id, replaces } = takeCapture(now);
-    void queuePhoto(uri, { session: id, source, testImage: testImages, replaces }, now).catch(() => {});
+    const { session: id, replaces, retries } = takeCapture(now);
+    void queuePhoto(uri, { session: id, source, testImage: testImages, replaces, retries }, now).catch(() => {});
   }
 
   const fromGallery = () =>
@@ -305,8 +310,8 @@ export default function CameraScreen() {
       if (picked === 'not_pdf') sayWhy('Choose a PDF file.');
       else if (picked !== null) {
         const now = new Date();
-        const { session: id, replaces } = takeCapture(now);
-        queuePdf(picked, { session: id, replaces }, now);
+        const { session: id, replaces, retries } = takeCapture(now);
+        queuePdf(picked, { session: id, replaces, retries }, now);
       }
     });
 
@@ -409,8 +414,10 @@ export default function CameraScreen() {
   }, [live]);
 
   // A Retake: the camera opens with the session's link, so Auto stops waiting for the last sheet to leave, and takes
-  // the one in view (ruling T1-1). Once per link. A build without rearm never crashes the camera for it.
-  const link = session?.open ? session.replaces : null;
+  // the one in view (ruling T1-1). Once per link: a scan's, or a failed read's (ruling T9-5). A build without rearm
+  // never crashes the camera for it.
+  const retryLink = session?.retries ? `retry:${session.retries}` : null;
+  const link = session?.open ? (session.replaces ?? retryLink) : null;
   const rearmed = useRef<string | null>(null);
   useEffect(() => {
     if (link === null) {

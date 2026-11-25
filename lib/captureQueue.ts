@@ -4,7 +4,7 @@ import { readPdf, scanPhoto, type ScanResult } from '../modules/scanner';
 import { letGoOfPdf, type PickedPdf } from './pickers';
 import { failedReadReason, SCANNER_STOPPED } from './readFailures';
 import { addScan, deleteScan, recentScans, type ScanSource, scansWritten } from './scans';
-import { addFailedRead, touchSession } from './session';
+import { addFailedRead, clearFailedRead, touchSession } from './session';
 
 // The capture queue (spec §6.3, the plan's calls 4, 5 and 21): what the camera tab took, waiting to be read. A photo
 // (the camera's, the camera app's or a gallery pick) moves out of the app's cache, which the scanner clears at every
@@ -14,7 +14,8 @@ import { addFailedRead, touchSession } from './session';
 //
 // Reads go one at a time, in the order taken, through the camera's read path (scanPhoto, readPdf). Each is kept as a
 // scan in its session, as of when it was taken (ruling P-F2); a Retake's new scan replaces the unsaved one it was taken
-// for once its form was found (ruling T7-3). A read that throws is the session's failed read, in plain words only (lib/readFailures), with no dialog and
+// for once its form was found (ruling T7-3), and a Retake of a read that failed clears that failed read once its new
+// read is stored, or takes its place when it fails again (ruling T9-5). A read that throws is the session's failed read, in plain words only (lib/readFailures), with no dialog and
 // nothing logged. A photo is deleted once recent.json holds its scan, or once its read has failed; when recent.json
 // can't be written, it stays for the next start (ruling T2-2), and a scan recent.json already holds is never read twice
 // (ruling P-F2). Review Focus 1.
@@ -37,6 +38,7 @@ export type Capture = {
   testImage: boolean;
   name: string | null; // a PDF's file name, as its app gives it
   replaces: string | null; // Retake: the unsaved scan its scan replaces
+  retries: string | null; // Retake of a read that failed: that failed read's `at` (ruling T9-5)
   reading: boolean;
 };
 
@@ -178,14 +180,15 @@ async function moveIn(entry: Entry, from: string, session: string, name: string)
  */
 export async function queuePhoto(
   from: string,
-  p: { session: string; source: PhotoSource; testImage?: boolean; replaces?: string | null },
+  p: { session: string; source: PhotoSource; testImage?: boolean; replaces?: string | null; retries?: string | null },
   at: Date,
 ): Promise<void> {
   const n = ++seq; // its place, at once: the reading order is the call order
   const testImage = p.testImage ?? false;
   const replaces = p.replaces ?? null;
+  const retries = p.retries ?? null;
   const entry = add(
-    { session: p.session, at, kind: 'photo', uri: from, source: p.source, testImage, name: null, replaces },
+    { session: p.session, at, kind: 'photo', uri: from, source: p.source, testImage, name: null, replaces, retries },
     [at.getTime(), n],
     false,
   );
@@ -197,10 +200,25 @@ export async function queuePhoto(
 }
 
 /** A PDF picked: it waits in memory, as the person's own file, and its access is given up once it has been read. */
-export function queuePdf(pdf: PickedPdf, p: { session: string; replaces?: string | null }, at: Date): void {
+export function queuePdf(
+  pdf: PickedPdf,
+  p: { session: string; replaces?: string | null; retries?: string | null },
+  at: Date,
+): void {
   const replaces = p.replaces ?? null;
+  const retries = p.retries ?? null;
   add(
-    { session: p.session, at, kind: 'pdf', uri: pdf.uri, source: 'pdf', testImage: false, name: pdf.name, replaces },
+    {
+      session: p.session,
+      at,
+      kind: 'pdf',
+      uri: pdf.uri,
+      source: 'pdf',
+      testImage: false,
+      name: pdf.name,
+      replaces,
+      retries,
+    },
     [at.getTime(), ++seq],
     true,
   );
@@ -232,7 +250,7 @@ async function read(entry: Entry): Promise<void> {
       result = c.kind === 'photo' ? await scanPhoto(c.uri, { deletePhoto: false }) : await readPdf(c.uri);
     } catch (e: unknown) {
       remove(entry);
-      addFailedRead(c.session, failedReadReason(c.kind, e), new Date());
+      addFailedRead(c.session, failedReadReason(c.kind, e), new Date(), c.retries); // a retry's takes its place
       if (c.kind === 'photo') deleteFile(c.uri); // a failed read keeps no scan, and a Retake's old one stays
       return;
     } finally {
@@ -246,11 +264,12 @@ async function read(entry: Entry): Promise<void> {
       // session shows it as a failed read, so it's never just gone from the tray (ruling T7-1); a Retake's old scan
       // stays, as after any failed read.
       remove(entry);
-      addFailedRead(c.session, SCANNER_STOPPED, new Date());
+      addFailedRead(c.session, SCANNER_STOPPED, new Date(), c.retries);
       if (c.kind === 'photo') unkept.add(c.uri);
       return;
     }
     remove(entry); // in the same tick: the tray never shows it twice
+    if (c.retries !== null) clearFailedRead(c.session, c.retries); // tried again, and stored: form found or not
     touchSession(c.session, new Date());
     // a Retake replaces its scan only with one whose form was found: a new one that wasn't is a retake beside it, and
     // never costs the person a scan they could use (ruling T7-3)
@@ -339,6 +358,7 @@ export async function resumeQueue(): Promise<void> {
         testImage: f.parsed?.testImage ?? false,
         name: null,
         replaces: null,
+        retries: null, // a photo from a last run: its link didn't survive the restart, nor did its session
       },
       f.parsed ? [f.parsed.at.getTime(), f.parsed.seq] : [Infinity, i],
       true,

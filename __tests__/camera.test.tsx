@@ -8,7 +8,7 @@ import { CAMERA_ERRORS, CAMERA_TEXT, PERMISSION_TEXT, statusText } from '../lib/
 import { captures, pendingIn } from '../lib/captureQueue';
 import { saveScan } from '../lib/saved';
 import { getScan, recentScans } from '../lib/scans';
-import { currentSession, loadSession, retakeIn } from '../lib/session';
+import { currentSession, loadSession, retakeIn, retryIn } from '../lib/session';
 import { CAPTURE_GRACE_MS, currentShutter } from '../lib/shutter';
 import { setStarted } from '../lib/startup';
 import { colors, radius, touch, type } from '../lib/theme';
@@ -1209,4 +1209,58 @@ test('a camera test image is marked', async () => {
   const details = { taxType: 'VAT', account: '4010', terms: 'account', atc: '' } as const;
   await act(async () => saveScan(scan.id, details));
   expect(getScan(scan.id)).toMatchObject({ testImage: true, saved: { details } });
+});
+
+test("a Retake of a photo that couldn't be read: rearmed; a cancelled pick spends nothing; the next file tries it again, once", async () => {
+  // ruling T9-5, P-F9: the session screen's Retake on its photos that couldn't be read (lib/session's retryIn)
+  await open();
+  await photo('capture_1.jpg');
+  const id = sessionId()!;
+  await read(result('blank_page'));
+  await photo('capture_2.jpg');
+  await fail();
+  const [failed] = currentSession()!.failed;
+  const scansBefore = recentScans().map((s) => s.id);
+  await act(async () => retryIn(id, failed.at, new Date()));
+  await settle();
+  expect(mockRearm).toHaveBeenCalledTimes(1); // Auto takes the sheet in view, as for a Retake of a scan
+
+  // a cancelled gallery or PDF (the camera app is the start panel's: the test before covers it): all stay
+  for (const cancel of [() => press(button('Gallery')), () => press(button('Import PDF'))]) {
+    await cancel();
+    await settle();
+    expect(currentSession()).toMatchObject({ id, open: true, failed: [failed], retries: failed.at });
+    expect(recentScans().map((s) => s.id)).toEqual(scansBefore);
+  }
+
+  // the next pick that returns a file spends it; stored, the failed read goes
+  memoryFs.files.set('file:///cache/ImagePicker/g1.jpg', 'jpeg');
+  mockLibrary.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file:///cache/ImagePicker/g1.jpg' }] });
+  await press(button('Gallery'));
+  await settle();
+  expect(captures().map((c) => c.retries)).toEqual([failed.at]);
+  expect(currentSession()?.retries).toBeNull();
+  await photo('capture_3.jpg'); // once
+  expect(captures().map((c) => c.retries)).toEqual([failed.at, null]);
+  await read();
+  expect(currentSession()?.failed).toEqual([]);
+  expect(thumbs()).toEqual(['Photo 1, retake', 'Photo 2, read', 'Photo 3, reading']);
+  await read();
+  expect(currentSession()?.failed).toEqual([]);
+
+  // a camera photo and a PDF carry it the same way
+  await photo('capture_4.jpg');
+  await fail();
+  await act(async () => retryIn(id, currentSession()!.failed[0].at, new Date()));
+  await photo('capture_5.jpg');
+  expect(captures().map((c) => c.retries)).toEqual([currentSession()!.failed[0].at]);
+  await read();
+  await photo('capture_6.jpg');
+  await fail();
+  const pdfRetry = currentSession()!.failed[0].at;
+  await act(async () => retryIn(id, pdfRetry, new Date()));
+  mockPick.mockResolvedValueOnce({ canceled: false, result: { uri: 'content://docs/msf%3A54', type: 'application/pdf' } });
+  await press(button('Import PDF'));
+  await settle();
+  expect(captures().map((c) => c.retries)).toEqual([pdfRetry]);
 });

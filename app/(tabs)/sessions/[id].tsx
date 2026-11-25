@@ -17,7 +17,7 @@ import { useOpenOnce } from '../../../lib/navigation';
 import { openSaved } from '../../../lib/saved';
 import { getScan } from '../../../lib/scans';
 import { shownLabel } from '../../../lib/scanState';
-import { currentSession, type FailedRead, retakeIn, subscribeSession } from '../../../lib/session';
+import { currentSession, type FailedRead, retakeIn, retryIn, subscribeSession } from '../../../lib/session';
 import {
   cardLine,
   countLine,
@@ -93,7 +93,8 @@ function SessionOf({ id }: { id: string }) {
       ? sessionTitle(new Date(failed[0].at), new Date())
       : 'Session';
   const header = (
-    <Header title={title} subtitle={members.length > 0 || failed.length > 0 ? `Session · ${countLine(session)}` : null} />
+    // with no scans in it (its photos all failed to read, or were deleted), no count: never "0 invoices" (ruling T9-4)
+    <Header title={title} subtitle={members.length > 0 ? `Session · ${countLine(session)}` : null} />
   );
 
   if (members.length === 0 && failed.length === 0) {
@@ -150,6 +151,13 @@ function SessionOf({ id }: { id: string }) {
     navigate('/camera', undefined, () => retakeIn(id, scanId, new Date()));
   }
 
+  /** Retake for the photos that couldn't be read: the camera, in this session, trying the oldest one again (T9-5). */
+  function retryFailed() {
+    if (reading.current || failed.length === 0) return;
+    const oldest = failed.reduce((a, b) => (Date.parse(b.at) < Date.parse(a.at) ? b : a));
+    navigate('/camera', undefined, () => retryIn(id, oldest.at, new Date()));
+  }
+
   /** A row's title: a saved scan's party as saved, else the party shown; or the scan's label. */
   const titleOf = (m: Member) =>
     m.summary ? m.summary.partyName || shownLabel({ label: m.summary.label }) : scanFields(m, theLists, theSettings).name;
@@ -179,8 +187,23 @@ function SessionOf({ id }: { id: string }) {
           />
         ) : null}
         {failed.length > 0 ? (
-          <View style={styles.gutter}>
+          <View testID="failed-reads" style={styles.gutter}>
             <Banner tone="warning" text={failedWords(failed)} />
+            <View style={styles.retry}>
+              <ButtonRow
+                buttons={[
+                  {
+                    label: 'Retake',
+                    accessibilityLabel:
+                      failed.length === 1
+                        ? "Retake the photo that couldn't be read"
+                        : "Retake a photo that couldn't be read",
+                    variant: 'text',
+                    onPress: retryFailed,
+                  },
+                ]}
+              />
+            </View>
           </View>
         ) : null}
       </View>
@@ -237,6 +260,7 @@ function SessionOf({ id }: { id: string }) {
 const styles = StyleSheet.create({
   top: { gap: space.m, paddingVertical: space.l },
   gutter: { paddingHorizontal: space.l },
+  retry: { alignItems: 'flex-end' }, // the banner's one button, under it at its end, as under a row
   // under its row, on the row's panel, on a hairline of its own
   actions: {
     alignItems: 'flex-end',

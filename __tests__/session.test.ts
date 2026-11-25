@@ -39,9 +39,9 @@ test('the first capture opens a session; the next ones join it, and session.json
   expect(first.session.startsWith(`${T.getTime()}-`)).toBe(true); // the time it started (the plan's call 23)
   expect(first.replaces).toBeNull();
   const opened = s.currentSession();
-  expect(opened).toEqual({ id: first.session, changedAt: T.toISOString(), open: true, failed: [], replaces: null });
+  expect(opened).toEqual({ id: first.session, changedAt: T.toISOString(), open: true, failed: [], replaces: null, retries: null });
 
-  expect(s.takeCapture(at(MINUTE))).toEqual({ session: first.session, replaces: null });
+  expect(s.takeCapture(at(MINUTE))).toEqual({ session: first.session, replaces: null, retries: null });
   expect(s.currentSession()).not.toBe(opened); // replaced, never changed in place: screens subscribe to it
   expect(opened?.changedAt).toBe(T.toISOString());
   expect(listener).toHaveBeenCalledTimes(2);
@@ -54,6 +54,8 @@ test('the first capture opens a session; the next ones join it, and session.json
     open: true,
     failed: [],
     replaces: null,
+
+    retries: null,
   });
 });
 
@@ -72,6 +74,8 @@ test("Done ends it: the next capture opens another, and the ended one's failed r
     open: false,
     failed: [{ at: at(MINUTE).toISOString(), reason: UNREADABLE }],
     replaces: null,
+
+    retries: null,
   });
 
   const next = s.takeCapture(at(2 * MINUTE));
@@ -83,6 +87,8 @@ test("Done ends it: the next capture opens another, and the ended one's failed r
     open: true,
     failed: [],
     replaces: null,
+
+    retries: null,
   });
   await flush();
   expect(kept()).toEqual(s.currentSession());
@@ -203,9 +209,11 @@ test("Retake: that session is the camera's again, and its next capture replaces 
     open: true,
     failed: [],
     replaces: 'scan-1',
+
+    retries: null,
   });
-  expect(s.takeCapture(at(2 * MINUTE))).toEqual({ session: b, replaces: 'scan-1' });
-  expect(s.takeCapture(at(3 * MINUTE))).toEqual({ session: b, replaces: null });
+  expect(s.takeCapture(at(2 * MINUTE))).toEqual({ session: b, replaces: 'scan-1', retries: null });
+  expect(s.takeCapture(at(3 * MINUTE))).toEqual({ session: b, replaces: null, retries: null });
 
   // a B that Done had ended keeps its failed reads
   s.addFailedRead(b, UNREADABLE, at(4 * MINUTE));
@@ -217,6 +225,8 @@ test("Retake: that session is the camera's again, and its next capture replaces 
     open: true,
     failed: [{ at: at(4 * MINUTE).toISOString(), reason: UNREADABLE }],
     replaces: 'scan-2',
+
+    retries: null,
   });
 
   // Done before that capture spends the link
@@ -227,4 +237,73 @@ test("Retake: that session is the camera's again, and its next capture replaces 
   expect(after.replaces).toBeNull();
   await flush();
   expect(kept()).toEqual(s.currentSession());
+});
+
+test("Retake of a read that failed: the camera's session again, with its failed reads; the next capture tries it, once", async () => {
+  // ruling T9-5
+  const s = S();
+  const { session: a } = s.takeCapture(T);
+  s.addFailedRead(a, STOPPED, at(MINUTE));
+  s.addFailedRead(a, UNREADABLE, at(2 * MINUTE));
+  s.endSession(a); // Done: its screen shows them
+  const failed = s.currentSession()!.failed;
+
+  s.retryIn(a, failed[0].at, at(3 * MINUTE));
+  expect(s.currentSession()).toEqual({
+    id: a,
+    changedAt: at(3 * MINUTE).toISOString(),
+    open: true,
+    failed,
+    replaces: null,
+    retries: failed[0].at,
+  });
+  expect(s.takeCapture(at(4 * MINUTE))).toEqual({ session: a, replaces: null, retries: failed[0].at });
+  expect(s.takeCapture(at(5 * MINUTE))).toEqual({ session: a, replaces: null, retries: null }); // spent
+
+  // failed again: in its place, with its new time and words
+  s.addFailedRead(a, UNREADABLE, at(6 * MINUTE), failed[0].at);
+  expect(s.currentSession()?.failed).toEqual([{ at: at(6 * MINUTE).toISOString(), reason: UNREADABLE }, failed[1]]);
+  // one gone by then is a new one
+  s.addFailedRead(a, STOPPED, at(7 * MINUTE), 'gone');
+  expect(s.currentSession()?.failed).toHaveLength(3);
+  // stored: it goes; one that isn't there, or another session's, changes nothing
+  s.clearFailedRead(a, failed[1].at);
+  expect(s.currentSession()?.failed.map((f) => f.at)).toEqual([at(6 * MINUTE).toISOString(), at(7 * MINUTE).toISOString()]);
+  const before = s.currentSession();
+  s.clearFailedRead(a, 'gone');
+  s.clearFailedRead('other', at(6 * MINUTE).toISOString());
+  expect(s.currentSession()).toBe(before);
+
+  // Done spends it, and so does a Retake of a scan; a new session starts with none
+  s.retryIn(a, at(6 * MINUTE).toISOString(), at(8 * MINUTE));
+  s.endSession(a);
+  expect(s.currentSession()).toMatchObject({ open: false, retries: null });
+  s.retryIn(a, at(6 * MINUTE).toISOString(), at(9 * MINUTE));
+  s.retakeIn(a, 'scan-1', at(9 * MINUTE));
+  expect(s.currentSession()).toMatchObject({ replaces: 'scan-1', retries: null });
+  s.endSession(a);
+  expect(s.takeCapture(at(10 * MINUTE))).toMatchObject({ replaces: null, retries: null });
+  expect(s.currentSession()).toMatchObject({ failed: [], retries: null });
+  await flush();
+  expect(kept()).toEqual(s.currentSession());
+});
+
+test('a session.json from before retries loads: closed, as every start closes it', async () => {
+  // data persists across updates: one kept by the last version has no `retries`
+  memoryFs.files.set(
+    FILE,
+    JSON.stringify({
+      id: '1795484460000-u5t9',
+      changedAt: T.toISOString(),
+      open: true,
+      failed: [{ at: T.toISOString(), reason: STOPPED }],
+      replaces: 'scan-1',
+    }),
+  );
+  const s = S();
+  await s.loadSession();
+  expect(s.currentSession()).toBeNull();
+  expect(memoryFs.files.get(FILE)).toBe('null');
+  const next = s.takeCapture(at(MINUTE));
+  expect(next).toMatchObject({ replaces: null, retries: null });
 });

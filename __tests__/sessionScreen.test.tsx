@@ -12,7 +12,7 @@ import * as savedStore from '../lib/saved';
 import { loadSaved, saveScan, savedSummary } from '../lib/saved';
 import * as scansStore from '../lib/scans';
 import { addScan, forgetScan, getScan, recentScans, type ScanSource, type StoredScan, updateScan } from '../lib/scans';
-import { addFailedRead, currentSession, endSession, loadSession, retakeIn } from '../lib/session';
+import { addFailedRead, clearFailedRead, currentSession, endSession, loadSession, retakeIn } from '../lib/session';
 import { savedSub } from '../lib/sessions';
 import { settings, updateSettings } from '../lib/settings';
 import { colors, type } from '../lib/theme';
@@ -569,4 +569,91 @@ test("confirmDeleteScan: Delete runs the caller's step, then the delete; Cancel 
   await choose('Delete');
   expect(steps).toEqual(['before', 'deleteSaved']);
   expect(deleteSaved).toHaveBeenCalledWith(saved);
+});
+
+test('with no scans in it, the header has no count: never 0 invoices', async () => {
+  // ruling T9-4: every photo of the session failed to read
+  failedReadsIn('S1', [[at(9, 41), UNREADABLE_PHOTO]]);
+  await showSession();
+  expect(screen.getByRole('header', { name: 'Today, 9:41 AM' })).toBeOnTheScreen();
+  expect(screen.queryByText(/^Session · /)).toBeNull();
+  expect(screen.getByRole('header', { name: '1 to retake' })).toBeOnTheScreen();
+
+  // a scan in it: its count is back
+  await act(async () => void scan('inv_0007', { at: at(9, 42) }));
+  expect(screen.getByText('Session · 1 invoice')).toBeOnTheScreen();
+});
+
+test("Retake on the photos that couldn't be read: the camera, in this session, trying the oldest again", async () => {
+  // ruling T9-5
+  scan('inv_0007', { at: at(9, 41) });
+  failedReadsIn('S1', [
+    [at(9, 42), UNREADABLE_PHOTO],
+    [at(9, 43), SCANNER_STOPPED],
+  ]);
+  await showSession();
+  const failed = currentSession()!.failed;
+  const retry = () => within(screen.getByTestId('failed-reads')).getByRole('button', { name: /^Retake / });
+  expect(retry().props.accessibilityLabel).toBe("Retake a photo that couldn't be read");
+  expect(within(screen.getByTestId('failed-reads')).getByText('Retake')).toHaveStyle({ color: colors.brandText });
+
+  await press(retry());
+  expect(mockNavigate.mock.calls).toEqual([['/camera']]);
+  expect(currentSession()).toMatchObject({ id: 'S1', open: true, failed, replaces: null, retries: failed[0].at });
+  await act(async () => focusAgain());
+
+  // its new read stored: that one goes, and the card counts one less
+  await act(async () => clearFailedRead('S1', failed[0].at));
+  expect(screen.getByRole('header', { name: '1 ready · 1 to retake' })).toBeOnTheScreen();
+  expect(retry().props.accessibilityLabel).toBe("Retake the photo that couldn't be read");
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    `1 photo couldn't be read. Retake it.\n${formatClock(at(9, 43))}: ${SCANNER_STOPPED}`,
+  );
+
+  // failed again: still one, with its new time and words; the oldest is retried next
+  await act(async () => addFailedRead('S1', UNREADABLE_PHOTO, at(9, 50), failed[1].at));
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    `1 photo couldn't be read. Retake it.\n${formatClock(at(9, 50))}: ${UNREADABLE_PHOTO}`,
+  );
+  await act(async () => addFailedRead('S1', SCANNER_STOPPED, at(9, 51)));
+  await act(async () => addFailedRead('S1', SCANNER_STOPPED, at(9, 53), at(9, 50).toISOString())); // first, but 9:53 now
+  mockNavigate.mockClear();
+  await press(retry());
+  expect(currentSession()?.retries).toBe(at(9, 51).toISOString()); // the oldest, not the first listed
+
+  // the last one stored: the banner and its Retake go, and the card says what's left
+  await act(async () => focusAgain());
+  await act(async () => clearFailedRead('S1', at(9, 51).toISOString()));
+  await act(async () => clearFailedRead('S1', at(9, 53).toISOString()));
+  expect(screen.queryByTestId('failed-reads')).toBeNull();
+  expect(screen.getByRole('header', { name: '1 ready' })).toBeOnTheScreen();
+});
+
+test("the failed reads' Retake runs once on a double tap, and waits for another press's open or read", async () => {
+  // Review Focus 5
+  const past = await savedOnly({ at: at(9, 41), edits: { customer_name: 'Bautista Pharmacy' } });
+  failedReadsIn('S1', [[at(9, 42), UNREADABLE_PHOTO]]);
+  await showSession();
+  const retry = () => within(screen.getByTestId('failed-reads')).getByRole('button', { name: /^Retake / });
+  const sessionBefore = currentSession();
+
+  // while a saved scan is read back: nothing
+  const finish = slowOpenSaved();
+  await press(button(/^Bautista Pharmacy, /));
+  await press(retry());
+  expect(currentSession()).toBe(sessionBefore);
+  await finish();
+  expect(opened()).toEqual([{ pathname: '/result', params: { id: past, from: 'session', session: 'S1' } }]);
+  expect(mockNavigate).not.toHaveBeenCalled();
+  // a row opened: nothing until this screen is on top again
+  await press(retry());
+  expect(currentSession()).toBe(sessionBefore);
+  await act(async () => focusAgain());
+
+  await act(async () => {
+    await fireEvent.press(retry());
+    await fireEvent.press(retry());
+  });
+  expect(mockNavigate).toHaveBeenCalledTimes(1);
+  expect(currentSession()?.retries).toBe(at(9, 42).toISOString());
 });
