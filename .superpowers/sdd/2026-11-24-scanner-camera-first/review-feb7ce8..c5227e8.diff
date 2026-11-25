@@ -1,0 +1,401 @@
+diff --git a/__tests__/sessionScreen.test.tsx b/__tests__/sessionScreen.test.tsx
+index a8cd9850..7842d553 100644
+--- a/__tests__/sessionScreen.test.tsx
++++ b/__tests__/sessionScreen.test.tsx
+@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react-n
+ import { Alert, type AlertButton } from 'react-native';
+ 
+ import SessionScreen from '../app/(tabs)/sessions/[id]';
++import { confirmDeleteScan } from '../lib/confirmDelete';
+ import { certOf, taxWithheld } from '../lib/cert';
+ import { amount, formatClock } from '../lib/format';
+ import { clearItems, clearParties, lists } from '../lib/lists';
+@@ -10,7 +11,7 @@ import { saleOf } from '../lib/sale';
+ import * as savedStore from '../lib/saved';
+ import { loadSaved, saveScan, savedSummary } from '../lib/saved';
+ import * as scansStore from '../lib/scans';
+-import { addScan, forgetScan, getScan, recentScans, type ScanSource, updateScan } from '../lib/scans';
++import { addScan, forgetScan, getScan, recentScans, type ScanSource, type StoredScan, updateScan } from '../lib/scans';
+ import { addFailedRead, currentSession, endSession, loadSession, retakeIn } from '../lib/session';
+ import { savedSub } from '../lib/sessions';
+ import { settings, updateSettings } from '../lib/settings';
+@@ -219,20 +220,25 @@ test("a scan whose form wasn't found: Retake opens the camera in this session; R
+   const under = (id: string) => screen.getByTestId(`retake-${id}`);
+ 
+   // only the rows whose form wasn't found have the two
+-  expect(screen.getAllByRole('button', { name: 'Retake' })).toHaveLength(2);
++  expect(screen.getAllByRole('button', { name: /^Retake / })).toHaveLength(2);
+   expect(within(under(blank)).getByText('Remove')).toHaveStyle({ color: colors.danger });
+   expect(within(under(blank)).getByText('Retake')).toHaveStyle({ color: colors.brandText });
++  // TalkBack says which scan each is for: the row's title and its time (the words shown stay Retake and Remove)
++  const blankAt = formatClock(at(9, 42));
++  expect(within(under(blank)).getByRole('button', { name: `Retake Camera photo ${blankAt}` })).toBeOnTheScreen();
++  expect(within(under(blank)).getByRole('button', { name: `Remove Camera photo ${blankAt}` })).toBeOnTheScreen();
++  expect(within(under(other)).getByRole('button', { name: `Retake Camera photo ${formatClock(at(9, 43))}` })).toBeOnTheScreen();
+ 
+-  await press(within(under(blank)).getByRole('button', { name: 'Retake' }));
++  await press(within(under(blank)).getByRole('button', { name: /^Retake / }));
+   expect(currentSession()).toMatchObject({ id: 'S1', open: true, replaces: blank });
+   expect(mockNavigate.mock.calls).toEqual([['/camera']]);
+   await act(async () => focusAgain());
+ 
+-  await press(within(under(other)).getByRole('button', { name: 'Remove' }));
++  await press(within(under(other)).getByRole('button', { name: /^Remove / }));
+   expect(dialog()).toEqual(['Delete this scan?', "It's removed from this phone."]);
+   await choose('Cancel');
+   expect(getScan(other)).toBeDefined();
+-  await press(within(under(other)).getByRole('button', { name: 'Remove' }));
++  await press(within(under(other)).getByRole('button', { name: /^Remove / }));
+   await choose('Delete');
+   expect(getScan(other)).toBeUndefined();
+   expect(screen.queryByTestId(`retake-${other}`)).toBeNull();
+@@ -243,7 +249,7 @@ test("a scan whose form wasn't found: Retake opens the camera in this session; R
+   jest.spyOn(scansStore, 'deleteScan').mockImplementation(() => {
+     throw new Error('locked');
+   });
+-  await press(within(under(blank)).getByRole('button', { name: 'Remove' }));
++  await press(within(under(blank)).getByRole('button', { name: /^Remove / }));
+   await choose('Delete');
+   expect(mockToast).toHaveBeenCalledWith("Couldn't delete the scan.");
+   expect(getScan(blank)).toBeDefined();
+@@ -327,14 +333,14 @@ test('Check the next one, Retake and Remove run once on a double tap', async ()
+   mockPush.mockClear();
+   await twice(
+     () => button('Check the next one'),
+-    () => within(under()).getByRole('button', { name: 'Retake' }),
++    () => within(under()).getByRole('button', { name: /^Retake / }),
+   );
+   expect(mockPush).toHaveBeenCalledTimes(1);
+   expect(mockNavigate).not.toHaveBeenCalled();
+   expect(currentSession()).toBeNull();
+   await act(async () => focusAgain());
+ 
+-  await twice(() => within(under()).getByRole('button', { name: 'Retake' }));
++  await twice(() => within(under()).getByRole('button', { name: /^Retake / }));
+   expect(mockNavigate).toHaveBeenCalledTimes(1);
+   await act(async () => focusAgain());
+ 
+@@ -345,7 +351,7 @@ test('Check the next one, Retake and Remove run once on a double tap', async ()
+   await act(async () => focusAgain());
+ 
+   // one dialog at a time: Remove twice, then a long press while it's up
+-  await twice(() => within(under()).getByRole('button', { name: 'Remove' }));
++  await twice(() => within(under()).getByRole('button', { name: /^Remove / }));
+   await act(async () => fireEvent(button(/^Camera photo, /), 'longPress'));
+   expect(alert).toHaveBeenCalledTimes(1);
+   await choose('Cancel');
+@@ -365,9 +371,9 @@ test('one screen shows one session, then another, with nothing carried over', as
+   mockParams.id = 'S1';
+   const { rerender } = await render(<SessionScreen />);
+   expect(screen.getByText('Session · 2 invoices')).toBeOnTheScreen();
+-  // A's Check the next one and its Remove's dialog, both still up as the screen goes to B
++  // A's Remove's dialog, then its Check the next one, both still up as the screen goes to B
++  await press(within(screen.getByTestId(`retake-${aBlank}`)).getByRole('button', { name: /^Remove / }));
+   await press(button('Check the next one'));
+-  await press(within(screen.getByTestId(`retake-${aBlank}`)).getByRole('button', { name: 'Remove' }));
+ 
+   mockParams.id = 'S2';
+   await act(async () => rerender(<SessionScreen />));
+@@ -381,7 +387,8 @@ test('one screen shows one session, then another, with nothing carried over', as
+     { pathname: '/result', params: { id: expect.any(String), from: 'session', session: 'S1' } },
+     { pathname: '/result', params: { id: bNext, from: 'session', session: 'S2' } },
+   ]);
+-  await press(within(screen.getByTestId(`retake-${bBlank}`)).getByRole('button', { name: 'Remove' }));
++  await act(async () => focusAgain()); // back from B's Scan screen
++  await press(within(screen.getByTestId(`retake-${bBlank}`)).getByRole('button', { name: /^Remove / }));
+   expect(alert).toHaveBeenCalledTimes(2);
+   await act(async () => fireEvent(button(/^Camera photo, /), 'longPress'));
+   expect(alert).toHaveBeenCalledTimes(2); // B's own dialog is up
+@@ -396,3 +403,170 @@ test('a session with nothing left in it says so', async () => {
+   expect(screen.queryByTestId('card')).toBeNull();
+   expect(button('Back')).toBeOnTheScreen();
+ });
++
++/** A saved scan of this session no longer among the recent ones (past the newest 100): its summary alone. */
++async function savedOnly(opts: Parameters<typeof scan>[1]): Promise<string> {
++  const id = scan('inv_0007', opts);
++  await act(async () => saveScan(id, DETAILS));
++  forgetScan(id);
++  return id;
++}
++
++/** openSaved, held until the test lets it finish: a slow read of a saved scan's scan.json (or the result given). */
++function slowOpenSaved(result?: StoredScan | null): () => Promise<void> {
++  jest.restoreAllMocks(); // the last one's spy: spying again would wrap it in itself
++  alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
++  const real = savedStore.openSaved;
++  let release!: () => void;
++  const gate = new Promise<void>((resolve) => (release = resolve));
++  jest.spyOn(savedStore, 'openSaved').mockImplementation(async (id) => {
++    await gate;
++    return result === undefined ? real(id) : result;
++  });
++  // the read ends, and what follows it in the screen (a push, a message) runs, all in one act() scope
++  return () =>
++    act(async () => {
++      release();
++      await new Promise((resolve) => setTimeout(resolve, 0));
++    });
++}
++
++test('a saved scan read back opens only while the screen is on top; one that has gone says so', async () => {
++  // ruling T8-3 (T9-1 a, b): after the read, nothing opens over another screen
++  const past = await savedOnly({ at: at(9, 41), edits: { customer_name: 'Bautista Pharmacy' } });
++  await showSession();
++
++  let finish = slowOpenSaved();
++  await press(button(/^Bautista Pharmacy, /));
++  mockFocused = false; // another tab came on top while it was read
++  await finish();
++  expect(mockPush).not.toHaveBeenCalled();
++  expect(mockToast).not.toHaveBeenCalled();
++
++  // its folder gone: it says so, and opens nothing
++  mockFocused = true;
++  await act(async () => forgetScan(past)); // read back again
++  finish = slowOpenSaved(null);
++  await press(button(/^Bautista Pharmacy, /));
++  await finish();
++  expect(mockToast.mock.calls).toEqual([["Couldn't open that scan."]]);
++  expect(mockPush).not.toHaveBeenCalled();
++
++  // and one read back while on top opens
++  await act(async () => forgetScan(past));
++  finish = slowOpenSaved();
++  await press(button(/^Bautista Pharmacy, /));
++  await finish();
++  expect(opened()).toEqual([{ pathname: '/result', params: { id: past, from: 'session', session: 'S1' } }]);
++});
++
++test('while a saved scan is read back, no other row, Check the next one, Retake or delete starts', async () => {
++  // T9-1 c, T9-3
++  const past = await savedOnly({ at: at(9, 41), edits: { customer_name: 'Bautista Pharmacy' } });
++  scan('inv_0007', { at: at(9, 42), edits: { customer_name: 'Torres Construction Supply' } });
++  const blank = scan('blank_page', { at: at(9, 43) });
++  await showSession();
++  const under = () => screen.getByTestId(`retake-${blank}`);
++
++  const finish = slowOpenSaved();
++  await press(button(/^Bautista Pharmacy, /));
++  await press(button(/^Torres Construction Supply, /));
++  await press(button('Check the next one'));
++  await press(within(under()).getByRole('button', { name: /^Retake / }));
++  await press(within(under()).getByRole('button', { name: /^Remove / }));
++  await act(async () => fireEvent(button(/^Torres Construction Supply, /), 'longPress'));
++  expect(mockPush).not.toHaveBeenCalled();
++  expect(mockNavigate).not.toHaveBeenCalled();
++  expect(currentSession()).toBeNull();
++  expect(alert).not.toHaveBeenCalled();
++  await finish();
++  expect(opened()).toEqual([{ pathname: '/result', params: { id: past, from: 'session', session: 'S1' } }]);
++});
++
++test("a delete doesn't start while a press is opening a screen", async () => {
++  // T9-3: a row, then Remove or a long press, in one go: the row's Scan screen alone, and no dialog over it
++  const blank = scan('blank_page', { at: at(9, 41) });
++  await showSession();
++  await act(async () => {
++    await fireEvent.press(button(/^Camera photo, /));
++    await fireEvent.press(within(screen.getByTestId(`retake-${blank}`)).getByRole('button', { name: /^Remove / }));
++    await fireEvent(button(/^Camera photo, /), 'longPress');
++  });
++  expect(mockPush).toHaveBeenCalledTimes(1);
++  expect(alert).not.toHaveBeenCalled();
++  // back on top: it asks again
++  await act(async () => focusAgain());
++  await act(async () => fireEvent(button(/^Camera photo, /), 'longPress'));
++  expect(dialog()).toEqual(['Delete this scan?', "It's removed from this phone."]);
++});
++
++test("a long press on a saved scan known by its summary alone asks in the saved scan's words", async () => {
++  // T9-1 d: no scan to hand confirmDeleteScan, so straight to confirmDeleteSaved
++  const past = await savedOnly({ at: at(9, 41), edits: { customer_name: 'Bautista Pharmacy' } });
++  await showSession();
++  await act(async () => fireEvent(button(/^Bautista Pharmacy, /), 'longPress'));
++  expect(dialog()).toEqual([
++    'Delete this saved scan?',
++    "It's removed from this phone. Files you already exported don't change.",
++  ]);
++  await choose('Delete');
++  expect(savedSummary(past)).toBeUndefined();
++});
++
++test("every scan saved, with a photo that couldn't be read: the card is still amber", async () => {
++  // T9-1 e: the failed read is left to do
++  await act(async () => saveScan(scan('inv_0007', { at: at(9, 41) }), DETAILS));
++  failedReadsIn('S1', [[at(9, 42), UNREADABLE_PHOTO]]);
++  await showSession();
++  expect(screen.getByRole('header', { name: '1 to retake' })).toBeOnTheScreen();
++  expect(screen.getByTestId('card')).toHaveStyle({ backgroundColor: colors.warningTint, borderColor: colors.warningLine });
++});
++
++test("confirmDeleteScan: Delete runs the caller's step, then the delete; Cancel neither; a saved scan in its own words", async () => {
++  // T9-1 f: the Scan screen's ⋮ (Task 11) starts going back first, in the same press (Review Focus 4)
++  const steps: string[] = [];
++  const before = jest.fn(() => {
++    steps.push('before');
++  });
++  const real = scansStore.deleteScan;
++  jest.spyOn(scansStore, 'deleteScan').mockImplementation((id) => {
++    steps.push('delete');
++    real(id);
++  });
++  const unsaved = scan('blank_page', { at: at(9, 41) });
++
++  let settled = false;
++  let asked = confirmDeleteScan(getScan(unsaved)!, before).then(() => {
++    settled = true;
++  });
++  expect(dialog()).toEqual(['Delete this scan?', "It's removed from this phone."]);
++  await act(async () => {});
++  expect(settled).toBe(false); // it settles when the dialog closes
++  await choose('Cancel');
++  await asked;
++  expect(steps).toEqual([]);
++  expect(getScan(unsaved)).toBeDefined();
++
++  asked = confirmDeleteScan(getScan(unsaved)!, before);
++  await choose('Delete');
++  await asked;
++  expect(steps).toEqual(['before', 'delete']);
++  expect(getScan(unsaved)).toBeUndefined();
++
++  // a saved scan: confirmDeleteSaved's words, and its own `before`, which runs ahead of the delete there too
++  steps.length = 0;
++  const saved = scan('inv_0007', { at: at(9, 42) });
++  await act(async () => saveScan(saved, DETAILS));
++  const deleteSaved = jest.spyOn(savedStore, 'deleteSaved').mockImplementation(async () => {
++    steps.push('deleteSaved');
++  });
++  await confirmDeleteScan(getScan(saved)!, before); // at once (ruling P-F12)
++  expect(dialog()).toEqual([
++    'Delete this saved scan?',
++    "It's removed from this phone. Files you already exported don't change.",
++  ]);
++  expect(steps).toEqual([]);
++  await choose('Delete');
++  expect(steps).toEqual(['before', 'deleteSaved']);
++  expect(deleteSaved).toHaveBeenCalledWith(saved);
++});
+diff --git a/app/(tabs)/sessions/[id].tsx b/app/(tabs)/sessions/[id].tsx
+index e8cd2d59..eee11cb2 100644
+--- a/app/(tabs)/sessions/[id].tsx
++++ b/app/(tabs)/sessions/[id].tsx
+@@ -65,7 +65,7 @@ function failedWords(failed: readonly FailedRead[]): string {
+ }
+ 
+ function SessionOf({ id }: { id: string }) {
+-  const { push, navigate } = useOpenOnce(); // one guard for every press that opens (ruling T6-1)
++  const { push, navigate, busy } = useOpenOnce(); // one guard for every press that opens (ruling T6-1)
+   const navigation = useNavigation();
+   const { sessions, statuses, states, saved } = useSessions();
+   const theLists = useSyncExternalStore(subscribeLists, lists);
+@@ -129,9 +129,12 @@ function SessionOf({ id }: { id: string }) {
+     push({ pathname: '/result', params: { id: scanId, from: 'session', session: id } });
+   }
+ 
+-  /** Asks before deleting a scan, one dialog at a time; settles when it closes (a saved one's at once: P-F12). */
++  /**
++   * Asks before deleting a scan, one dialog at a time, and none while a press is opening a screen (or reading a saved
++   * scan back to open it); settles when it closes (a saved one's at once: P-F12).
++   */
+   async function askDelete(m: Member) {
+-    if (asking.current) return;
++    if (asking.current || reading.current || busy()) return;
+     asking.current = true;
+     try {
+       if (m.scan) await confirmDeleteScan(m.scan);
+@@ -187,6 +190,7 @@ function SessionOf({ id }: { id: string }) {
+           {members.map((m) => {
+             const badge = scanBadge(m, states.get(m.id) ?? null, saved.get(m.id) ?? 'no');
+             const notFound = statuses.get(m.id) === 'retake' && m.scan !== null && !m.summary;
++            const named = `${titleOf(m)} ${scanSub(m)}`; // TalkBack: which scan Remove and Retake are for
+             return (
+               <View key={m.id}>
+                 <ListRow
+@@ -205,8 +209,18 @@ function SessionOf({ id }: { id: string }) {
+                   <View testID={`retake-${m.id}`} style={styles.actions}>
+                     <ButtonRow
+                       buttons={[
+-                        { label: 'Remove', variant: 'destructiveText', onPress: () => askDelete(m) },
+-                        { label: 'Retake', variant: 'text', onPress: () => retake(m.id) },
++                        {
++                          label: 'Remove',
++                          accessibilityLabel: `Remove ${named}`,
++                          variant: 'destructiveText',
++                          onPress: () => askDelete(m),
++                        },
++                        {
++                          label: 'Retake',
++                          accessibilityLabel: `Retake ${named}`,
++                          variant: 'text',
++                          onPress: () => retake(m.id),
++                        },
+                       ]}
+                     />
+                   </View>
+diff --git a/components/Buttons.tsx b/components/Buttons.tsx
+index 8802197d..02346265 100644
+--- a/components/Buttons.tsx
++++ b/components/Buttons.tsx
+@@ -27,6 +27,7 @@ export type ButtonProps = {
+   loading?: boolean;
+   testID?: string;
+   accessibilityHint?: string;
++  accessibilityLabel?: string; // what TalkBack says, when the label alone isn't enough (default: the label)
+   onLabelLines?: (lines: number) => void; // from the label's onTextLayout
+   ref?: Ref<ViewInstance>; // its pressable (a sheet's returnFocus)
+ };
+@@ -42,6 +43,7 @@ export function Button({
+   loading = false,
+   testID,
+   accessibilityHint,
++  accessibilityLabel,
+   onLabelLines,
+   ref,
+ }: ButtonProps) {
+@@ -69,7 +71,7 @@ export function Button({
+     <Tap
+       ref={ref}
+       accessibilityRole="button"
+-      accessibilityLabel={label}
++      accessibilityLabel={accessibilityLabel ?? label}
+       accessibilityHint={accessibilityHint}
+       accessibilityState={{ busy }}
+       testID={testID}
+diff --git a/lib/navigation.ts b/lib/navigation.ts
+index 4c0d2720..db89574e 100644
+--- a/lib/navigation.ts
++++ b/lib/navigation.ts
+@@ -36,11 +36,14 @@ export function useGoBackOrHome(): () => void {
+  *   from inside the tabs). Its options are the router's: withAnchor puts a tab's own list under a screen opened in it
+  *   (Done's session screen, with Sessions under it). Its `before` runs first, and only when the guard lets the tab
+  *   open: a session screen's Retake makes that session the camera's (lib/session's retakeIn) only if the camera opens.
++ * - busy: whether one of them has opened, until this screen is on top again: a press that isn't an open (a delete's
++ *   dialog) waits for it too.
+  * On the live root's router, useRouter(), as useGoBackOrHome goes to the camera (ruling T26-4).
+  */
+ export function useOpenOnce(): {
+   push: (href: Href) => void;
+   navigate: (href: Href, options?: NavigateOptions, before?: () => void) => void;
++  busy: () => boolean;
+ } {
+   const router = useRouter();
+   const navigation = useNavigation();
+@@ -50,6 +53,8 @@ export function useOpenOnce(): {
+       opened.current = false;
+     }, []),
+   );
++  /** Whether a press has opened a screen or a tab, and this screen isn't on top again yet. */
++  const busy = useCallback(() => opened.current, []);
+   const once = (open: () => void) => {
+     if (opened.current) return;
+     opened.current = true;
+@@ -57,6 +62,7 @@ export function useOpenOnce(): {
+   };
+   return {
+     push: (href) => once(() => router.push(href)),
++    busy,
+     navigate: (href, options, before) =>
+       once(() => {
+         before?.();

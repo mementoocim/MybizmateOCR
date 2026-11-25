@@ -118,7 +118,8 @@ Never `git add -A` without that list.
 - Task 6 is done and reviewed: the tabs (`app/(tabs)/`), a launch opens the camera (`app/+native-intent.tsx`), Back goes to the camera, Profile holds Settings, one open-guard per screen (`useOpenOnce`).
 - Task 7 is done and reviewed: the camera tab shoots into a session (`app/(tabs)/camera.tsx`): the bar's middle button is the shutter, the session tray (`components/SessionTray.tsx`) and Done; a not-found Retake keeps the original (T7-3).
 - Task 8 is done and reviewed: Sessions (`app/(tabs)/sessions/index.tsx`): a row per session by day with its badges (`ListRow`'s `badges`), search across scans, and one open at a time while a saved scan is read back; `memberAmount` in `lib/sessions.ts` is there for Task 9.
-- **Task 9 is next**, on the branch `camera-first`, after the user reviews Task 8. Its brief isn't extracted yet: take it from the plan's Task 9 section.
+- Task 9 is done and reviewed: the session screen (`app/(tabs)/sessions/[id].tsx`, keyed on the id so each session mounts fresh): `components/Card.tsx` with Check the next one, the failed-reads Banner, the rows, Retake and Remove, and `confirmDeleteScan` in `lib/confirmDelete.ts` (for Task 11's ⋮ Delete). `useOpenOnce` gained `navigate`'s `before` and `busy()`.
+- **Task 10 is next**, on the branch `camera-first`, after the user reviews Task 9. Its brief isn't extracted yet: take it from the plan's Task 10 section. Open for the user: "Session · 0 invoices", and no Retake for a failed read on the session screen.
 
 **The user's answers for this plan:**
 - execution is subagent-driven, with a fresh implementer and a reviewer per task;

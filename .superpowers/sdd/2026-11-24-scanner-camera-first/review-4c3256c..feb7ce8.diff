@@ -1,0 +1,849 @@
+diff --git a/__tests__/display.test.tsx b/__tests__/display.test.tsx
+index 3f9bb731..6f2b8aa2 100644
+--- a/__tests__/display.test.tsx
++++ b/__tests__/display.test.tsx
+@@ -4,6 +4,7 @@ import { StyleSheet, View, type ViewInstance } from 'react-native';
+ 
+ import { Badge, type BadgeTone } from '../components/Badge';
+ import { Banner } from '../components/Banner';
++import { Card } from '../components/Card';
+ import { EmptyState } from '../components/EmptyState';
+ import { CircleAlert, type IconComponent, TriangleAlert } from '../components/icons';
+ import { LedgerRow } from '../components/LedgerRow';
+@@ -649,3 +650,48 @@ test("EmptyState gives an action's ref its button's pressable", async () => {
+     accessibilityLabel: 'How to import',
+   });
+ });
++
++test('Card: a header, its words, one button; attention on the warning tint', async () => {
++  // camera first (spec §6.4, the mockup's cards): plain is a panel in a line border; attention the amber card
++  const check = jest.fn();
++  await render(
++    <Card title="1 ready · 1 to check" body="From today's session." action={{ label: 'Check the next one', onPress: check }}>
++      <Banner tone="warning" text="Between the words and the button" />
++    </Card>,
++  );
++  const card = screen.getByTestId('card');
++  expect(card).toHaveStyle({
++    backgroundColor: colors.panel,
++    borderWidth: 1,
++    borderColor: colors.line,
++    borderRadius: radius.panel,
++    padding: space.l,
++    gap: space.s,
++    marginHorizontal: space.l,
++  });
++  const title = within(card).getByRole('header', { name: '1 ready · 1 to check' });
++  expect(typeStylesOf(title)).toEqual(['headline']);
++  expect(title).toHaveStyle({ color: colors.ink });
++  const body = within(card).getByText("From today's session.");
++  expect(typeStylesOf(body)).toEqual(['body']);
++  expect(body).toHaveStyle({ color: colors.mute });
++  // in order: the title, the words, what's between, then the one button, primary, full width (no alignSelf of its own)
++  const kids = card.children as Instance[];
++  expect(kids.map((k) => k.props.testID ?? k.props.accessibilityRole ?? k.props.children)).toEqual([
++    'header',
++    "From today's session.",
++    'alert',
++    'button',
++  ]);
++  const action = within(card).getByRole('button', { name: 'Check the next one' });
++  expect(action).toHaveStyle({ backgroundColor: colors.brand });
++  expect(card).not.toHaveStyle({ alignItems: 'center' });
++  await fireEvent.press(action);
++  expect(check).toHaveBeenCalledTimes(1);
++
++  // attention, with a title alone: the warning tint in its line, no words, no button
++  await render(<Card title="2 to retake" tone="attention" />);
++  expect(screen.getByTestId('card')).toHaveStyle({ backgroundColor: colors.warningTint, borderColor: colors.warningLine });
++  expect(screen.getByTestId('card').children).toHaveLength(1);
++  expect(screen.queryByRole('button')).toBeNull();
++});
+diff --git a/__tests__/sessionScreen.test.tsx b/__tests__/sessionScreen.test.tsx
+new file mode 100644
+index 00000000..a8cd9850
+--- /dev/null
++++ b/__tests__/sessionScreen.test.tsx
+@@ -0,0 +1,398 @@
++import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
++import { Alert, type AlertButton } from 'react-native';
++
++import SessionScreen from '../app/(tabs)/sessions/[id]';
++import { certOf, taxWithheld } from '../lib/cert';
++import { amount, formatClock } from '../lib/format';
++import { clearItems, clearParties, lists } from '../lib/lists';
++import { SCANNER_STOPPED, UNREADABLE_PHOTO } from '../lib/readFailures';
++import { saleOf } from '../lib/sale';
++import * as savedStore from '../lib/saved';
++import { loadSaved, saveScan, savedSummary } from '../lib/saved';
++import * as scansStore from '../lib/scans';
++import { addScan, forgetScan, getScan, recentScans, type ScanSource, updateScan } from '../lib/scans';
++import { addFailedRead, currentSession, endSession, loadSession, retakeIn } from '../lib/session';
++import { savedSub } from '../lib/sessions';
++import { settings, updateSettings } from '../lib/settings';
++import { colors, type } from '../lib/theme';
++import { parseScanResult } from '../modules/scanner/src/parse';
++import { coreJson } from '../test-utils/coreJson';
++import { memoryFs } from '../test-utils/memoryFs';
++import { focusAgain } from '../test-utils/screenFocus';
++import { pinToday } from '../test-utils/today';
++
++// Spec §6.4 and the plan's calls 2, 3, 9 and 10: a session's screen. Its header, a card that counts what's left with
++// Check the next one, the reads that failed while it's the camera's session, then a row per scan, oldest first; a scan
++// whose form wasn't found offers Retake and Remove, and a long press asks to delete. Every press runs once, however fast
++// it's tapped (Review Focus 5, ruling T6-1). One mounted screen shows one session, then another (ruling T7-6's
++// dangerouslySingular), with nothing carried over. The data is made up.
++
++const mockPush = jest.fn();
++const mockNavigate = jest.fn();
++const mockToast = jest.fn();
++const mockParams: { id: string } = { id: 'S1' };
++let mockFocused = true;
++
++jest.mock('expo-router', () => ({
++  useLocalSearchParams: () => mockParams,
++  // the session screen is in the Sessions tab's own Stack, so in the tabs (lib/navigation)
++  useNavigation: () => ({
++    canGoBack: () => true,
++    goBack: jest.fn(),
++    getState: () => ({ type: 'stack' }),
++    getParent: () => ({ getState: () => ({ type: 'tab' }), getParent: () => undefined }),
++    isFocused: () => mockFocused,
++  }),
++  useRouter: () => ({ push: mockPush, dismissTo: jest.fn(), navigate: mockNavigate, back: jest.fn(), replace: jest.fn() }),
++  useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
++  useIsFocused: () => true,
++}));
++jest.mock('../lib/toast', () => ({ toast: (...args: unknown[]) => mockToast(...args) }));
++jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
++
++const TODAY = new Date(2026, 10, 24, 10, 0); // Tuesday, Nov 24, 2026, 10:00 AM
++const at = (h: number, m: number) => new Date(2026, 10, 24, h, m);
++const DETAILS = { taxType: 'VAT', account: '4010', terms: 'account', atc: 'WC158' } as const;
++
++function scan(
++  stem: string,
++  opts: { session?: string; at?: Date; source?: ScanSource; label?: string; edits?: Record<string, string> } = {},
++): string {
++  const id = addScan({
++    label: opts.label ?? 'Camera photo',
++    source: opts.source ?? 'camera',
++    result: parseScanResult(coreJson(stem)),
++    session: opts.session ?? 'S1',
++    at: opts.at,
++  });
++  if (opts.edits) updateScan(id, { edits: opts.edits });
++  return id;
++}
++
++/** A session as the camera has it, with reads that failed: the current one, ended by Done (call 2). */
++function failedReadsIn(id: string, reasons: readonly [Date, string][]) {
++  retakeIn(id, 'none', reasons[0]?.[0] ?? TODAY); // the camera's session, as Done leaves it
++  for (const [when, reason] of reasons) addFailedRead(id, reason, when);
++  endSession(id);
++}
++
++type Instance = ReturnType<typeof screen.getByText>;
++const press = (el: Instance) => act(async () => fireEvent.press(el));
++const button = (name: string | RegExp) => screen.getByRole('button', { name });
++const opened = () => mockPush.mock.calls.map(([href]) => href);
++/** The scans' rows, top to bottom, as TalkBack says them. */
++const rows = () => screen.queryAllByTestId(/^row-/).map((n) => n.props.accessibilityLabel);
++const startingWith = (start: string) => ({
++  asymmetricMatch: (label: unknown) => typeof label === 'string' && label.startsWith(start),
++  toString: () => `a label starting with "${start}"`,
++});
++
++let alert: jest.SpyInstance;
++/** The last dialog's title and message. */
++const dialog = () => alert.mock.calls.at(-1)?.slice(0, 2);
++/** Presses a button of the last dialog. */
++const choose = (text: string) =>
++  act(async () => {
++    const buttons: AlertButton[] = alert.mock.calls.at(-1)[2];
++    buttons.find((b) => b.text === text)!.onPress!();
++  });
++
++async function showSession(id = 'S1') {
++  mockParams.id = id;
++  await render(<SessionScreen />);
++}
++
++beforeAll(() => pinToday(TODAY));
++afterAll(() => jest.useRealTimers());
++afterEach(() => jest.restoreAllMocks());
++
++beforeEach(async () => {
++  jest.clearAllMocks();
++  mockFocused = true;
++  memoryFs.reset();
++  recentScans().forEach((s) => forgetScan(s.id));
++  await loadSaved();
++  await loadSession(); // no current session
++  await updateSettings({ annotation: false });
++  await clearParties('customer');
++  await clearParties('supplier');
++  await clearItems();
++  alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
++});
++
++test('the header: Today, 9:41 AM, and Session · 3 invoices', async () => {
++  scan('inv_0007', { at: at(9, 41) });
++  scan('inv_0051', { at: at(9, 42) });
++  scan('blank_page', { at: at(9, 43) });
++  scan('inv_0007', { session: 'S2', at: at(9, 50) }); // another session's
++  await showSession();
++
++  expect(screen.getByRole('header', { name: 'Today, 9:41 AM' })).toBeOnTheScreen();
++  expect(screen.getByText('Session · 3 invoices')).toHaveStyle({ ...type.overline, color: colors.mute });
++  expect(button('Back')).toBeOnTheScreen();
++  expect(rows()).toHaveLength(3);
++});
++
++test("the card: 1 ready · 1 to check · 1 to retake with Check the next one; All saved. with no button", async () => {
++  scan('inv_0007', { at: at(9, 41) }); // checks passed
++  scan('sales_text_0', { at: at(9, 42), source: 'pdf', label: 'PDF: sales.pdf' }); // to check
++  scan('blank_page', { at: at(9, 43) }); // the form wasn't found
++  await showSession();
++
++  const card = screen.getByTestId('card');
++  expect(card).toHaveStyle({ backgroundColor: colors.warningTint, borderColor: colors.warningLine });
++  expect(within(card).getByRole('header', { name: '1 ready · 1 to check · 1 to retake' })).toBeOnTheScreen();
++  expect(within(card).getByRole('button', { name: 'Check the next one' })).toBeOnTheScreen();
++
++  // every scan saved: plain, and nothing to press
++  await act(async () => saveScan(scan('inv_0007', { session: 'S2', at: at(9, 50) }), DETAILS));
++  await act(async () => saveScan(scan('inv_0007', { session: 'S2', at: at(9, 51) }), DETAILS));
++  await showSession('S2');
++  const allSaved = screen.getByTestId('card');
++  expect(allSaved).toHaveStyle({ backgroundColor: colors.panel, borderColor: colors.line });
++  expect(within(allSaved).getByRole('header', { name: 'All saved.' })).toBeOnTheScreen();
++  expect(screen.queryByRole('button', { name: 'Check the next one' })).toBeNull();
++});
++
++test('Check the next one opens the first unsaved scan whose form was found, past a retake', async () => {
++  scan('blank_page', { at: at(9, 41) });
++  const saved = scan('inv_0007', { at: at(9, 42) });
++  await act(async () => saveScan(saved, DETAILS));
++  const next = scan('sales_text_0', { at: at(9, 43), source: 'pdf', label: 'PDF: sales.pdf' });
++  scan('inv_0007', { at: at(9, 44) });
++  await showSession();
++
++  await press(button('Check the next one'));
++  expect(opened()).toEqual([{ pathname: '/result', params: { id: next, from: 'session', session: 'S1' } }]);
++});
++
++test('a row: party or label, kind and number, the amount and one badge; it opens the Scan screen', async () => {
++  const torres = scan('inv_0007', {
++    at: at(9, 41),
++    edits: { customer_name: 'Torres Construction Supply', invoice_no: '0000186' },
++  });
++  const cert = scan('bir2307_text_0', { at: at(9, 42), source: 'pdf', label: 'PDF: bir2307.pdf' });
++  const saved = scan('inv_0007', { at: at(9, 43) });
++  await act(async () => saveScan(saved, DETAILS));
++  const blank = scan('blank_page', { at: at(9, 44) });
++  // a saved scan no longer among the recent ones (Review Focus 2), in this session through its summary
++  const past = scan('inv_0007', { at: at(9, 45), edits: { customer_name: 'Bautista Pharmacy' } });
++  await act(async () => saveScan(past, DETAILS));
++  forgetScan(past);
++  await showSession();
++
++  const gross = amount(saleOf(getScan(torres)!, lists(), settings()).gross);
++  const tax = amount(taxWithheld(certOf(getScan(cert)!, lists(), settings()).cert));
++  const summaryOf = (id: string) => savedSummary(id)!;
++  const savedRow = (id: string) => {
++    const s = summaryOf(id) as savedStore.InvoiceSummary;
++    return `${s.partyName}, ${savedSub(s)}, ${amount(s.gross)}, Saved`;
++  };
++  expect(screen.getByRole('header', { name: 'Invoices' })).toBeOnTheScreen();
++  expect(screen.getByText('5')).toHaveStyle({ ...type.overline, color: colors.mute }); // the count, on its right
++  expect(rows()).toEqual([
++    startingWith(`Torres Construction Supply, Sale · SI 0000186, ${gross}, `),
++    startingWith(`Reyes Sari-Sari Store, 2307 · Q1 2026, ${tax}, `),
++    savedRow(saved),
++    `Camera photo, ${formatClock(at(9, 44))}, Retake`,
++    savedRow(past),
++  ]);
++  expect(summaryOf(past).partyName).toBe('Bautista Pharmacy');
++
++  await press(button(/^Torres Construction Supply, /));
++  expect(opened()).toEqual([{ pathname: '/result', params: { id: torres, from: 'session', session: 'S1' } }]);
++  await act(async () => focusAgain());
++  await press(button(`Camera photo, ${formatClock(at(9, 44))}, Retake`));
++  expect(opened().at(-1)).toEqual({ pathname: '/result', params: { id: blank, from: 'session', session: 'S1' } });
++  await act(async () => focusAgain());
++  // the one past the newest 100 is read back first, so the Scan screen finds it
++  await press(button(/^Bautista Pharmacy, /));
++  expect(opened().at(-1)).toEqual({ pathname: '/result', params: { id: past, from: 'session', session: 'S1' } });
++  expect(getScan(past)?.id).toBe(past);
++});
++
++test("a scan whose form wasn't found: Retake opens the camera in this session; Remove asks, then deletes", async () => {
++  scan('inv_0007', { at: at(9, 41) });
++  const blank = scan('blank_page', { at: at(9, 42) });
++  const other = scan('blank_page', { at: at(9, 43) });
++  await showSession();
++  const under = (id: string) => screen.getByTestId(`retake-${id}`);
++
++  // only the rows whose form wasn't found have the two
++  expect(screen.getAllByRole('button', { name: 'Retake' })).toHaveLength(2);
++  expect(within(under(blank)).getByText('Remove')).toHaveStyle({ color: colors.danger });
++  expect(within(under(blank)).getByText('Retake')).toHaveStyle({ color: colors.brandText });
++
++  await press(within(under(blank)).getByRole('button', { name: 'Retake' }));
++  expect(currentSession()).toMatchObject({ id: 'S1', open: true, replaces: blank });
++  expect(mockNavigate.mock.calls).toEqual([['/camera']]);
++  await act(async () => focusAgain());
++
++  await press(within(under(other)).getByRole('button', { name: 'Remove' }));
++  expect(dialog()).toEqual(['Delete this scan?', "It's removed from this phone."]);
++  await choose('Cancel');
++  expect(getScan(other)).toBeDefined();
++  await press(within(under(other)).getByRole('button', { name: 'Remove' }));
++  await choose('Delete');
++  expect(getScan(other)).toBeUndefined();
++  expect(screen.queryByTestId(`retake-${other}`)).toBeNull();
++  expect(rows()).toHaveLength(2);
++  expect(mockToast).not.toHaveBeenCalled();
++
++  // a delete that fails says so
++  jest.spyOn(scansStore, 'deleteScan').mockImplementation(() => {
++    throw new Error('locked');
++  });
++  await press(within(under(blank)).getByRole('button', { name: 'Remove' }));
++  await choose('Delete');
++  expect(mockToast).toHaveBeenCalledWith("Couldn't delete the scan.");
++  expect(getScan(blank)).toBeDefined();
++});
++
++test("photos that couldn't be read: the count, then each one's time and words, while it's the current session", async () => {
++  scan('inv_0007', { at: at(9, 41) });
++  failedReadsIn('S1', [[at(9, 42), UNREADABLE_PHOTO]]);
++  await showSession();
++
++  expect(screen.getByRole('alert')).toHaveTextContent(
++    `1 photo couldn't be read. Retake it.\n${formatClock(at(9, 42))}: ${UNREADABLE_PHOTO}`,
++  );
++  // counted among the retakes
++  expect(screen.getByRole('header', { name: '1 ready · 1 to retake' })).toBeOnTheScreen();
++
++  await act(async () => retakeIn('S1', 'none', at(9, 43))); // open again, so the next one counts
++  await act(async () => addFailedRead('S1', SCANNER_STOPPED, at(9, 44)));
++  expect(screen.getByRole('alert')).toHaveTextContent(
++    [
++      "2 photos couldn't be read. Retake them.",
++      `${formatClock(at(9, 42))}: ${UNREADABLE_PHOTO}`,
++      `${formatClock(at(9, 44))}: ${SCANNER_STOPPED}`,
++    ].join('\n'),
++  );
++  expect(screen.getByRole('header', { name: '1 ready · 2 to retake' })).toBeOnTheScreen();
++
++  // another session's screen doesn't show them
++  await act(async () => void scan('inv_0007', { session: 'S2', at: at(9, 50) }));
++  await showSession('S2');
++  expect(screen.queryByRole('alert')).toBeNull();
++  expect(screen.getByRole('header', { name: '1 ready' })).toBeOnTheScreen();
++
++  // once another session is the camera's, they've gone with it
++  await act(async () => retakeIn('S2', 'none', at(9, 55)));
++  await showSession('S1');
++  expect(screen.queryByRole('alert')).toBeNull();
++});
++
++test('a long press asks to delete: an unsaved scan as Delete this scan?, a saved one in its words', async () => {
++  const unsaved = scan('inv_0007', { at: at(9, 41), edits: { customer_name: 'Torres Construction Supply' } });
++  const saved = scan('inv_0007', { at: at(9, 42), edits: { customer_name: 'Bautista Pharmacy' } });
++  await act(async () => saveScan(saved, DETAILS));
++  await showSession();
++
++  await act(async () => fireEvent(button(/^Torres Construction Supply, /), 'longPress'));
++  expect(dialog()).toEqual(['Delete this scan?', "It's removed from this phone."]);
++  await choose('Delete');
++  expect(getScan(unsaved)).toBeUndefined();
++
++  await act(async () => fireEvent(button(/^Bautista Pharmacy, /), 'longPress'));
++  expect(dialog()).toEqual([
++    'Delete this saved scan?',
++    "It's removed from this phone. Files you already exported don't change.",
++  ]);
++  // ruling P-F12: it doesn't wait for the saved scan's own dialog, so the next long press asks again
++  await act(async () => fireEvent(button(/^Bautista Pharmacy, /), 'longPress'));
++  expect(alert).toHaveBeenCalledTimes(3);
++  await choose('Delete');
++  expect(savedSummary(saved)).toBeUndefined();
++  expect(screen.getByText('Nothing left in this session')).toBeOnTheScreen();
++});
++
++test('Check the next one, Retake and Remove run once on a double tap', async () => {
++  // Review Focus 5: inside one act() scope, nothing re-renders between the taps
++  scan('inv_0007', { at: at(9, 41) });
++  const blank = scan('blank_page', { at: at(9, 42) });
++  await showSession();
++  const under = () => screen.getByTestId(`retake-${blank}`);
++  const twice = (a: () => Instance, b: () => Instance = a) =>
++    act(async () => {
++      await fireEvent.press(a());
++      await fireEvent.press(b());
++    });
++
++  await twice(() => button('Check the next one'));
++  expect(mockPush).toHaveBeenCalledTimes(1);
++  await act(async () => focusAgain());
++
++  // Check the next one, then Retake: the first alone, and the camera's session is left as it was
++  mockPush.mockClear();
++  await twice(
++    () => button('Check the next one'),
++    () => within(under()).getByRole('button', { name: 'Retake' }),
++  );
++  expect(mockPush).toHaveBeenCalledTimes(1);
++  expect(mockNavigate).not.toHaveBeenCalled();
++  expect(currentSession()).toBeNull();
++  await act(async () => focusAgain());
++
++  await twice(() => within(under()).getByRole('button', { name: 'Retake' }));
++  expect(mockNavigate).toHaveBeenCalledTimes(1);
++  await act(async () => focusAgain());
++
++  // a row, then Check the next one
++  mockPush.mockClear();
++  await twice(() => button(/^Camera photo, /), () => button('Check the next one'));
++  expect(opened()).toEqual([{ pathname: '/result', params: { id: blank, from: 'session', session: 'S1' } }]);
++  await act(async () => focusAgain());
++
++  // one dialog at a time: Remove twice, then a long press while it's up
++  await twice(() => within(under()).getByRole('button', { name: 'Remove' }));
++  await act(async () => fireEvent(button(/^Camera photo, /), 'longPress'));
++  expect(alert).toHaveBeenCalledTimes(1);
++  await choose('Cancel');
++  await act(async () => fireEvent(button(/^Camera photo, /), 'longPress'));
++  await act(async () => fireEvent(button(/^Camera photo, /), 'longPress'));
++  expect(alert).toHaveBeenCalledTimes(2);
++});
++
++test('one screen shows one session, then another, with nothing carried over', async () => {
++  // ruling T7-6: the Stack keeps one session screen, so the camera's Done on B, with A shown, gives the same mounted
++  // screen B's id
++  scan('inv_0007', { at: at(9, 41), edits: { customer_name: 'Torres Construction Supply' } });
++  const aBlank = scan('blank_page', { at: at(9, 42) });
++  const bNext = scan('sales_text_0', { session: 'S2', at: at(9, 50), source: 'pdf', label: 'PDF: sales.pdf' });
++  const bBlank = scan('blank_page', { session: 'S2', at: at(9, 51) });
++  failedReadsIn('S2', [[at(9, 52), UNREADABLE_PHOTO]]);
++  mockParams.id = 'S1';
++  const { rerender } = await render(<SessionScreen />);
++  expect(screen.getByText('Session · 2 invoices')).toBeOnTheScreen();
++  // A's Check the next one and its Remove's dialog, both still up as the screen goes to B
++  await press(button('Check the next one'));
++  await press(within(screen.getByTestId(`retake-${aBlank}`)).getByRole('button', { name: 'Remove' }));
++
++  mockParams.id = 'S2';
++  await act(async () => rerender(<SessionScreen />));
++  expect(screen.getByRole('header', { name: 'Today, 9:50 AM' })).toBeOnTheScreen();
++  expect(screen.queryByText(/Torres/)).toBeNull();
++  expect(screen.getByRole('alert')).toHaveTextContent(/^1 photo couldn't be read/);
++  expect(screen.getByRole('header', { name: '1 to check · 2 to retake' })).toBeOnTheScreen();
++
++  await press(button('Check the next one'));
++  expect(opened()).toEqual([
++    { pathname: '/result', params: { id: expect.any(String), from: 'session', session: 'S1' } },
++    { pathname: '/result', params: { id: bNext, from: 'session', session: 'S2' } },
++  ]);
++  await press(within(screen.getByTestId(`retake-${bBlank}`)).getByRole('button', { name: 'Remove' }));
++  expect(alert).toHaveBeenCalledTimes(2);
++  await act(async () => fireEvent(button(/^Camera photo, /), 'longPress'));
++  expect(alert).toHaveBeenCalledTimes(2); // B's own dialog is up
++  await choose('Delete');
++  expect(getScan(bBlank)).toBeUndefined();
++});
++
++test('a session with nothing left in it says so', async () => {
++  await showSession('S9');
++  expect(screen.getByText('Nothing left in this session')).toHaveStyle({ ...type.title, color: colors.ink });
++  expect(screen.getByText('Its scans were deleted.')).toHaveStyle({ ...type.body, color: colors.mute });
++  expect(screen.queryByTestId('card')).toBeNull();
++  expect(button('Back')).toBeOnTheScreen();
++});
+diff --git a/app/(tabs)/sessions/[id].tsx b/app/(tabs)/sessions/[id].tsx
+index bb5f3ffc..e8cd2d59 100644
+--- a/app/(tabs)/sessions/[id].tsx
++++ b/app/(tabs)/sessions/[id].tsx
+@@ -1,7 +1,235 @@
++import { useLocalSearchParams, useNavigation } from 'expo-router';
++import { useEffect, useRef, useSyncExternalStore } from 'react';
++import { StyleSheet, View } from 'react-native';
++
++import { Banner } from '../../../components/Banner';
++import { ButtonRow } from '../../../components/BottomBar';
++import { Card } from '../../../components/Card';
++import { EmptyState } from '../../../components/EmptyState';
+ import { Header } from '../../../components/Header';
++import { ListRow } from '../../../components/ListRow';
+ import { Screen } from '../../../components/Screen';
++import { SectionHeader } from '../../../components/SectionHeader';
++import { confirmDeleteSaved, confirmDeleteScan } from '../../../lib/confirmDelete';
++import { amount, formatClock } from '../../../lib/format';
++import { lists, subscribeLists } from '../../../lib/lists';
++import { useOpenOnce } from '../../../lib/navigation';
++import { openSaved } from '../../../lib/saved';
++import { getScan } from '../../../lib/scans';
++import { shownLabel } from '../../../lib/scanState';
++import { currentSession, type FailedRead, retakeIn, subscribeSession } from '../../../lib/session';
++import {
++  cardLine,
++  countLine,
++  type Member,
++  memberAmount,
++  nextToCheck,
++  type Session,
++  scanBadge,
++  scanFields,
++  scanSub,
++  sessionTitle,
++  tallyOf,
++  useSessions,
++} from '../../../lib/sessions';
++import { settings, subscribeSettings } from '../../../lib/settings';
++import { colors, space } from '../../../lib/theme';
++import { toast } from '../../../lib/toast';
++
++// Spec §6.4 (the plan's calls 2, 3, 9 and 10): a session, in the Sessions tab under its bar. The header is when it
++// started, with "Session · 3 invoices". A card counts what's left ("1 ready · 1 to check · 1 to retake", the reads that
++// failed among the retakes), amber while anything is, with Check the next one: the first scan, oldest first, that isn't
++// saved and whose form was found. While it's the camera's session, a banner says which photos couldn't be read, and
++// why. Then a row per scan, oldest first, each opening its Scan screen in this session; a long press asks to delete it.
++// A scan whose form wasn't found has Retake (the camera, in this session: its next photo replaces the scan once it
++// reads) and Remove under its row. Every press that opens goes through the one guard (ruling T6-1), and a delete's
++// dialog is one at a time, so a double tap runs once (Review Focus 5).
++//
++// The Stack keeps one session screen (ruling T7-6), so Done on another session gives this one a new id while it's
++// mounted. Everything below is keyed on the id: its guards and its Header start again with each session.
+ 
+-/** A session, inside the Sessions tab and under its bar: a stand-in until Task 9 builds it. Back goes to Sessions. */
+ export default function SessionScreen() {
+-  return <Screen header={<Header title="Session" />} />;
++  const { id } = useLocalSearchParams<{ id: string }>();
++  return <SessionOf key={id} id={id ?? ''} />;
++}
++
++/** A session with no scans left: its reads that failed alone, or nothing. */
++const none = (id: string): Session => ({ key: id, id, at: new Date(0), members: [] });
++const NO_FAILED: readonly FailedRead[] = [];
++
++/** "1 photo couldn't be read. Retake it.", "2 photos couldn't be read. Retake them.", then each one's time and words. */
++function failedWords(failed: readonly FailedRead[]): string {
++  const n = failed.length;
++  const head = n === 1 ? "1 photo couldn't be read. Retake it." : `${n} photos couldn't be read. Retake them.`;
++  return [head, ...failed.map((f) => `${formatClock(new Date(f.at))}: ${f.reason}`)].join('\n');
++}
++
++function SessionOf({ id }: { id: string }) {
++  const { push, navigate } = useOpenOnce(); // one guard for every press that opens (ruling T6-1)
++  const navigation = useNavigation();
++  const { sessions, statuses, states, saved } = useSessions();
++  const theLists = useSyncExternalStore(subscribeLists, lists);
++  const theSettings = useSyncExternalStore(subscribeSettings, settings);
++  const camera = useSyncExternalStore(subscribeSession, currentSession);
++  // A saved scan's read back (openSaved) is in flight: every press that opens waits for it (ruling T8-3), and it opens
++  // only while this screen is still here and on top.
++  const reading = useRef(false);
++  const asking = useRef(false); // a delete's dialog is up: one at a time
++  const mounted = useRef(true);
++  useEffect(() => {
++    mounted.current = true;
++    return () => {
++      mounted.current = false;
++    };
++  }, []);
++
++  const found = sessions.find((s) => s.id === id);
++  const session = found ?? none(id);
++  const failed = camera?.id === id ? camera.failed : NO_FAILED; // only while it's the camera's session (call 2)
++  const members = session.members;
++  const title = found
++    ? sessionTitle(found.at, new Date())
++    : failed.length > 0
++      ? sessionTitle(new Date(failed[0].at), new Date())
++      : 'Session';
++  const header = (
++    <Header title={title} subtitle={members.length > 0 || failed.length > 0 ? `Session · ${countLine(session)}` : null} />
++  );
++
++  if (members.length === 0 && failed.length === 0) {
++    return (
++      <Screen header={header}>
++        <EmptyState title="Nothing left in this session" body="Its scans were deleted." />
++      </Screen>
++    );
++  }
++
++  const tally = tallyOf(session, statuses);
++  const line = cardLine(tally, failed.length);
++  const left = tally.ready + tally.toCheck + tally.retake + failed.length > 0;
++  const next = nextToCheck(session, statuses);
++
++  /** A scan's Scan screen, in this session: a saved one no longer among the recent ones is read back first. */
++  async function openScan(scanId: string) {
++    if (reading.current) return;
++    if (!getScan(scanId)) {
++      reading.current = true;
++      let scan;
++      try {
++        scan = await openSaved(scanId);
++      } finally {
++        reading.current = false;
++      }
++      if (!mounted.current || !navigation.isFocused()) return; // left while it was read (T26-4)
++      if (!scan) {
++        toast("Couldn't open that scan.");
++        return;
++      }
++    }
++    push({ pathname: '/result', params: { id: scanId, from: 'session', session: id } });
++  }
++
++  /** Asks before deleting a scan, one dialog at a time; settles when it closes (a saved one's at once: P-F12). */
++  async function askDelete(m: Member) {
++    if (asking.current) return;
++    asking.current = true;
++    try {
++      if (m.scan) await confirmDeleteScan(m.scan);
++      else confirmDeleteSaved(m.id); // a saved scan known by its summary alone
++    } finally {
++      asking.current = false;
++    }
++  }
++
++  function retake(scanId: string) {
++    if (reading.current) return;
++    // the camera's session only if the camera opens: a second press, or one after another press, changes nothing
++    navigate('/camera', undefined, () => retakeIn(id, scanId, new Date()));
++  }
++
++  /** A row's title: a saved scan's party as saved, else the party shown; or the scan's label. */
++  const titleOf = (m: Member) =>
++    m.summary ? m.summary.partyName || shownLabel({ label: m.summary.label }) : scanFields(m, theLists, theSettings).name;
++  const amountOf = (m: Member) => {
++    const v = memberAmount(m);
++    return v === null ? null : amount(v);
++  };
++
++  return (
++    <Screen header={header}>
++      <View style={styles.top}>
++        {line !== '' ? (
++          <Card
++            title={line}
++            tone={left ? 'attention' : 'plain'}
++            action={
++              next === null
++                ? null
++                : {
++                    label: 'Check the next one',
++                    onPress: () => {
++                      if (reading.current) return;
++                      push({ pathname: '/result', params: { id: next, from: 'session', session: id } });
++                    },
++                  }
++            }
++          />
++        ) : null}
++        {failed.length > 0 ? (
++          <View style={styles.gutter}>
++            <Banner tone="warning" text={failedWords(failed)} />
++          </View>
++        ) : null}
++      </View>
++      {members.length > 0 ? (
++        <View testID="session-scans">
++          <SectionHeader title="Invoices" right={`${members.length}`} />
++          {members.map((m) => {
++            const badge = scanBadge(m, states.get(m.id) ?? null, saved.get(m.id) ?? 'no');
++            const notFound = statuses.get(m.id) === 'retake' && m.scan !== null && !m.summary;
++            return (
++              <View key={m.id}>
++                <ListRow
++                  title={titleOf(m)}
++                  sub={scanSub(m)}
++                  subMono
++                  subCaps
++                  amount={amountOf(m)}
++                  badge={badge}
++                  chevron
++                  testID={`row-${m.id}`}
++                  onPress={() => void openScan(m.id)}
++                  onLongPress={() => void askDelete(m)}
++                />
++                {notFound ? (
++                  <View testID={`retake-${m.id}`} style={styles.actions}>
++                    <ButtonRow
++                      buttons={[
++                        { label: 'Remove', variant: 'destructiveText', onPress: () => askDelete(m) },
++                        { label: 'Retake', variant: 'text', onPress: () => retake(m.id) },
++                      ]}
++                    />
++                  </View>
++                ) : null}
++              </View>
++            );
++          })}
++        </View>
++      ) : null}
++    </Screen>
++  );
+ }
++
++const styles = StyleSheet.create({
++  top: { gap: space.m, paddingVertical: space.l },
++  gutter: { paddingHorizontal: space.l },
++  // under its row, on the row's panel, on a hairline of its own
++  actions: {
++    alignItems: 'flex-end',
++    paddingHorizontal: space.l,
++    paddingBottom: space.s,
++    backgroundColor: colors.panel,
++    borderBottomWidth: 1,
++    borderBottomColor: colors.hairline,
++  },
++});
+diff --git a/components/Card.tsx b/components/Card.tsx
+new file mode 100644
+index 00000000..25857ed9
+--- /dev/null
++++ b/components/Card.tsx
+@@ -0,0 +1,49 @@
++import type { ReactElement, ReactNode } from 'react';
++import { StyleSheet, Text, View } from 'react-native';
++
++import { colors, radius, space, type } from '../lib/theme';
++import { Button, type ButtonProps } from './Buttons';
++
++// Camera first (spec §6.4 and §6.5, the approved mockup's cards): a card on the gutter that says where things stand,
++// with at most one button. A headline (a header for TalkBack), its words in mute, anything the screen puts between
++// them and the button, then the one button, full width. Plain is a panel in a line border; attention, while something
++// is left to do, is the mockup's amber card: the warning tint in a warningLine border.
++
++export function Card({
++  title,
++  body,
++  tone = 'plain',
++  action,
++  children,
++}: {
++  title: string;
++  body?: string | null;
++  tone?: 'plain' | 'attention';
++  action?: ButtonProps | null; // its one button, full width, under it
++  children?: ReactNode; // between the body and the button
++}): ReactElement {
++  return (
++    <View testID="card" style={[styles.card, tone === 'attention' ? styles.attention : styles.plain]}>
++      <Text accessibilityRole="header" style={[type.headline, styles.title]}>
++        {title}
++      </Text>
++      {body ? <Text style={[type.body, styles.body]}>{body}</Text> : null}
++      {children}
++      {action ? <Button {...action} /> : null}
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  card: {
++    borderWidth: 1,
++    borderRadius: radius.panel,
++    padding: space.l,
++    gap: space.s,
++    marginHorizontal: space.l,
++  },
++  plain: { backgroundColor: colors.panel, borderColor: colors.line },
++  attention: { backgroundColor: colors.warningTint, borderColor: colors.warningLine },
++  title: { color: colors.ink },
++  body: { color: colors.mute },
++});
+diff --git a/lib/confirmDelete.ts b/lib/confirmDelete.ts
+index 369c79da..b03ac3bf 100644
+--- a/lib/confirmDelete.ts
++++ b/lib/confirmDelete.ts
+@@ -1,11 +1,13 @@
+ import { Alert } from 'react-native';
+ 
+ import { deleteSaved } from './saved';
++import { deleteScan, type StoredScan } from './scans';
+ import { toast } from './toast';
+ 
+ // Design B §9.5: deleting a saved scan asks first, in the same words from the Scan screen's ⋮ and from Saved's long
+ // press. Delete runs the caller's own step first (the Scan screen starts going back: Review Focus 4), then the delete,
+ // in the same press. A delete that fails says so in the snackbar, in place of failing unseen (ruling T19-2).
++// Camera first (spec §6.4): any scan, saved or not, from a session screen's row or its Remove (confirmDeleteScan).
+ 
+ /** Asks before deleting a saved scan; on Delete, runs `before` (if given), then deletes it. */
+ export function confirmDeleteSaved(id: string, before?: () => void): void {
+@@ -21,3 +23,37 @@ export function confirmDeleteSaved(id: string, before?: () => void): void {
+     },
+   ]);
+ }
++
++/**
++ * Asks before deleting a scan. A saved one goes through confirmDeleteSaved, in today's words, and this resolves at once
++ * (ruling P-F12): its delete is that flow's own. An unsaved one asks "Delete this scan?"; Delete runs `before` (if
++ * given), then deletes it (lib/scans' deleteScan), and says so if that fails. For an unsaved scan this settles when the
++ * dialog closes, either way, so a Button that runs it guards a double tap while it's up.
++ */
++export function confirmDeleteScan(scan: StoredScan, before?: () => void): Promise<void> {
++  if (scan.saved) {
++    confirmDeleteSaved(scan.id, before);
++    return Promise.resolve();
++  }
++  return new Promise((resolve) => {
++    Alert.alert('Delete this scan?', "It's removed from this phone.", [
++      { text: 'Cancel', style: 'cancel', onPress: () => resolve() },
++      {
++        text: 'Delete',
++        style: 'destructive',
++        onPress: () => {
++          try {
++            before?.();
++            try {
++              deleteScan(scan.id);
++            } catch {
++              toast("Couldn't delete the scan.");
++            }
++          } finally {
++            resolve();
++          }
++        },
++      },
++    ]);
++  });
++}
+diff --git a/lib/navigation.ts b/lib/navigation.ts
+index 97adb8c3..4c0d2720 100644
+--- a/lib/navigation.ts
++++ b/lib/navigation.ts
+@@ -34,12 +34,13 @@ export function useGoBackOrHome(): () => void {
+  *   (the Scan screen), it's expo-router's dismissTo: the screens over the tabs go, and the tabs switch, since navigate
+  *   would push a second tabs over the first, and Back would show the screen just left (while dismissTo does nothing
+  *   from inside the tabs). Its options are the router's: withAnchor puts a tab's own list under a screen opened in it
+- *   (Done's session screen, with Sessions under it).
++ *   (Done's session screen, with Sessions under it). Its `before` runs first, and only when the guard lets the tab
++ *   open: a session screen's Retake makes that session the camera's (lib/session's retakeIn) only if the camera opens.
+  * On the live root's router, useRouter(), as useGoBackOrHome goes to the camera (ruling T26-4).
+  */
+ export function useOpenOnce(): {
+   push: (href: Href) => void;
+-  navigate: (href: Href, options?: NavigateOptions) => void;
++  navigate: (href: Href, options?: NavigateOptions, before?: () => void) => void;
+ } {
+   const router = useRouter();
+   const navigation = useNavigation();
+@@ -56,8 +57,9 @@ export function useOpenOnce(): {
+   };
+   return {
+     push: (href) => once(() => router.push(href)),
+-    navigate: (href, options) =>
++    navigate: (href, options, before) =>
+       once(() => {
++        before?.();
+         const tabs = inTabs(navigation);
+         if (!options) return tabs ? router.navigate(href) : router.dismissTo(href);
+         return tabs ? router.navigate(href, options) : router.dismissTo(href, options);
