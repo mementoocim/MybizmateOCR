@@ -122,7 +122,9 @@ Never `git add -A` without that list.
   At the user's word (2026-11-25): no "Session · 0 invoices" line, and a Retake on the failed-reads Banner retries in the same session (`retryIn`, `retries` in session.json; T9-4 to T9-6).
 - Task 10 is done and reviewed: the Export tab (`app/(tabs)/export/`: step 1, `[which]` for a file's steps 2–3, one at a time, and `invoices` for See invoices; `lib/exportSteps.ts`). `components/ExportSheet.tsx` and `app/saved.tsx` are gone. `useOpenOnce().navigate` decides from the live state (`tabsOnTop`). The save sheets say "Send it from the Export tab." (the user's word, 2026-11-25).
 - Task 11 is done and reviewed: the Scan screen in a session (`app/result.tsx`: `from: 'session' | 'list'` and `session`; Next invoice replaces the screen, Back to session; Retake in a session links the camera via `retakeIn`; no View in a session's snackbar; ⋮ deletes any scan). `useOpenOnce` gained `replace` and `leave`, and `useScanFlow` takes the screen's guard.
-- **Task 12 is next**, on the branch `camera-first`, after the user reviews Task 11. Its brief isn't extracted yet: take it from the plan's Task 12 section.
+- Task 12 is done and reviewed: Home as cards (`app/(tabs)/index.tsx`; `greeting` and `longDay` in `lib/format.ts`; `RecentRow` is gone). A link to a tab lands on that tab's first screen with nothing above it (`popTabToTop` in `lib/navigation.ts`), except a session or file already up, which stays (T12-1, T12-5).
+- **Task 13 is next**, on the branch `camera-first`, after the user reviews Task 12. Its brief isn't extracted yet: take it from the plan's Task 13 section.
+- **QA emulator:** if its system server crashes, don't `adb emu kill` and quick-boot: that saves the broken state. Cold-boot with `-no-snapshot-load`; the app's data survives.
 
 **The user's answers for this plan:**
 - execution is subagent-driven, with a fresh implementer and a reviewer per task;

@@ -1,0 +1,323 @@
+diff --git a/__tests__/exportTab.test.tsx b/__tests__/exportTab.test.tsx
+index e84e327b..eec540c9 100644
+--- a/__tests__/exportTab.test.tsx
++++ b/__tests__/exportTab.test.tsx
+@@ -1001,7 +1001,7 @@ test('a mark that finishes after the person has left: no going back, no message,
+   expect(mockToast).not.toHaveBeenCalled();
+   expect(focused()).toEqual([]); // the question cleared on a hidden tab sends TalkBack nowhere (ruling T10-6)
+   // back on the Export tab: the file, where it was, with no question left over what has been marked
+-  await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Export' })));
++  await act(async () => fireEvent.press(screen.getByRole('tab', { name: /^Export/ })));
+   expect(header('Export sales')).toBeOnTheScreen();
+   expect(screen.queryByText(QUESTION)).toBeNull();
+   expect(line('Sales, Nothing to export for this choice')).toBeOnTheScreen();
+@@ -1399,9 +1399,64 @@ test("from Home's Go to Export: one file screen at a time, the new one with noth
+   expect(line('Purchases, 1 · ₱24,377.00')).toBeOnTheScreen();
+   const files = screen.queryAllByRole('header', { name: /^Export (sales|purchases)$/, includeHiddenElements: true });
+   expect(files.map((h) => h.props.children)).toEqual(['Export purchases']);
+-  // Back: step 1. (Go to Export while a file is up stacks a second step 1 under the tabs' router: Task 12's report.)
++  // Back: step 1, then the camera
+   await press(button('Back'));
+   expect(header(STEP_1)).toBeOnTheScreen();
++  await systemBack();
++  expect(onTop()).toEqual(['Camera: on top']);
++});
++
++// ---- Fix round 1 of Task 12 (rulings T12-1 and T12-2) ----
++
++/** The Export screens in the tab's Stack, under the top one too, by their titles. */
++const exportScreens = () =>
++  screen
++    .queryAllByRole('header', { name: /^(Send to MyBizMate|Export (sales|purchases)|Sales|Purchases)$/, includeHiddenElements: true })
++    .map((h) => h.props.children);
++
++/** The Export tab showing the sales' file, opened from its step 1. */
++async function salesFileUp() {
++  await saveInvoice();
++  await renderRouter(LIVE_ROUTES, { initialUrl: '/camera' });
++  await act(async () => fireEvent.press(screen.getByRole('tab', { name: /^Export/ })));
++  await press(button(/^Sales, /));
++  expect(header('Export sales')).toBeOnTheScreen();
++}
++
++test("Home's Go to Export with a file up: step 1 alone, then Back to the camera (T12-1)", async () => {
++  // a NAVIGATE pushes: the tab's Stack was step 1, the file, then a second step 1, and Back showed the file again
++  await salesFileUp();
++  await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Home' })));
++  await press(button('Go to Export'));
++  expect(header(STEP_1)).toBeOnTheScreen();
++  expect(exportScreens()).toEqual([STEP_1]);
++  await systemBack();
++  expect(onTop()).toEqual(['Camera: on top']);
++
++  // the bar's own Export icon still goes back to where the tab was
++  await act(async () => fireEvent.press(screen.getByRole('tab', { name: /^Export/ })));
++  await press(button(/^Sales, /));
++  await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Home' })));
++  await act(async () => fireEvent.press(screen.getByRole('tab', { name: /^Export/ })));
++  expect(header('Export sales')).toBeOnTheScreen();
++});
++
++test("a save's View with a file up: See invoices alone over step 1, then Back to the camera (T12-2)", async () => {
++  await salesFileUp();
++  const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('inv_0007')) });
++  await act(() => router.push({ pathname: '/result', params: { id } }));
++  await press(screen.getByTestId('save-open'));
++  await press(screen.getByText('Not VAT-registered'));
++  await act(async () => fireEvent.changeText(screen.getByLabelText('Revenue account'), '4010'));
++  await press(screen.getByTestId('save-confirm'));
++  await act(async () => lastAction().onPress());
++  expect(screen).toHavePathname('/export/invoices');
++  expect(header('Sales')).toBeOnTheScreen();
++  expect(exportScreens()).toEqual([STEP_1, 'Sales']);
++  await systemBack();
++  expect(header(STEP_1)).toBeOnTheScreen();
++  await systemBack();
++  expect(onTop()).toEqual(['Camera: on top']);
+ });
+ 
+ test("the question's title takes TalkBack focus as it shows (T10-4)", async () => {
+diff --git a/__tests__/home.test.tsx b/__tests__/home.test.tsx
+index 788b8695..152a9fd1 100644
+--- a/__tests__/home.test.tsx
++++ b/__tests__/home.test.tsx
+@@ -196,6 +196,27 @@ test('the header: the greeting for the time of day, and the date', async () => {
+   }
+ });
+ 
++test('the greeting, the date and the last session are as of when Home is looked at, back on top (T12-3)', async () => {
++  // the tabs keep Home mounted under the others: it was drawn at 11:55, and shown again at 12:05
++  jest.setSystemTime(at(24, 11, 55));
++  await render(<Home />);
++  await act(async () => {
++    scan('inv_0007', { session: 'S1', at: at(24, 11, 50) });
++  });
++  const title = () => within(screen.getByTestId('header')).getByRole('header').props.children;
++  expect(title()).toBe('Good morning');
++  expect(within(card('Last session')).getByText('Today, 11:50 AM · 1 invoice')).toBeOnTheScreen();
++  jest.setSystemTime(at(24, 12, 5));
++  await backHome();
++  expect(title()).toBe('Good afternoon');
++  // past midnight: another day, and the session was yesterday's
++  jest.setSystemTime(at(25, 0, 5));
++  await backHome();
++  expect(title()).toBe('Good morning');
++  expect(within(screen.getByTestId('header')).getByText(longDay(at(25, 0, 5)))).toBeOnTheScreen();
++  expect(within(card('Last session')).getByText('Yesterday, 11:50 AM · 1 invoice')).toBeOnTheScreen();
++});
++
+ test('a first run: Get set up, and Take your first photo with the three tips; Open the camera opens it', async () => {
+   await render(<Home />);
+   expect(cardTitles()).toEqual(['Get set up 0 of 2', 'Take your first photo']);
+diff --git a/app/(tabs)/export/_layout.tsx b/app/(tabs)/export/_layout.tsx
+index 6ffec781..bc1c5fbf 100644
+--- a/app/(tabs)/export/_layout.tsx
++++ b/app/(tabs)/export/_layout.tsx
+@@ -4,9 +4,10 @@ import { colors } from '../../../lib/theme';
+ 
+ /**
+  * The Export tab's own Stack, under the bar, anchored on its first screen. Every screen draws its own Header, on
+- * paper. It holds one file's screen at a time (ruling T10-2, as Sessions' Stack holds one session's: T7-6): Home's
+- * To export rows open a file while the tab may still show another one, and that one goes, so Back from it is step 1,
+- * then the camera. The screen keys its content on the file, so nothing of the last one carries over.
++ * paper. It holds one file's screen at a time (ruling T10-2, as Sessions' Stack holds one session's: T7-6): a file
++ * opened while the tab may still show another one takes its place, so Back from it is step 1, then the camera. A link
++ * into the tab from elsewhere (Home's Go to Export, a save's View) first takes it back to step 1 (lib/navigation's
++ * useOpenOnce, ruling T12-1). The screen keys its content on the file, so nothing of the last one carries over.
+  */
+ export const unstable_settings = { anchor: 'index' };
+ 
+diff --git a/app/(tabs)/export/index.tsx b/app/(tabs)/export/index.tsx
+index 7f2aa9b1..f66c1548 100644
+--- a/app/(tabs)/export/index.tsx
++++ b/app/(tabs)/export/index.tsx
+@@ -35,7 +35,7 @@ export default function ExportScreen() {
+       key={which}
+       title={FILES[which].row}
+       sub={n > 0 ? `${n} to export` : 'All exported'}
+-      // a count in the figure style, as Home's To export rows (ruling T18-3); All exported is words, in sans (T18-5)
++      // a count in the figure style (ruling T18-3); All exported is words, in sans (T18-5)
+       subMono={n > 0}
+       amount={n > 0 && total !== null ? peso(total) : null}
+       chevron
+diff --git a/app/(tabs)/index.tsx b/app/(tabs)/index.tsx
+index a9974224..15ff0288 100644
+--- a/app/(tabs)/index.tsx
++++ b/app/(tabs)/index.tsx
+@@ -1,4 +1,5 @@
+-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
++import { useFocusEffect } from 'expo-router';
++import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
+ import { Image, StyleSheet, Text, View, type ViewInstance } from 'react-native';
+ 
+ import { Button } from '../../components/Buttons';
+@@ -62,6 +63,10 @@ export default function Home() {
+   const { sessions, statuses } = useSessions();
+   const [samplesOpen, setSamplesOpen] = useState(false);
+   const samplesButton = useRef<ViewInstance>(null); // TalkBack focus goes back to it when the sheet closes
++  // Drawn again each time Home is on top again: the greeting, the date and Last session's day are as of then, not of
++  // when the tab first mounted (ruling T12-3; the tabs keep it mounted under the others).
++  const [, looked] = useReducer((n: number) => n + 1, 0);
++  useFocusEffect(useCallback(() => looked(), []));
+   const now = new Date();
+ 
+   // Get set up: any rows in the lists, and the export defaults (a VAT status chosen and a revenue account)
+diff --git a/components/SectionHeader.tsx b/components/SectionHeader.tsx
+index 9d51c21a..eea111ce 100644
+--- a/components/SectionHeader.tsx
++++ b/components/SectionHeader.tsx
+@@ -4,9 +4,9 @@ import { colors, space, touch, type } from '../lib/theme';
+ import { Tap } from './Tap';
+ 
+ // Design B §5.6: a section strip, the web's table header. A sand strip with its title on the left, as a header for
+-// TalkBack, and on the right a column's name ("Amount"), a count ("0 of 2") or a text action ("All saved ›"). All in
+-// the overline style. The action fills the strip's height and reaches its right edge, so it's a 48 dp target; the
+-// strip grows to hold it.
++// TalkBack, and on the right a column's name ("Amount"), a count ("0 of 2") or a text action (none uses one since
++// Home became cards). All in the overline style. The action fills the strip's height and reaches its right edge, so
++// it's a 48 dp target; the strip grows to hold it.
+ 
+ export function SectionHeader({
+   title,
+@@ -15,7 +15,7 @@ export function SectionHeader({
+ }: {
+   title: string;
+   right?: string | null; // "Amount", "0 of 2"
+-  action?: { label: string; onPress: () => void } | null; // "All saved ›"
++  action?: { label: string; onPress: () => void } | null; // a text action, "Label ›"
+ }) {
+   return (
+     <View style={styles.strip}>
+diff --git a/lib/navigation.ts b/lib/navigation.ts
+index 867f2c23..df186c55 100644
+--- a/lib/navigation.ts
++++ b/lib/navigation.ts
+@@ -38,6 +38,9 @@ export function useGoBackOrHome(): () => void {
+  *   from inside the tabs). Its options are the router's: withAnchor puts a tab's own list under a screen opened in it
+  *   (Done's session screen, with Sessions under it). Its `before` runs first, and only when the guard lets the tab
+  *   open: a session screen's Retake makes that session the camera's (lib/session's retakeIn) only if the camera opens.
++ *   A tab with a Stack of its own (Sessions, Export) is first taken back to its first screen (popTabToTop), so the
++ *   screen opened sits alone over it: navigate pushes, so a second step 1, or a file's screen left above it, would be
++ *   under the new one (ruling T12-1: Home's Go to Export while a file was up; T12-2: the save's View).
+  * - leave: a press that leaves this screen some other way, behind the same guard (the Scan screen's Retake going back,
+  *   or down to the camera), so a Retake and a Next invoice in one go leave it once.
+  * - busy: whether one of them has opened, until this screen is on top again: a press that isn't an open (a delete's
+@@ -68,6 +71,7 @@ export function useOpenOnce(): OpenOnce {
+     navigate: (href, options, before) =>
+       once(() => {
+         before?.();
++        popTabToTop(navigation, href);
+         const tabs = tabsOnTop(navigation); // as things are now: a snackbar's View can outlive its screen (T10-1)
+         if (!options) return tabs ? router.navigate(href) : router.dismissTo(href);
+         return tabs ? router.navigate(href, options) : router.dismissTo(href, options);
+@@ -96,11 +100,38 @@ export function useNavigateOnce(): (href: Href) => void {
+   return useOpenOnce().navigate;
+ }
+ 
++type NavState = { key?: string; type?: string; index?: number; routes?: readonly { name: string; state?: NavState }[] };
+ type Nav = {
+-  getState(): { type?: string; index?: number; routes?: readonly { name: string }[] } | undefined;
++  getState(): NavState | undefined;
+   getParent(): Nav | undefined;
++  dispatch?(action: { type: string; target?: string }): void;
+ };
+ 
++/** The tabs' state, going up from this screen: the tab navigator's own, or the (tabs) route's in a Stack above. */
++function tabsState(navigation: Nav): NavState | undefined {
++  for (let nav: Nav | undefined = navigation; nav; nav = nav.getParent()) {
++    const state = nav.getState();
++    if (state?.type === 'tab') return state;
++    const tabs = state?.routes?.find((r) => r.name === '(tabs)');
++    if (tabs) return tabs.state;
++  }
++  return undefined;
++}
++
++/**
++ * The tab an href opens, back to its first screen when its own Stack has more on it: the POP_TO_TOP a second press on
++ * its tab sends, aimed at that Stack by its key (a targeted action goes up the tree, then down, to the navigator with
++ * that key). "/export", "/export/invoices" and "/sessions/[id]" open in theirs; the camera, Home and Profile have none,
++ * and a tab not opened yet has no Stack yet, so nothing is sent.
++ */
++function popTabToTop(navigation: Nav, href: Href): void {
++  const path = typeof href === 'string' ? href : (href.pathname ?? '');
++  const tab = path.split(/[/?#]/)[1];
++  const stack = tabsState(navigation)?.routes?.find((r) => r.name === tab)?.state;
++  if (stack?.type !== 'stack' || !stack.key || (stack.index ?? 0) === 0) return;
++  navigation.dispatch?.({ type: 'POP_TO_TOP', target: stack.key });
++}
++
+ /**
+  * Whether the tabs are what's on top now, read from the live state when it's called: the root Stack's focused route,
+  * found going up from this screen's navigation (a navigator's state is its current one, even for a screen that has
+diff --git a/lib/scanFlow.ts b/lib/scanFlow.ts
+index a9f291de..f511e10d 100644
+--- a/lib/scanFlow.ts
++++ b/lib/scanFlow.ts
+@@ -30,7 +30,7 @@ export function useScanFlow(shared?: OpenOnce) {
+   const [busy, setBusy] = useState(false);
+   const { sayWhy, sayingWhy } = useSayWhy();
+   const [readingWhat, setReading] = useState<'photo' | 'pdf' | null>(null);
+-  // false once the screen is left: a read that ends after that is kept in Recent scans, and nothing opens.
++  // false once the screen is left: a read that ends after that is kept with the recent scans, and nothing opens.
+   const focused = useIsFocused();
+   const here = useRef(true);
+   useEffect(() => {
+@@ -58,7 +58,7 @@ export function useScanFlow(shared?: OpenOnce) {
+     return true;
+   }
+ 
+-  /** Reads it, keeps it in Recent scans and opens its result. A failure is told in its own words. */
++  /** Reads it, keeps it with the recent scans and opens its result. A failure is told in its own words. */
+   async function readAndOpen(
+     read: () => Promise<ScanResult>,
+     scan: Pick<StoredScan, 'label' | 'source' | 'sampleId'>,
+diff --git a/lib/scanState.ts b/lib/scanState.ts
+index 741f3fbe..ca4a29b8 100644
+--- a/lib/scanState.ts
++++ b/lib/scanState.ts
+@@ -9,11 +9,11 @@ import { marksOf, rowsNow, type SavedSummary, savedSummary, subscribeSaved, summ
+ import type { StoredScan } from './scans';
+ import { annotationOn, settings, subscribeSettings } from './settings';
+ 
+-// Design B §9.5 and §9.2: a scan's one state, which the status strip and Home's badge both show, so the two always
+-// agree. In the old status card's order: its form not found; things to check, which come first; what it still needs
+-// before it can be saved (a 2307 with no payments read, say, or boxes not checked yet in annotation mode); or checks
+-// passed. Samples are made up, so they're never blocked: their screen says why they can't be saved. Apart from that,
+-// whether a saved scan has changed since it was saved.
++// Design B §9.5 and §9.2: a scan's one state, which the status strip and the scan's badge on Sessions and its session
++// screen (lib/sessions' scanBadge) both show, so the two always agree. In the old status card's order: its form not
++// found; things to check, which come first; what it still needs before it can be saved (a 2307 with no payments read,
++// say, or boxes not checked yet in annotation mode); or checks passed. Samples are made up, so they're never blocked:
++// their screen says why they can't be saved. Apart from that, whether a saved scan has changed since it was saved.
+ 
+ export type ScanState =
+   | { kind: 'not_found' }
+@@ -46,15 +46,15 @@ export function savedStateOf(scan: StoredScan, summary: SavedSummary | undefined
+ 
+ /**
+  * A scan's label as the screens show it: a PDF's is its file's own name, without the "PDF: " it's kept with
+- * ("sales_text_1.pdf"). The Scan screen's subtitle when the form wasn't found, and Home's recent rows.
++ * ("sales_text_1.pdf"). The Scan screen's subtitle when the form wasn't found, and a scan's rows on Sessions.
+  */
+ export function shownLabel(scan: Pick<StoredScan, 'label'>): string {
+   return scan.label.replace(/^PDF: /, '');
+ }
+ 
+ /**
+- * Home's badge for a recent scan: one state, the first that applies. Changed, then Saved; Sample; then the scan's
+- * state: Couldn't find the form, N to check, Can't save yet, Checks passed.
++ * A recent scan's badge (design B's, under lib/sessions' scanBadge): one state, the first that applies. Changed, then
++ * Saved; Sample; then the scan's state: Couldn't find the form, N to check, Can't save yet, Checks passed.
+  */
+ export function homeBadge(scan: StoredScan, state: ScanState, saved: SavedState): BadgeSpec {
+   if (saved === 'changed') return { label: 'Changed', tone: 'warning' };
+@@ -74,7 +74,7 @@ export function homeBadge(scan: StoredScan, state: ScanState, saved: SavedState)
+ 
+ /**
+  * A scan's checks and state, kept up to date with the lists, the settings and its saved summary. The checks run once
+- * per scan as it stands (saleOf, certOf): the Scan screen, Home's rows and Saved share each run. No scan
++ * per scan as it stands (saleOf, certOf): the Scan screen, Sessions and the session screen share each run. No scan
+  * (one that's gone): no state.
+  */
+ export function useScanCheck(scan: StoredScan | undefined): {
