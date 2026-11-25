@@ -2,11 +2,12 @@ import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
 import { readPdf, scanPhoto, type ScanResult } from '../modules/scanner';
-import { useGoBackOrHome } from './navigation';
+import { type OpenOnce, useGoBackOrHome, useOpenOnce } from './navigation';
 import { cameraAppPhoto, letGoOfPdf, pickPdf, pickPhoto } from './pickers';
 import { pdfFailed, photoFailed, useSayWhy } from './readFailures';
 import { SAMPLES, sampleUri } from './samples';
 import { addScan, type ScanSource, type StoredScan } from './scans';
+import { retakeIn } from './session';
 
 type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean };
 
@@ -16,13 +17,15 @@ type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean
  * the queue (lib/captureQueue). One at a time: while one is being picked or read (busy), another does nothing. While
  * one is read, readingWhat says what it is (a photo, a sample's too, or a PDF), for the reading card. A failure that
  * stops a capture is said in a dialog, in plain words (lib/readFailures' useSayWhy, with sayingWhy while it's up): the
- * scanner's own message shows in team builds only.
+ * scanner's own message shows in team builds only. A Retake that leaves the screen goes through the screen's one guard
+ * when it gives it (lib/navigation's useOpenOnce: the Scan screen's, which its Next invoice shares), else its own.
  */
-export function useScanFlow() {
+export function useScanFlow(shared?: OpenOnce) {
   const router = useRouter();
   const goBackOrHome = useGoBackOrHome();
+  const own = useOpenOnce();
+  const open = shared ?? own; // set at once, so a second Retake is refused before the screen has gone
   const busyRef = useRef(false);
-  const leaving = useRef(false); // set at once, so a second Retake is refused before the screen has gone
   const [busy, setBusy] = useState(false);
   const { sayWhy, sayingWhy } = useSayWhy();
   const [readingWhat, setReading] = useState<'photo' | 'pdf' | null>(null);
@@ -152,14 +155,21 @@ export function useScanFlow() {
   }
 
   /**
-   * Retake: the same source again (for a PDF, the picker again); back after a sample or a scan opened from Home's
-   * Recent scans or Saved (Home when there's nothing to go back to: useGoBackOrHome). Going back, or to the camera,
-   * leaves the screen at once, and runs once (ruling T25b-2), as the header's Back does: going
-   * back queues a GO_BACK per call, so a fast double tap would leave the screen under this one too. A picker can run
-   * again once it's done (oneAtATime).
+   * Retake (the plan's call 16): back after a sample, or when the Scan screen says so (how.back: opened from a list, or
+   * a saved scan from its session's screen; the camera when there's nothing to go back to: useGoBackOrHome). An
+   * unsaved scan in a session: the camera, in that session, its next photo replacing this scan once it reads (lib/
+   * session's retakeIn, run only when the camera opens). Else the same source again (for a PDF, the picker again).
+   * Going back, or to the camera, leaves the screen at once, and runs once (ruling T25b-2), as the header's Back does:
+   * going back queues a GO_BACK per call, so a fast double tap would leave the screen under this one too. A picker can
+   * run again once it's done (oneAtATime).
    */
-  async function retake(scan: StoredScan, openedFromRecent: boolean): Promise<void> {
-    if (openedFromRecent || scan.source === 'sample') return leaveOnce(goBackOrHome);
+  async function retake(scan: StoredScan, how: { back: boolean; session: string | null }): Promise<void> {
+    if (how.back || scan.source === 'sample') return leaveOnce(goBackOrHome);
+    const session = how.session;
+    if (session !== null && scan.saved === null) {
+      // the camera's session only if the camera opens: a refused tap re-links nothing (as the session screen's Retake)
+      return open.navigate('/camera', undefined, () => retakeIn(session, scan.id, new Date()));
+    }
     if (scan.source === 'camera') return toCamera();
     if (scan.source === 'camera_app') return fromCameraApp({ replace: true });
     if (scan.source === 'pdf') return fromPdf({ replace: true });
@@ -177,9 +187,7 @@ export function useScanFlow() {
 
   /** Leaves the screen, once: a second tap before it has gone does nothing. */
   function leaveOnce(leave: () => void): void {
-    if (leaving.current) return;
-    leaving.current = true;
-    leave();
+    open.leave(leave);
   }
 
   const reading = readingWhat !== null;

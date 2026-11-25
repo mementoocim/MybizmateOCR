@@ -30,6 +30,7 @@ export function useGoBackOrHome(): () => void {
  * two different presses can't open two screens either (ruling T6-1: with a guard each, Home's Your lists then Take
  * photo, in one go, pushed Your lists, and the camera's href, resolved over it, a second tabs).
  * - push: a screen over this one.
+ * - replace: a screen in this one's place (the Scan screen's Next invoice: the session's next scan to check).
  * - navigate: a tab, or a screen in one. While the tabs are on top when it runs (read then: tabsOnTop), it navigates:
  *   the tabs switch. With a screen above them (the Scan screen), it's expo-router's dismissTo: the screens over the tabs
  *   go, and the tabs switch, since navigate
@@ -37,15 +38,13 @@ export function useGoBackOrHome(): () => void {
  *   from inside the tabs). Its options are the router's: withAnchor puts a tab's own list under a screen opened in it
  *   (Done's session screen, with Sessions under it). Its `before` runs first, and only when the guard lets the tab
  *   open: a session screen's Retake makes that session the camera's (lib/session's retakeIn) only if the camera opens.
+ * - leave: a press that leaves this screen some other way, behind the same guard (the Scan screen's Retake going back,
+ *   or down to the camera), so a Retake and a Next invoice in one go leave it once.
  * - busy: whether one of them has opened, until this screen is on top again: a press that isn't an open (a delete's
  *   dialog) waits for it too.
  * On the live root's router, useRouter(), as useGoBackOrHome goes to the camera (ruling T26-4).
  */
-export function useOpenOnce(): {
-  push: (href: Href) => void;
-  navigate: (href: Href, options?: NavigateOptions, before?: () => void) => void;
-  busy: () => boolean;
-} {
+export function useOpenOnce(): OpenOnce {
   const router = useRouter();
   const navigation = useNavigation();
   const opened = useRef(false); // set at once, so a second press is refused before the screen or tab is up
@@ -63,6 +62,8 @@ export function useOpenOnce(): {
   };
   return {
     push: (href) => once(() => router.push(href)),
+    replace: (href) => once(() => router.replace(href)),
+    leave: (go) => once(go),
     busy,
     navigate: (href, options, before) =>
       once(() => {
@@ -73,6 +74,15 @@ export function useOpenOnce(): {
       }),
   };
 }
+
+/** A screen's one guard for its presses that open a screen or a tab, or leave it (useOpenOnce). */
+export type OpenOnce = {
+  push: (href: Href) => void;
+  replace: (href: Href) => void;
+  navigate: (href: Href, options?: NavigateOptions, before?: () => void) => void;
+  leave: (go: () => void) => void;
+  busy: () => boolean;
+};
 
 type NavigateOptions = Parameters<ReturnType<typeof useRouter>['navigate']>[1];
 

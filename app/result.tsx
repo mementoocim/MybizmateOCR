@@ -32,19 +32,20 @@ import { Tap } from '../components/Tap';
 import { TermsSheet } from '../components/TermsSheet';
 import { TEAM_BUILD } from '../lib/build';
 import { localIsoDate } from '../lib/checks/dates';
-import { confirmDeleteSaved } from '../lib/confirmDelete';
+import { confirmDeleteScan } from '../lib/confirmDelete';
 import { blockWords, saveBlock } from '../lib/exportRows';
 import { flagTarget, PAYOR_ROW } from '../lib/flagTargets';
 import { formatClock, formatMs, formatSeconds, monthDay } from '../lib/format';
 import { FORMS } from '../lib/forms';
 import { addItem } from '../lib/lists';
-import { useGoBackOrHome } from '../lib/navigation';
+import { useGoBackOrHome, useOpenOnce } from '../lib/navigation';
 import { boxValue, type SaleView } from '../lib/sale';
 import { compareWithSample, sampleInfo } from '../lib/samples';
 import type { SavedSummary } from '../lib/saved';
 import { useScanFlow } from '../lib/scanFlow';
 import { shownLabel, useScanCheck } from '../lib/scanState';
 import { getScan, type InvoiceKind, isTextPdf, type StoredScan, subscribeRecent, updateScan } from '../lib/scans';
+import { nextToCheck, useSessions } from '../lib/sessions';
 import { colors, radius, space, type } from '../lib/theme';
 import { toast } from '../lib/toast';
 import { uncheckedBoxes } from '../lib/training/boxes';
@@ -54,7 +55,14 @@ import type { ScanResult } from '../modules/scanner';
 // scan); the status strip is pinned under it, with a flag chip per thing to check. The scroll holds the saved line, the
 // kind switch (invoices only), the invoice or the 2307 as a ledger, and the footnote; the bottom bar holds Retake and
 // the save. Every row opens what the camera saw in its boxes, each box fixable, and the checks run again. When the
-// form wasn't found, the photo and how to retake it take the strip's and the ledger's place.
+// form wasn't found, the photo and how to retake it take the strip's and the ledger's place. ⋮ deletes the scan, saved
+// or not (ruling P-F10: a scan from before the update, with no session, opens straight to this screen).
+//
+// In a session (spec §6.4, the plan's call 16: `session`, from its screen or from Done's one photo), the not-found bar
+// is Retake alone, and an unsaved scan's Retake opens the camera in that session. Once saved and unchanged, the primary
+// is Next invoice, this screen replaced by the session's next one to check, or Back to session when none is left; a
+// change after the save brings Save changes back. The save's snackbar then has no View: the bar does that job. Every
+// press that opens or leaves goes through the screen's one guard (ruling T6-1), so a double tap runs once.
 
 const KINDS = [
   { value: 'sale', label: 'Sale' },
@@ -86,9 +94,13 @@ type Opening = SheetOpen & { n: number; rowKey?: string };
 const dayOf = (iso: string) => monthDay(localIsoDate(new Date(iso)));
 
 export default function Result() {
-  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
-  const flow = useScanFlow();
+  // from: 'session' (its session's screen, or Next invoice), 'list' (Sessions, a search, See invoices or Home), or none
+  // (straight from a read: Done's one photo, a sample); session: the session it's in (Done's one photo's too)
+  const { id, from, session } = useLocalSearchParams<{ id: string; from?: 'session' | 'list'; session?: string }>();
+  const once = useOpenOnce(); // one guard for every press that opens or leaves (ruling T6-1)
+  const flow = useScanFlow(once);
   const goBackOrHome = useGoBackOrHome();
+  const { sessions, statuses } = useSessions();
   const scan = useSyncExternalStore(subscribeRecent, () => (id ? getScan(id) : undefined));
   const { sale, cert, state, saved, summary, annotation } = useScanCheck(scan);
   // Deleted from ⋮: the header's words as they were, while the screen goes back.
@@ -120,7 +132,7 @@ export default function Result() {
   const supplier = useLingering(open?.kind === 'supplier' ? open : null);
   const save = useLingering(open?.kind === 'save' ? open : null);
 
-  // Straight from a read (not opened from Home or Saved): TalkBack starts at the strip, which says where it stands.
+  // Straight from a read (not opened from a list or a session): TalkBack starts at the strip, which says where it stands.
   useEffect(() => {
     if (from === undefined && stripRef.current) AccessibilityInfo.sendAccessibilityEvent(stripRef.current, 'focus');
   }, [from]);
@@ -141,7 +153,9 @@ export default function Result() {
   const found = state.kind !== 'not_found';
   const isSample = scan.source === 'sample';
   const isSaved = saved !== 'no' && summary !== undefined;
-  const back = from === 'recent' || from === 'saved';
+  // Retake goes back: opened from a list, or a saved scan from its session's screen (the plan's call 16)
+  const back = from === 'list' || (from === 'session' && scan.saved !== null);
+  const inSession = session !== undefined;
   const title = found && r.form ? FORMS[r.form].title : 'Scan';
   const subtitle = subtitleOf(scan, found, sale, isSaved ? summary : undefined);
 
@@ -197,26 +211,41 @@ export default function Result() {
   }
 
   /**
-   * ⋮ › Delete saved scan, asked as Saved's long press asks it (lib/confirmDelete). Delete first leaves, then deletes,
-   * in the one press: the screen shows only its header from then on, so the scan's going, once saved.json is written,
-   * never shows as "This scan is no longer here".
+   * ⋮ › Delete saved scan, or Delete this scan for one not saved, asked as a session's rows ask it (lib/confirmDelete).
+   * Delete first leaves, then deletes, in the one press: the screen shows only its header from then on, so the scan's
+   * going, once saved.json or recent.json is written, never shows as "This scan is no longer here".
    */
-  function confirmDelete(scanId: string) {
-    confirmDeleteSaved(scanId, () => {
+  function confirmDelete(it: StoredScan) {
+    void confirmDeleteScan(it, () => {
       setLeaving({ title, subtitle });
       goBackOrHome();
     });
   }
 
-  const retake = () => flow.retake(scan, back);
-  const buttons: ButtonProps[] = !found
+  const retake = () => flow.retake(scan, { back, session: session ?? null });
+  const group = inSession ? sessions.find((s) => s.id === session) : undefined;
+  const next = group ? nextToCheck(group, statuses, scan.id) : null;
+  /** Saved and unchanged, in a session: on to its next scan to check, in this screen's place, or back to it. */
+  const onward: ButtonProps =
+    next !== null
+      ? {
+          label: 'Next invoice',
+          onPress: () => once.replace({ pathname: '/result', params: { id: next, from: 'session', session } }),
+        }
+      : {
+          label: 'Back to session',
+          // the session's screen in the Sessions tab, with Sessions under it, and nothing above it
+          onPress: () => once.navigate({ pathname: '/sessions/[id]', params: { id: session ?? '' } }, { withAnchor: true }),
+        };
+  // today's bar: in a session too, until it's saved, and again after a change since the save
+  const todays: ButtonProps[] = !found
     ? [
         scan.source === 'pdf'
           ? { label: 'Choose a PDF', variant: 'secondary', onPress: () => flow.fromPdf({ replace: true }) }
           : { label: 'Choose a photo', variant: 'secondary', onPress: () => flow.fromGallery({ replace: true }) },
         {
           label: 'Retake',
-          // the plan's call 8: the camera, or the camera app again; opened from Home or Saved, back
+          // the plan's call 8: the camera, or the camera app again; opened from a list, back
           onPress: back || scan.source === 'camera' || scan.source === 'camera_app' ? retake : flow.toCamera,
         },
       ]
@@ -226,23 +255,25 @@ export default function Result() {
           { label: 'Retake', variant: 'secondary', onPress: retake },
           { label: saveLabel, testID: 'save-open', onPress: openSave, ref: saveButton },
         ];
+  const buttons: ButtonProps[] =
+    inSession && !found
+      ? [{ label: 'Retake', onPress: retake }] // the gallery and the PDF are in the camera's tray (call 16)
+      : inSession && saved === 'unchanged'
+        ? [{ label: 'Retake', variant: 'secondary', onPress: retake }, onward]
+        : todays;
 
   const header = (
     <Header
       title={title}
       subtitle={subtitle}
       right={
-        found || isSaved ? (
-          <>
-            {found ? <PhotoThumb result={r} onPress={() => setViewing(true)} /> : null}
-            {isSaved ? (
-              // The menu's anchor: a view of its own, so Android measures it where it is.
-              <View ref={moreRef} collapsable={false}>
-                <IconButton icon={More} label="More options" onPress={() => setMenuOpen(true)} />
-              </View>
-            ) : null}
-          </>
-        ) : undefined
+        <>
+          {found ? <PhotoThumb result={r} onPress={() => setViewing(true)} /> : null}
+          {/* The menu's anchor: a view of its own, so Android measures it where it is. */}
+          <View ref={moreRef} collapsable={false}>
+            <IconButton icon={More} label="More options" onPress={() => setMenuOpen(true)} />
+          </View>
+        </>
       }
     />
   );
@@ -354,6 +385,7 @@ export default function Result() {
           sale={sale}
           onClose={closeSheet}
           returnFocus={saveButton}
+          inSession={inSession}
         />
       ) : null}
       {save && cert ? (
@@ -364,17 +396,22 @@ export default function Result() {
           view={cert}
           onClose={closeSheet}
           returnFocus={saveButton}
+          inSession={inSession}
         />
       ) : null}
       <PhotoViewer visible={viewing} result={r} onClose={() => setViewing(false)} />
-      {isSaved ? (
-        <Menu
-          visible={menuOpen}
-          anchor={moreRef}
-          items={[{ label: 'Delete saved scan', destructive: true, onPress: () => confirmDelete(scan.id) }]}
-          onClose={() => setMenuOpen(false)}
-        />
-      ) : null}
+      <Menu
+        visible={menuOpen}
+        anchor={moreRef}
+        items={[
+          {
+            label: scan.saved ? 'Delete saved scan' : 'Delete this scan',
+            destructive: true,
+            onPress: () => confirmDelete(scan),
+          },
+        ]}
+        onClose={() => setMenuOpen(false)}
+      />
       <ReadingOverlay visible={flow.reading} what={flow.readingWhat ?? 'photo'} />
     </View>
   );

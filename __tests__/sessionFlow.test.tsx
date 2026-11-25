@@ -1,6 +1,8 @@
 import { router } from 'expo-router';
 import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
 
+import { saveScan } from '../lib/saved';
+import { recentScans } from '../lib/scans';
 import { currentSession, loadSession } from '../lib/session';
 import { CAPTURE_GRACE_MS, currentShutter } from '../lib/shutter';
 import type { ScanResult } from '../modules/scanner';
@@ -172,6 +174,46 @@ test("Done on a second session, with the first one's screen left in Sessions, sh
   expect(screen).toHavePathname(`/sessions/${b}`);
   expect(onTop()).toEqual(['Session: on top']);
   expect(tab('Sessions')).toBeSelected();
+
+  await act(() => router.back());
+  expect(screen).toHavePathname('/sessions');
+  expect(onTop()).toEqual(['Sessions: on top']);
+  await act(() => router.back());
+  expect(screen).toHavePathname('/camera');
+  expect(router.canGoBack()).toBe(false);
+});
+
+test('Back to session lands on the session screen in the Sessions tab, with nothing above it', async () => {
+  // Done's one photo opens its Scan screen, in the session (the plan's call 16); once it's saved, the last one left,
+  // Back to session goes down to that session's screen, with Sessions under it, and the Scan screen gone
+  await act(async () => mockReads.splice(0).forEach((r) => r.resolve(parseScanResult(coreJson('inv_0007', null)))));
+  await act(() => loadSession());
+  memoryFs.reset();
+  photos = 0;
+  mockTakePhoto.mockClear();
+  await renderRouter(
+    appRoutes({ '(tabs)/camera': require('../app/(tabs)/camera').default, result: require('../app/result').default }),
+    { initialUrl: '/camera' },
+  );
+  await settle();
+  await send('status', { status: 'looking', form: null });
+  await shoot();
+  const id = currentSession()!.id;
+  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Done · 1' })));
+  await read();
+  await grace();
+  expect(screen).toHavePathname('/result');
+  const scan = recentScans().find((s) => s.session === id)!;
+  expect(screen).toHaveSearchParams({ id: scan.id, session: id });
+
+  await act(async () => saveScan(scan.id, { taxType: 'VAT', account: '4010', terms: 'account', atc: '' }));
+  await settle();
+  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Back to session' })));
+  await settle();
+  expect(screen).toHavePathname(`/sessions/${id}`);
+  expect(onTop()).toEqual(['Session: on top']);
+  expect(tab('Sessions')).toBeSelected();
+  expect(screen.queryByRole('button', { name: 'Back to session' })).toBeNull(); // the Scan screen has gone
 
   await act(() => router.back());
   expect(screen).toHavePathname('/sessions');

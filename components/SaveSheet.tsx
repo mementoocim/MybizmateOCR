@@ -29,7 +29,7 @@ import { codeKeyboard, TextField } from './TextField';
 // what's still marked to check, which saving doesn't wait for. Cancel and the save are the sheet's pinned actions
 // (ruling T7-4). The save's press returns its promise, so the button loads while the save runs and a double tap saves
 // once (Review Focus 3). After a save, the sheet closes, and a snackbar says so, with View, which opens Saved for the
-// kind. A save that fails keeps the sheet open, and says so in it, above the scrim (Review Focus 1).
+// kind (none in a session). A save that fails keeps the sheet open, and says so in it, above the scrim (Review Focus 1).
 
 export const TAX_TYPES = [
   { value: 'VAT', label: 'VAT' },
@@ -68,12 +68,14 @@ export function SaveSheet({
   sale,
   onClose,
   returnFocus,
+  inSession = false,
 }: {
   visible: boolean;
   scan: StoredScan;
   sale: SaleView;
   onClose: () => void;
   returnFocus?: RefObject<ViewInstance | null>; // Save, which opened it
+  inSession?: boolean; // opened in a session: the snackbar after the save has no View
 }) {
   const s = useSyncExternalStore(subscribeSettings, settings);
   const isSale = scan.kind === 'sale';
@@ -84,7 +86,7 @@ export function SaveSheet({
   const [terms, setTerms] = useState<Terms | null>(before?.terms ?? sale.terms ?? (sale.party.listParty?.terms || null));
   const [atc, setAtc] = useState(before?.atc ?? s.atc);
   const codes = useCodes(scan);
-  const run = useSave(scan, isSale ? 'sale' : 'purchase', "Couldn't save the invoice.", onClose);
+  const run = useSave(scan, isSale ? 'sale' : 'purchase', "Couldn't save the invoice.", onClose, inSession);
   const taxType = chosenType ?? sale.taxType; // the suggestion follows the VAT answer until the person picks one
   const askVat = isSale && s.vatRegistered === null;
   const ready = account.trim() !== '' && terms !== null && !askVat && codes.ready;
@@ -167,17 +169,19 @@ export function CertSaveSheet({
   view,
   onClose,
   returnFocus,
+  inSession = false,
 }: {
   visible: boolean;
   scan: StoredScan;
   view: CertView;
   onClose: () => void;
   returnFocus?: RefObject<ViewInstance | null>; // Save, which opened it
+  inSession?: boolean; // opened in a session: the snackbar after the save has no View
 }) {
   const s = useSyncExternalStore(subscribeSettings, settings);
   const [account, setAccount] = useState(scan.saved?.details.account ?? s.offsetAccount);
   const codes = useCodes(scan);
-  const run = useSave(scan, '2307', "Couldn't save the 2307.", onClose);
+  const run = useSave(scan, '2307', "Couldn't save the 2307.", onClose, inSession);
   const ready = account.trim() !== '' && codes.ready;
   const { cert, payor, problems } = view;
 
@@ -216,10 +220,11 @@ export function CertSaveSheet({
 /**
  * The save itself: the scan is saved (again) with what the sheet asks. Then the sheet closes, and a snackbar says so,
  * "Saved as a sale" (or a purchase, or a 2307; "Changes saved" for a re-save), with View, which opens See invoices
- * for the kind in the Export tab. A save that fails keeps the sheet open, and says so in it. Its promise settles when
- * it's done.
+ * for the kind in the Export tab. In a session, the same words with no action (camera first's call 15): the Scan screen
+ * goes on to the next invoice, then back to the session. A save that fails keeps the sheet open, and says so in it.
+ * Its promise settles when it's done.
  */
-function useSave(scan: StoredScan, kind: Kind, failed: string, onClose: () => void) {
+function useSave(scan: StoredScan, kind: Kind, failed: string, onClose: () => void, inSession: boolean) {
   const { navigate } = useOpenOnce();
   return async (details: SaveDetails, tag: SourceTag | null): Promise<void> => {
     const wasSaved = scan.saved !== null; // as the scan was before this save
@@ -230,7 +235,12 @@ function useSave(scan: StoredScan, kind: Kind, failed: string, onClose: () => vo
       return;
     }
     onClose();
-    toast(wasSaved ? 'Changes saved' : `Saved as a ${kind}`, {
+    const words = wasSaved ? 'Changes saved' : `Saved as a ${kind}`;
+    if (inSession) {
+      toast(words);
+      return;
+    }
+    toast(words, {
       label: 'View',
       // See invoices for the kind, in the Export tab, with its first step under it (the plan's call 14)
       onPress: () => navigate({ pathname: '/export/invoices', params: { kind } }, { withAnchor: true }),

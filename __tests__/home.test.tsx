@@ -438,7 +438,8 @@ test('recent scans: title, time and form, and the badge; the caption says 20', a
   // the badge: spoken with its row, not a stop of its own (ruling T4-4)
   expect(within(row).getByText('Checks passed', { includeHiddenElements: true })).toHaveStyle({ color: colors.success });
   await press(row);
-  expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/result', params: { id: recentScans()[0].id, from: 'recent' } });
+  // from a list: the Scan screen's Retake goes back (ruling P-F16, until Task 12's Home)
+  expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/result', params: { id: recentScans()[0].id, from: 'list' } });
   expect(screen.getByText('The last 20 scans stay here. Save a scan to keep it.')).toHaveStyle({
     ...type.label,
     color: colors.mute,

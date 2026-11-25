@@ -26,7 +26,7 @@ import { pinToday } from '../test-utils/today';
 // save loads while it runs and runs once; after it, the sheet closes and a snackbar says so, with View, which opens
 // See invoices for the kind, in the Export tab (the plan's call 14).
 
-let mockParams: { id?: string; from?: string } = {};
+let mockParams: { id?: string; from?: string; session?: string } = {};
 let mockTeam = false;
 const mockToast = jest.fn();
 const mockPush = jest.fn();
@@ -78,7 +78,8 @@ async function show(
 ): Promise<string> {
   const result = parseScanResult(coreJson(stem));
   opts.edit?.(result);
-  const id = addScan({ label: 'Camera photo', source: opts.source ?? 'camera', result });
+  // in act: the screen a test showed before re-renders with the sessions (useSessions)
+  const id = await act(async () => addScan({ label: 'Camera photo', source: opts.source ?? 'camera', result }));
   mockParams = { id };
   await render(<Result />);
   return id;
@@ -377,6 +378,41 @@ test('a re-save says Changes saved', async () => {
   expect(mockToast).toHaveBeenLastCalledWith('Changes saved', VIEW);
   lastAction().onPress();
   expect(mockDismissTo).toHaveBeenLastCalledWith({ pathname: '/export/invoices', params: { kind: 'sale' } }, { withAnchor: true });
+});
+
+test("in a session the save's snackbar has no View", async () => {
+  // the plan's call 15: today's words, with no full stop (ruling P-F15); the bar goes on to the next invoice instead
+  const id = addScan({
+    label: 'Camera photo',
+    source: 'camera',
+    session: 'S-save',
+    result: parseScanResult(coreJson('inv_0007')),
+  });
+  mockParams = { id, session: 'S-save' };
+  await render(<Result />);
+  await saveSale();
+  expect(mockToast.mock.calls).toEqual([['Saved as a sale']]);
+  expect(screen.queryByTestId('save-open')).toBeNull(); // saved: Back to session, in its place
+  await act(async () => setEdit(id, 'invoice_no', '0007999'));
+  await press(screen.getByTestId('save-open')); // Save changes, after a change
+  await press(screen.getByTestId('save-confirm'));
+  expect(mockToast.mock.calls.at(-1)).toEqual(['Changes saved']);
+  // a 2307's too
+  const cert = await act(async () =>
+    addScan({
+      label: 'PDF',
+      source: 'pdf',
+      session: 'S-save',
+      result: parseScanResult(coreJson('bir2307_text_1')),
+    }),
+  );
+  mockParams = { id: cert, from: 'session', session: 'S-save' };
+  await render(<Result />);
+  await press(screen.getByTestId('save-open'));
+  await type('Offset account', '1205');
+  await press(screen.getByTestId('save-confirm'));
+  expect(mockToast.mock.calls.at(-1)).toEqual(['Saved as a 2307']);
+  expect(mockDismissTo).not.toHaveBeenCalled();
 });
 
 test("a failed save keeps the sheet open, and says so in it, not behind it", async () => {
@@ -811,7 +847,7 @@ test('a scan saved before the save kept its marks says only what its import row 
   const id = await show('inv_0007');
   await checkEveryBox(id);
   await saveSale();
-  // its scan.json without the marks, as a save before this change wrote it, opened again from Saved
+  // its scan.json without the marks, as a save before this change wrote it, opened again from a list
   const kept = keptScan(id);
   delete kept.savedMarks;
   memoryFs.files.set(`file:///docs/saved/${id}/scan.json`, JSON.stringify(kept));
@@ -820,7 +856,7 @@ test('a scan saved before the save kept its marks says only what its import row 
     await openSaved(id);
   });
   expect(getScan(id)!.savedMarks).toBe('');
-  mockParams = { id, from: 'saved' };
+  mockParams = { id, from: 'list' };
   await render(<Result />);
   expect(screen.getByText(SAVED)).toBeTruthy();
   await act(async () => setEdit(id, 'item1_unit', 'pcs'));

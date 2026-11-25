@@ -25,6 +25,8 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: jest.fn() }),
+  // the Scan screen's presses that open or leave run once until it's focused again (lib/navigation)
+  useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
   useIsFocused: () => true,
 }));
 jest.mock('../modules/scanner', () => ({
@@ -66,7 +68,10 @@ const PENA = {
 
 /** Sample 0007 (its customer: Torres Construction Supply, in the made-up lists; its first item: Sugar). */
 async function showSample(): Promise<string> {
-  const id = addScan({ label: 'Sample 0007', source: 'sample', result: parseScanResult(coreJson('inv_0007')) });
+  // in act: the screen a test showed before re-renders with the sessions (useSessions)
+  const id = await act(async () =>
+    addScan({ label: 'Sample 0007', source: 'sample', result: parseScanResult(coreJson('inv_0007')) }),
+  );
   mockParams = { id };
   await render(<Result />);
   return id;
@@ -74,7 +79,10 @@ async function showSample(): Promise<string> {
 
 /** The same invoice from the camera (or another fixture's): a real scan, whose names can be added to the lists. */
 async function showScan(stem = 'inv_0007'): Promise<string> {
-  const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson(stem)) });
+  // in act: the screen a test showed before re-renders with the sessions (useSessions)
+  const id = await act(async () =>
+    addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson(stem)) }),
+  );
   mockParams = { id };
   await render(<Result />);
   return id;
@@ -133,7 +141,7 @@ test("the customer's boxes come under what the camera saw, or a text PDF's text"
   expect(sheet().getByRole('header', { name: 'What the camera saw' })).toBeTruthy();
 
   const result = parseScanResult(coreJson('sales_text_0'));
-  const id = addScan({ label: 'PDF: sales_text_0.pdf', source: 'pdf', result });
+  const id = await act(async () => addScan({ label: 'PDF: sales_text_0.pdf', source: 'pdf', result }));
   mockParams = { id };
   await render(<Result />);
   await press(screen.getByText('Customer'));

@@ -26,6 +26,8 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
   useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: jest.fn() }),
+  // the Scan screen's presses that open or leave run once until it's focused again (lib/navigation)
+  useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
   useIsFocused: () => true,
 }));
 jest.mock('../modules/scanner', () => ({
@@ -64,8 +66,12 @@ async function show(
   const result = parseScanResult(coreJson(stem));
   opts.edit?.(result);
   const source: ScanSource = result.source === 'pdf' ? 'pdf' : 'gallery';
-  const id = addScan({ label: `PDF: ${stem}.pdf`, source, result });
-  for (const [box, text] of Object.entries(opts.edits ?? {})) setEdit(id, box, text);
+  // in act: the screen a test showed before re-renders with the sessions (useSessions)
+  const id = await act(async () => {
+    const added = addScan({ label: `PDF: ${stem}.pdf`, source, result });
+    for (const [box, text] of Object.entries(opts.edits ?? {})) setEdit(added, box, text);
+    return added;
+  });
   mockParams = { id };
   await render(<Result />);
   return id;

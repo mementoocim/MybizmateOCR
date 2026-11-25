@@ -148,7 +148,7 @@ export default function Home() {
               <RecentRow
                 key={scan.id}
                 scan={scan}
-                onPress={() => push({ pathname: '/result', params: { id: scan.id, from: 'recent' } })}
+                onPress={() => push({ pathname: '/result', params: { id: scan.id, from: 'list' } })}
               />
             ))}
             <Text style={[type.label, styles.note]}>The last 20 scans stay here. Save a scan to keep it.</Text>
