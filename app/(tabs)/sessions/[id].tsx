@@ -65,7 +65,7 @@ function failedWords(failed: readonly FailedRead[]): string {
 }
 
 function SessionOf({ id }: { id: string }) {
-  const { push, navigate } = useOpenOnce(); // one guard for every press that opens (ruling T6-1)
+  const { push, navigate, busy } = useOpenOnce(); // one guard for every press that opens (ruling T6-1)
   const navigation = useNavigation();
   const { sessions, statuses, states, saved } = useSessions();
   const theLists = useSyncExternalStore(subscribeLists, lists);
@@ -129,9 +129,12 @@ function SessionOf({ id }: { id: string }) {
     push({ pathname: '/result', params: { id: scanId, from: 'session', session: id } });
   }
 
-  /** Asks before deleting a scan, one dialog at a time; settles when it closes (a saved one's at once: P-F12). */
+  /**
+   * Asks before deleting a scan, one dialog at a time, and none while a press is opening a screen (or reading a saved
+   * scan back to open it); settles when it closes (a saved one's at once: P-F12).
+   */
   async function askDelete(m: Member) {
-    if (asking.current) return;
+    if (asking.current || reading.current || busy()) return;
     asking.current = true;
     try {
       if (m.scan) await confirmDeleteScan(m.scan);
@@ -187,6 +190,7 @@ function SessionOf({ id }: { id: string }) {
           {members.map((m) => {
             const badge = scanBadge(m, states.get(m.id) ?? null, saved.get(m.id) ?? 'no');
             const notFound = statuses.get(m.id) === 'retake' && m.scan !== null && !m.summary;
+            const named = `${titleOf(m)} ${scanSub(m)}`; // TalkBack: which scan Remove and Retake are for
             return (
               <View key={m.id}>
                 <ListRow
@@ -205,8 +209,18 @@ function SessionOf({ id }: { id: string }) {
                   <View testID={`retake-${m.id}`} style={styles.actions}>
                     <ButtonRow
                       buttons={[
-                        { label: 'Remove', variant: 'destructiveText', onPress: () => askDelete(m) },
-                        { label: 'Retake', variant: 'text', onPress: () => retake(m.id) },
+                        {
+                          label: 'Remove',
+                          accessibilityLabel: `Remove ${named}`,
+                          variant: 'destructiveText',
+                          onPress: () => askDelete(m),
+                        },
+                        {
+                          label: 'Retake',
+                          accessibilityLabel: `Retake ${named}`,
+                          variant: 'text',
+                          onPress: () => retake(m.id),
+                        },
                       ]}
                     />
                   </View>

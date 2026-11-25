@@ -27,6 +27,7 @@ export type ButtonProps = {
   loading?: boolean;
   testID?: string;
   accessibilityHint?: string;
+  accessibilityLabel?: string; // what TalkBack says, when the label alone isn't enough (default: the label)
   onLabelLines?: (lines: number) => void; // from the label's onTextLayout
   ref?: Ref<ViewInstance>; // its pressable (a sheet's returnFocus)
 };
@@ -42,6 +43,7 @@ export function Button({
   loading = false,
   testID,
   accessibilityHint,
+  accessibilityLabel,
   onLabelLines,
   ref,
 }: ButtonProps) {
@@ -69,7 +71,7 @@ export function Button({
     <Tap
       ref={ref}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ busy }}
       testID={testID}

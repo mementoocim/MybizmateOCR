@@ -36,11 +36,14 @@ export function useGoBackOrHome(): () => void {
  *   from inside the tabs). Its options are the router's: withAnchor puts a tab's own list under a screen opened in it
  *   (Done's session screen, with Sessions under it). Its `before` runs first, and only when the guard lets the tab
  *   open: a session screen's Retake makes that session the camera's (lib/session's retakeIn) only if the camera opens.
+ * - busy: whether one of them has opened, until this screen is on top again: a press that isn't an open (a delete's
+ *   dialog) waits for it too.
  * On the live root's router, useRouter(), as useGoBackOrHome goes to the camera (ruling T26-4).
  */
 export function useOpenOnce(): {
   push: (href: Href) => void;
   navigate: (href: Href, options?: NavigateOptions, before?: () => void) => void;
+  busy: () => boolean;
 } {
   const router = useRouter();
   const navigation = useNavigation();
@@ -50,6 +53,8 @@ export function useOpenOnce(): {
       opened.current = false;
     }, []),
   );
+  /** Whether a press has opened a screen or a tab, and this screen isn't on top again yet. */
+  const busy = useCallback(() => opened.current, []);
   const once = (open: () => void) => {
     if (opened.current) return;
     opened.current = true;
@@ -57,6 +62,7 @@ export function useOpenOnce(): {
   };
   return {
     push: (href) => once(() => router.push(href)),
+    busy,
     navigate: (href, options, before) =>
       once(() => {
         before?.();
