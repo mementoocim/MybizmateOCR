@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 
 import { toast } from './toast';
 
-// Sharing an export file: the import files (the export sheet, which asks its question as a step of its own) and the
+// Sharing an export file: the import files (the Export tab's file step, which asks its question itself) and the
 // team's training data (Profile › Team tools, which asks it in an Alert).
 
 /** How what's in a file is counted ("1 sale", "2 sales"), and what leaves it out once marked ("the next export"). */

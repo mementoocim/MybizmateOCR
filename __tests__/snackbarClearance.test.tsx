@@ -15,12 +15,13 @@ import { appRoutes } from '../test-utils/routes';
 import { pinToday } from '../test-utils/today';
 
 // Ruling T19-5: the root host's message clears the bottom bar of the screen on top. A bar counts only while its screen
-// is focused, so one that mounts on a screen under the top one doesn't move the message. Saved with nothing to export
-// has no bar; it gets one when a save, or a customer added, on the Scan screen over it gives it something to export.
-// On a tab, the tabs' floating bar is the bar the message clears; on the Scan screen over the tabs, that screen's. The
-// app's own layouts (test-utils/routes: app/_layout, with the root host, and the tabs with their bar), Saved and the
-// Scan screen as they are; the tabs' screens stand in. jest has no layout: each bar's height is given as Android would
-// report it. No insets here.
+// is focused, so one that mounts on a screen under the top one doesn't move the message. On a tab, the tabs' floating
+// bar is the bar the message clears; on the Scan screen over the tabs, that screen's. The Export tab's steps have no
+// bar of their own (their buttons sit at each step's end: the plan's call 13), so a save, or a customer added, on the
+// Scan screen over an empty Export tab gives the tab something to send without moving the message. The app's own
+// layouts (test-utils/routes: app/_layout, with the root host, and the tabs with their bar), the Export tab's first step
+// and the Scan screen as they are; the other screens stand in. jest has no layout: each bar's height is given as
+// Android would report it. No insets here.
 
 jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(async () => {}) }));
 jest.mock('../components/BrandSplash', () => ({ BrandSplash: () => null })); // the scanner's start (splash.test)
@@ -41,11 +42,10 @@ jest.mock('expo-asset', () => ({ Asset: { fromModule: () => ({ downloadAsync: as
 jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
 jest.mock('expo-sharing', () => ({ shareAsync: async () => undefined, isAvailableAsync: async () => true }));
 
-const ROUTES = appRoutes({ saved: require('../app/saved'), result: require('../app/result') });
+const ROUTES = appRoutes({ '(tabs)/export/index': require('../app/(tabs)/export/index'), result: require('../app/result') });
 
-/** The Scan screen's bar's height, and Saved's; and the tabs' floating bar's, as laid out, under its raised button. */
+/** The Scan screen's bar's height; and the tabs' floating bar's, as laid out, under its raised button. */
 const SCAN_BAR = 80;
-const SAVED_BAR = 120;
 const TAB_BAR = 72;
 
 type Instance = ReturnType<typeof screen.getByTestId>;
@@ -53,7 +53,7 @@ const press = (el: Instance) => act(async () => fireEvent.press(el));
 const snackbar = () => screen.getByTestId('snackbar');
 /** Every bottom bar mounted, a covered screen's too. */
 const bars = () => screen.queryAllByTestId('bottom-bar', { includeHiddenElements: true });
-/** The bottom bar with this button: Saved's Export…, the Scan screen's Retake. */
+/** The bottom bar with this button: the Scan screen's Retake. */
 function barWith(button: string): Instance {
   const found = bars().filter((bar) => within(bar).queryByText(button, { includeHiddenElements: true }) !== null);
   expect(found).toHaveLength(1);
@@ -63,12 +63,21 @@ function barWith(button: string): Instance {
 const layout = (button: string, height: number) =>
   act(async () => fireEvent(barWith(button), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 360, height } } }));
 
-/** Saved, with nothing saved and no party from a scan, so no bar; then a camera scan's Scan screen over it. */
-async function scanOverEmptySaved(): Promise<string> {
+/** The tabs' floating bar lays out, as Android reports it. */
+const layoutTabBar = () =>
+  act(async () =>
+    fireEvent(screen.getByTestId('tab-bar'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 360, height: TAB_BAR } },
+    }),
+  );
+
+/** The Export tab with nothing saved and no party from a scan; then a camera scan's Scan screen over it. */
+async function scanOverEmptyExport(): Promise<string> {
   const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('inv_0007')) });
-  await renderRouter(ROUTES, { initialUrl: '/saved' });
+  await renderRouter(ROUTES, { initialUrl: '/export' });
   expect(screen.getByText('Nothing saved yet')).toBeOnTheScreen();
   expect(bars()).toEqual([]);
+  await layoutTabBar();
   await act(() => router.push({ pathname: '/result', params: { id } }));
   await layout('Retake', SCAN_BAR);
   return id;
@@ -111,39 +120,40 @@ beforeEach(async () => {
   if (left) dismissSnack(left.id);
 });
 
-test("a save on the Scan screen over an empty Saved: the message clears the Scan screen's bar, not Saved's", async () => {
-  const id = await scanOverEmptySaved();
+test("a save on the Scan screen over an empty Export tab: the message clears the Scan screen's bar, then the tabs'", async () => {
+  const id = await scanOverEmptyExport();
   await press(screen.getByTestId('save-open'));
   await press(screen.getByText('Not VAT-registered'));
   await act(async () => fireEvent.changeText(screen.getByLabelText('Revenue account'), '4010'));
   await press(screen.getByTestId('save-confirm'));
 
-  // Saved, under it, has a scan to export now: its bar mounts there, and lays out
-  expect(bars()).toHaveLength(2);
-  await layout('Export…', SAVED_BAR);
+  // the Export tab, under it, has a scan to send now, and no bar of its own to mount: the Scan screen's stays the one
+  expect(screen.getByLabelText('Sales, 1 to export, ₱24,377.00', { includeHiddenElements: true })).toBeTruthy();
+  expect(bars()).toHaveLength(1);
   expect(within(snackbar()).getByText('Saved as a sale')).toBeOnTheScreen();
   expect(snackbar()).toHaveStyle({ bottom: SCAN_BAR + space.s });
 
-  // back on Saved, its bar is the one on top
+  // back on the Export tab, the floating bar is the one on top
   await act(() => router.back());
-  expect(bars()).toHaveLength(1);
-  expect(snackbar()).toHaveStyle({ bottom: SAVED_BAR + space.s });
+  expect(screen.getByRole('button', { name: 'Sales, 1 to export, ₱24,377.00' })).toBeOnTheScreen();
+  expect(bars()).toEqual([]);
+  expect(snackbar()).toHaveStyle({ bottom: TAB_BAR + bar.raise + space.s });
 
-  // the scan opened again over it: Saved's bar no longer counts, and the Scan screen's does once it has laid out
-  await act(() => router.push({ pathname: '/result', params: { id, from: 'saved' } }));
+  // the scan opened again over it: the floating bar no longer counts, and the Scan screen's does once it has laid out
+  await act(() => router.push({ pathname: '/result', params: { id, from: 'list' } }));
   expect(snackbar()).toHaveStyle({ bottom: space.s }); // no bar on top has laid out yet
   await layout('Retake', SCAN_BAR);
   expect(snackbar()).toHaveStyle({ bottom: SCAN_BAR + space.s });
 });
 
-test('a customer added on the Scan screen over an empty Saved: the same', async () => {
-  await scanOverEmptySaved();
+test('a customer added on the Scan screen over an empty Export tab: the same', async () => {
+  await scanOverEmptyExport();
   await press(screen.getByText('Customer'));
   await press(screen.getByRole('button', { name: /^Add “.+” to your customers$/ }));
 
-  // Saved, under it, can export the new customer now: its bar mounts there, and lays out
-  expect(bars()).toHaveLength(2);
-  await layout('Export…', SAVED_BAR);
+  // the Export tab, under it, can send the new customer now (ruling T19-7), with no bar of its own
+  expect(screen.getByText('New customers and suppliers', { includeHiddenElements: true })).toBeTruthy();
+  expect(bars()).toHaveLength(1);
   // the message shows in the sheet (Review Focus 1); once the sheet has gone, in the root host, over the Scan screen
   expect(within(screen.getByTestId('sheet-panel')).getByText('Added to your customers.')).toBeOnTheScreen();
   await press(screen.getByLabelText('Close'));

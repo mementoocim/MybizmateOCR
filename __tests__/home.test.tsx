@@ -353,7 +353,7 @@ test('Get set up: two rows, each checked when done, then gone for good', async (
   expect(settings().setupDone).toBe(true);
 });
 
-test('To export: a row per kind with its count and total; a row opens Saved for its kind', async () => {
+test("To export: a row per kind with its count and total; a row opens its file in the Export tab", async () => {
   await render(<Home />);
   expect(screen.queryByText('To export')).toBeNull(); // nothing saved: no section
   expect(screen.queryByText('Saved')).toBeNull();
@@ -377,14 +377,20 @@ test('To export: a row per kind with its count and total; a row opens Saved for 
   }
   expect(iconsIn(button(/^Sales, /), colors.chevron)).toHaveLength(1);
   await press(button(/^Sales, /));
-  expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/saved', params: { kind: 'sale' } });
+  expect(mockNavigate).toHaveBeenLastCalledWith(
+    { pathname: '/export/[which]', params: { which: 'sale' } },
+    { withAnchor: true },
+  );
   await backHome();
   await press(button(/^2307s, /));
-  expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/saved', params: { kind: '2307' } });
-  // All saved: every kind
+  expect(mockNavigate).toHaveBeenLastCalledWith(
+    { pathname: '/export/[which]', params: { which: '2307' } },
+    { withAnchor: true },
+  );
+  // All saved: every kind, the Export tab
   await backHome();
   await press(button('All saved'));
-  expect(mockPush).toHaveBeenLastCalledWith('/saved');
+  expect(mockNavigate).toHaveBeenLastCalledWith('/export'); // the Export tab's first step
 
   // purchases waiting too, between the two; a total in the millions in full
   await savedAre(summary('2307', 10039.79), summary('purchase', 12345000), summary('purchase', 678.9), summary('sale', 100));
@@ -396,10 +402,13 @@ test('To export: a row per kind with its count and total; a row opens Saved for 
   expect(screen.getByText('₱12,345,678.90').props.numberOfLines).toBeUndefined();
   await backHome();
   await press(button(/^Purchases, /));
-  expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/saved', params: { kind: 'purchase' } });
+  expect(mockNavigate).toHaveBeenLastCalledWith(
+    { pathname: '/export/[which]', params: { which: 'purchase' } },
+    { withAnchor: true },
+  );
 });
 
-test('everything exported: Saved, Everything is exported', async () => {
+test('everything exported: Saved, Everything is exported, which opens the Export tab', async () => {
   await render(<Home />);
   await savedAre(summary('sale', 100, EXPORTED), summary('2307', 50, EXPORTED));
   expect(header('Saved')).toBeOnTheScreen();
@@ -408,7 +417,7 @@ test('everything exported: Saved, Everything is exported', async () => {
   const row = button('Everything is exported');
   expect(iconsIn(row, colors.chevron)).toHaveLength(1);
   await press(row);
-  expect(mockPush).toHaveBeenLastCalledWith('/saved');
+  expect(mockNavigate).toHaveBeenLastCalledWith('/export'); // the Export tab's first step
 
   // one waiting again: To export
   await savedAre(summary('sale', 100, EXPORTED), summary('sale', 200));

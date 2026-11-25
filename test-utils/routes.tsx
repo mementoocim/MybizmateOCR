@@ -18,8 +18,9 @@ export type RouteFile =
   | '(tabs)/sessions/[id]'
   | '(tabs)/export/_layout'
   | '(tabs)/export/index'
+  | '(tabs)/export/[which]'
+  | '(tabs)/export/invoices'
   | 'result'
-  | 'saved'
   | 'lists'
   | 'licenses'
   | 'license'
@@ -52,8 +53,9 @@ export const SCREEN_NAMES: Record<Exclude<RouteFile, Layout>, string> = {
   '(tabs)/sessions/index': 'Sessions',
   '(tabs)/sessions/[id]': 'Session',
   '(tabs)/export/index': 'Export',
+  '(tabs)/export/[which]': 'Export file',
+  '(tabs)/export/invoices': 'See invoices',
   result: 'Scan',
-  saved: 'Saved',
   lists: 'Your lists',
   licenses: 'Open-source licenses',
   license: 'License',

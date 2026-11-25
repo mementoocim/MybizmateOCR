@@ -133,7 +133,6 @@ test('the Scan screen, Your lists, the licenses and the team screens sit above t
     ['/lists', 'Your lists'],
     ['/licenses', 'Open-source licenses'],
     ['/license', 'License'],
-    ['/saved', 'Saved'],
     ['/speed', 'Speed test'],
     ['/training', 'Training data'],
   ]) {

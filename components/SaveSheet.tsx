@@ -4,7 +4,7 @@ import { StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { type CertView, type PayorStatus, periodName, taxWithheld } from '../lib/cert';
 import type { Terms } from '../lib/checks/finalize';
 import { peso, prettyDate } from '../lib/format';
-import { usePushOnce } from '../lib/navigation';
+import { useOpenOnce } from '../lib/navigation';
 import { type PartyStatus, type SaleView, taxTypeFromBoxes } from '../lib/sale';
 import { saveScan } from '../lib/saved';
 import type { Kind, SaveDetails, SourceTag, StoredScan } from '../lib/scans';
@@ -215,11 +215,12 @@ export function CertSaveSheet({
 
 /**
  * The save itself: the scan is saved (again) with what the sheet asks. Then the sheet closes, and a snackbar says so,
- * "Saved as a sale" (or a purchase, or a 2307; "Changes saved" for a re-save), with View, which opens Saved for the
- * kind. A save that fails keeps the sheet open, and says so in it. Its promise settles when it's done.
+ * "Saved as a sale" (or a purchase, or a 2307; "Changes saved" for a re-save), with View, which opens See invoices
+ * for the kind in the Export tab. A save that fails keeps the sheet open, and says so in it. Its promise settles when
+ * it's done.
  */
 function useSave(scan: StoredScan, kind: Kind, failed: string, onClose: () => void) {
-  const push = usePushOnce();
+  const { navigate } = useOpenOnce();
   return async (details: SaveDetails, tag: SourceTag | null): Promise<void> => {
     const wasSaved = scan.saved !== null; // as the scan was before this save
     try {
@@ -231,7 +232,8 @@ function useSave(scan: StoredScan, kind: Kind, failed: string, onClose: () => vo
     onClose();
     toast(wasSaved ? 'Changes saved' : `Saved as a ${kind}`, {
       label: 'View',
-      onPress: () => push({ pathname: '/saved', params: { kind } }),
+      // See invoices for the kind, in the Export tab, with its first step under it (the plan's call 14)
+      onPress: () => navigate({ pathname: '/export/invoices', params: { kind } }, { withAnchor: true }),
     });
   };
 }

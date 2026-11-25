@@ -64,8 +64,11 @@ export default function Home() {
   }, [settingUp, listsDone, defaultsDone]);
 
   const firstRun = recent.length === 0 && saved.length === 0; // a sample counts as a scan
-  // Saved, for one kind (Saved reads the kind) or every kind
-  const showSaved = (kind?: Kind) => (kind ? push({ pathname: '/saved', params: { kind } }) : push('/saved'));
+  // The Export tab: a kind's file, with the tab's first step under it; or the first step, for every kind
+  const openExport = (kind?: Kind) =>
+    kind
+      ? navigateOnce({ pathname: '/export/[which]', params: { which: kind } }, { withAnchor: true })
+      : navigateOnce('/export');
 
   const header = (
     <Header
@@ -136,7 +139,7 @@ export default function Home() {
           </>
         )}
 
-        {saved.length > 0 && <ToExport saved={saved} onOpen={showSaved} />}
+        {saved.length > 0 && <ToExport saved={saved} onOpen={openExport} />}
 
         {recent.length > 0 && (
           <>
@@ -207,8 +210,8 @@ function Tips() {
 
 /**
  * The saved scans: a row per kind with any waiting to export (lib/exportFile's waitingOf, as Export counts them), with
- * their count (figureSmall) and total (figure), each opening Saved for its kind; or, with none waiting, one row saying
- * everything is exported.
+ * their count (figureSmall) and total (figure), each opening its file in the Export tab; or, with none waiting, one row
+ * saying everything is exported, which opens the tab, as All saved does.
  */
 function ToExport({ saved, onOpen }: { saved: readonly SavedSummary[]; onOpen: (kind?: Kind) => void }) {
   if (waitingOf(null, saved).length === 0) {

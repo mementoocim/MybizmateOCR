@@ -24,17 +24,24 @@ import { pinToday } from '../test-utils/today';
 // Design B §9.6, and §9.11 for annotation mode: the save sheets. A summary of the import row (a 2307's rows), today's
 // fields restyled, a warning banner for what's still marked to check, then Cancel and the save pinned under them. The
 // save loads while it runs and runs once; after it, the sheet closes and a snackbar says so, with View, which opens
-// Saved for the kind.
+// See invoices for the kind, in the Export tab (the plan's call 14).
 
 let mockParams: { id?: string; from?: string } = {};
 let mockTeam = false;
 const mockToast = jest.fn();
 const mockPush = jest.fn();
+const mockDismissTo = jest.fn(); // down to a tab: View's See invoices, in the Export tab (lib/navigation)
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
-  useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
-  useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: mockPush }),
+  // the Scan screen is above the tabs (lib/navigation: going back, and whether a screen is in the tabs)
+  useNavigation: () => ({
+    canGoBack: () => true,
+    goBack: jest.fn(),
+    getState: () => ({ type: 'stack' }),
+    getParent: () => undefined,
+  }),
+  useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: mockPush, dismissTo: mockDismissTo }),
   // a screen's pushes run once until it's focused again (lib/navigation)
   useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
   useIsFocused: () => true,
@@ -215,7 +222,7 @@ test('the purchase sheet: the supplier as typed, with New, and the expense accou
   await press(screen.getByTestId('save-confirm'));
   expect(mockToast).toHaveBeenCalledWith('Saved as a purchase', VIEW);
   lastAction().onPress();
-  expect(mockPush).toHaveBeenCalledWith({ pathname: '/saved', params: { kind: 'purchase' } });
+  expect(mockDismissTo).toHaveBeenCalledWith({ pathname: '/export/invoices', params: { kind: 'purchase' } }, { withAnchor: true });
 });
 
 test('the customer: New when it goes out as written, and an unsure match says so', async () => {
@@ -345,7 +352,7 @@ test('a double tap saves once', async () => {
   expect(screen.queryByTestId('sheet-panel')).toBeNull();
 });
 
-test('after a save, a snackbar with View opens Saved for that kind', async () => {
+test("a save's View opens See invoices for its kind", async () => {
   const id = await show('inv_0007');
   await saveSale();
   // the sheet has closed, and the strip and the saved line show the saved state
@@ -356,8 +363,9 @@ test('after a save, a snackbar with View opens Saved for that kind', async () =>
   expect(mockToast).toHaveBeenCalledTimes(1);
   expect(mockToast).toHaveBeenCalledWith('Saved as a sale', VIEW);
   expect(mockPush).not.toHaveBeenCalled();
+  expect(mockDismissTo).not.toHaveBeenCalled();
   lastAction().onPress();
-  expect(mockPush).toHaveBeenCalledWith({ pathname: '/saved', params: { kind: 'sale' } });
+  expect(mockDismissTo).toHaveBeenCalledWith({ pathname: '/export/invoices', params: { kind: 'sale' } }, { withAnchor: true });
 });
 
 test('a re-save says Changes saved', async () => {
@@ -368,7 +376,7 @@ test('a re-save says Changes saved', async () => {
   await press(screen.getByTestId('save-confirm'));
   expect(mockToast).toHaveBeenLastCalledWith('Changes saved', VIEW);
   lastAction().onPress();
-  expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/saved', params: { kind: 'sale' } });
+  expect(mockDismissTo).toHaveBeenLastCalledWith({ pathname: '/export/invoices', params: { kind: 'sale' } }, { withAnchor: true });
 });
 
 test("a failed save keeps the sheet open, and says so in it, not behind it", async () => {
@@ -401,7 +409,7 @@ test("a failed save keeps the sheet open, and says so in it, not behind it", asy
   expect(screen.queryByTestId('sheet-panel')).toBeNull();
   expect(screen.getByText('Saved as a sale')).toBeOnTheScreen();
   await press(screen.getByRole('button', { name: 'View' }));
-  expect(mockPush).toHaveBeenCalledWith({ pathname: '/saved', params: { kind: 'sale' } });
+  expect(mockDismissTo).toHaveBeenCalledWith({ pathname: '/export/invoices', params: { kind: 'sale' } }, { withAnchor: true });
 
   // a 2307's says it for a 2307
   save.mockRejectedValueOnce(new Error('No space left on device'));
@@ -538,7 +546,7 @@ test('the 2307 sheet: Payor, Period, Tax withheld, the offset account', async ()
   expect(getScan(id)!.saved!.details).toEqual({ account: '1205' });
   expect(mockToast).toHaveBeenCalledWith('Saved as a 2307', VIEW);
   lastAction().onPress();
-  expect(mockPush).toHaveBeenCalledWith({ pathname: '/saved', params: { kind: '2307' } });
+  expect(mockDismissTo).toHaveBeenCalledWith({ pathname: '/export/invoices', params: { kind: '2307' } }, { withAnchor: true });
 });
 
 test('saving a 2307: the first save asks for the offset account', async () => {
