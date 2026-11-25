@@ -1,0 +1,1042 @@
+diff --git a/__tests__/certificate.test.tsx b/__tests__/certificate.test.tsx
+index d1298f46..befc382d 100644
+--- a/__tests__/certificate.test.tsx
++++ b/__tests__/certificate.test.tsx
+@@ -26,6 +26,8 @@ jest.mock('expo-router', () => ({
+   useLocalSearchParams: () => mockParams,
+   useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
+   useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: jest.fn() }),
++  // the Scan screen's presses that open or leave run once until it's focused again (lib/navigation)
++  useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
+   useIsFocused: () => true,
+ }));
+ jest.mock('../modules/scanner', () => ({
+@@ -64,8 +66,12 @@ async function show(
+   const result = parseScanResult(coreJson(stem));
+   opts.edit?.(result);
+   const source: ScanSource = result.source === 'pdf' ? 'pdf' : 'gallery';
+-  const id = addScan({ label: `PDF: ${stem}.pdf`, source, result });
+-  for (const [box, text] of Object.entries(opts.edits ?? {})) setEdit(id, box, text);
++  // in act: the screen a test showed before re-renders with the sessions (useSessions)
++  const id = await act(async () => {
++    const added = addScan({ label: `PDF: ${stem}.pdf`, source, result });
++    for (const [box, text] of Object.entries(opts.edits ?? {})) setEdit(added, box, text);
++    return added;
++  });
+   mockParams = { id };
+   await render(<Result />);
+   return id;
+diff --git a/__tests__/home.test.tsx b/__tests__/home.test.tsx
+index b47f9811..c601b0a8 100644
+--- a/__tests__/home.test.tsx
++++ b/__tests__/home.test.tsx
+@@ -438,7 +438,8 @@ test('recent scans: title, time and form, and the badge; the caption says 20', a
+   // the badge: spoken with its row, not a stop of its own (ruling T4-4)
+   expect(within(row).getByText('Checks passed', { includeHiddenElements: true })).toHaveStyle({ color: colors.success });
+   await press(row);
+-  expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/result', params: { id: recentScans()[0].id, from: 'recent' } });
++  // from a list: the Scan screen's Retake goes back (ruling P-F16, until Task 12's Home)
++  expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/result', params: { id: recentScans()[0].id, from: 'list' } });
+   expect(screen.getByText('The last 20 scans stay here. Save a scan to keep it.')).toHaveStyle({
+     ...type.label,
+     color: colors.mute,
+diff --git a/__tests__/parties.test.tsx b/__tests__/parties.test.tsx
+index f979c6b0..cb2962fb 100644
+--- a/__tests__/parties.test.tsx
++++ b/__tests__/parties.test.tsx
+@@ -25,6 +25,8 @@ jest.mock('expo-router', () => ({
+   useLocalSearchParams: () => mockParams,
+   useNavigation: () => ({ canGoBack: () => true, goBack: jest.fn() }), // going back (lib/navigation)
+   useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: jest.fn() }),
++  // the Scan screen's presses that open or leave run once until it's focused again (lib/navigation)
++  useFocusEffect: (effect: () => void) => require('../test-utils/screenFocus').useFocusEffect(effect),
+   useIsFocused: () => true,
+ }));
+ jest.mock('../modules/scanner', () => ({
+@@ -66,7 +68,10 @@ const PENA = {
+ 
+ /** Sample 0007 (its customer: Torres Construction Supply, in the made-up lists; its first item: Sugar). */
+ async function showSample(): Promise<string> {
+-  const id = addScan({ label: 'Sample 0007', source: 'sample', result: parseScanResult(coreJson('inv_0007')) });
++  // in act: the screen a test showed before re-renders with the sessions (useSessions)
++  const id = await act(async () =>
++    addScan({ label: 'Sample 0007', source: 'sample', result: parseScanResult(coreJson('inv_0007')) }),
++  );
+   mockParams = { id };
+   await render(<Result />);
+   return id;
+@@ -74,7 +79,10 @@ async function showSample(): Promise<string> {
+ 
+ /** The same invoice from the camera (or another fixture's): a real scan, whose names can be added to the lists. */
+ async function showScan(stem = 'inv_0007'): Promise<string> {
+-  const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson(stem)) });
++  // in act: the screen a test showed before re-renders with the sessions (useSessions)
++  const id = await act(async () =>
++    addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson(stem)) }),
++  );
+   mockParams = { id };
+   await render(<Result />);
+   return id;
+@@ -133,7 +141,7 @@ test("the customer's boxes come under what the camera saw, or a text PDF's text"
+   expect(sheet().getByRole('header', { name: 'What the camera saw' })).toBeTruthy();
+ 
+   const result = parseScanResult(coreJson('sales_text_0'));
+-  const id = addScan({ label: 'PDF: sales_text_0.pdf', source: 'pdf', result });
++  const id = await act(async () => addScan({ label: 'PDF: sales_text_0.pdf', source: 'pdf', result }));
+   mockParams = { id };
+   await render(<Result />);
+   await press(screen.getByText('Customer'));
+diff --git a/__tests__/result.test.tsx b/__tests__/result.test.tsx
+index ec531dde..500d56fe 100644
+--- a/__tests__/result.test.tsx
++++ b/__tests__/result.test.tsx
+@@ -12,6 +12,8 @@ import { clearItems, lists } from '../lib/lists';
+ import * as savedStore from '../lib/saved';
+ import { markExported, savedSummary, saveScan } from '../lib/saved';
+ import { addScan, confirmBox, getScan, loadRecent, setEdit, updateScan } from '../lib/scans';
++import * as sessionStore from '../lib/session';
++import { currentSession, loadSession } from '../lib/session';
+ import type { ScanSource } from '../lib/scans';
+ import { settings, updateSettings } from '../lib/settings';
+ import { colors, space, type } from '../lib/theme';
+@@ -28,11 +30,20 @@ import { pinToday } from '../test-utils/today';
+ // the invoice as a ledger and the footnote; the bottom bar holds Retake and the save. Every row opens what the camera
+ // saw in its boxes, each box fixable, and the checks run again.
+ 
+-let mockParams: { id?: string; from?: string } = {};
++let mockParams: { id?: string; from?: string; session?: string } = {};
+ let mockTeam = false;
+-const mockRouter = { replace: jest.fn(), push: jest.fn(), dismissTo: jest.fn() }; // dismissTo: down to the camera tab
+-/** The screen's own navigation: going back (lib/navigation's useGoBackOrHome) is its. */
+-const mockNavigation = { canGoBack: jest.fn(() => true), goBack: jest.fn() };
++// dismissTo: down to a tab (the camera, or a session's screen in Sessions), this screen gone
++const mockRouter = { replace: jest.fn(), push: jest.fn(), dismissTo: jest.fn(), navigate: jest.fn() };
++/**
++ * The screen's own navigation: going back (lib/navigation's useGoBackOrHome) is its. It's in the root Stack, above the
++ * tabs (lib/navigation's tabsOnTop), so a tab opens with dismissTo.
++ */
++const mockNavigation = {
++  canGoBack: jest.fn(() => true),
++  goBack: jest.fn(),
++  getState: () => ({ type: 'stack' }),
++  getParent: () => undefined,
++};
+ const mockEnhance = jest.fn(async (_uri: string, mode: string) => `file:///x/${mode}.img`);
+ const mockSave = jest.fn();
+ const mockToast = jest.fn();
+@@ -87,7 +98,10 @@ async function show(
+ ): Promise<string> {
+   const result = parseScanResult(coreJson(stem));
+   opts.edit?.(result);
+-  const id = addScan({ label: opts.label ?? 'A scan', source: opts.source ?? 'sample', sampleId: opts.sampleId, result });
++  // in act: the screen a test showed before re-renders with the sessions (useSessions)
++  const id = await act(async () =>
++    addScan({ label: opts.label ?? 'A scan', source: opts.source ?? 'sample', sampleId: opts.sampleId, result }),
++  );
+   mockParams = { id, from: opts.from };
+   await render(<Result />);
+   return id;
+@@ -99,7 +113,7 @@ const DETAILS = { taxType: 'VAT', account: '4010', terms: 'account', atc: '' } a
+ async function showSaved(stem: string): Promise<string> {
+   const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson(stem)) });
+   await saveScan(id, DETAILS);
+-  mockParams = { id, from: 'saved' };
++  mockParams = { id, from: 'list' };
+   await render(<Result />);
+   return id;
+ }
+@@ -157,9 +171,9 @@ test('the header names the form; its subtitle has the number and the read time',
+   // RNTL's text match counts a no-break space as a space, so the line's own text pins it: the read time keeps its unit
+   // on its line (QA pass 2, a Service Invoice at 100%: "· READ IN 3.7" / "S")
+   expect(screen.getByText(/ · Read in /).props.children).toBe(`SI no. ${no} · Read in 3.2\u00A0s`);
+-  // On its right, the photo's thumbnail; ⋮ only once it's saved.
++  // On its right, the photo's thumbnail, and ⋮, which deletes it, saved or not (ruling P-F10)
+   expect(within(screen.getByTestId('header')).getByRole('button', { name: 'Photo of the form' })).toBeOnTheScreen();
+-  expect(screen.queryByRole('button', { name: 'More options' })).toBeNull();
++  expect(within(screen.getByTestId('header')).getByRole('button', { name: 'More options' })).toBeOnTheScreen();
+ 
+   // A Service Invoice names its own number; a 2307 has none; a text PDF says where its boxes came from.
+   await show('svc_0000', { source: 'gallery' });
+@@ -512,7 +526,7 @@ test('Check every box first keeps its list with one box left, and gives focus ba
+   // Ruling T13-5: milestone 4 opened the list here; the one-box shortcut is for rows
+   mockTeam = true;
+   await act(async () => updateSettings({ annotation: true }));
+-  const id = await show('inv_0007', { source: 'gallery', from: 'recent' });
++  const id = await show('inv_0007', { source: 'gallery', from: 'list' });
+   await act(async () => {
+     uncheckedBoxes(getScan(id)!)
+       .filter((box) => box !== 'item3_unit')
+@@ -702,13 +716,13 @@ test('not found: a PDF chooses a PDF; Retake opens the camera, the camera app ag
+   await show('blank_page', { source: 'camera_app' });
+   await press(button('Retake'));
+   expect(mockCameraApp).toHaveBeenCalledTimes(1);
+-  await show('blank_page', { source: 'gallery', from: 'recent' });
++  await show('blank_page', { source: 'gallery', from: 'list' });
+   await press(button('Retake'));
+   expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+ 
+   // with nothing under it, the camera (ruling T6-2: the tabs are the Stack's anchor, so a fallback)
+   mockNavigation.canGoBack.mockReturnValue(false);
+-  await show('blank_page', { source: 'gallery', from: 'recent' });
++  await show('blank_page', { source: 'gallery', from: 'list' });
+   await press(button('Retake'));
+   expect(mockRouter.replace).toHaveBeenLastCalledWith('/camera');
+   expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+@@ -752,7 +766,7 @@ test('a saved scan that changed says so and how to update the export', async ()
+ test('deleting from ⋮ goes back without flashing that the scan is gone', async () => {
+   const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('inv_0007')) });
+   await saveScan(id, DETAILS);
+-  mockParams = { id, from: 'saved' };
++  mockParams = { id, from: 'list' };
+   // Each commit, as React makes it: does the screen say the scan is gone, even for a frame?
+   let watching = false;
+   let flashes = 0;
+@@ -797,7 +811,7 @@ test('deleting from ⋮ when the navigator lets go of the screen at once: still
+   // react-native-screens animates a popped screen's native views out, so React may let go of it in the same render
+   const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('inv_0007')) });
+   await saveScan(id, DETAILS);
+-  mockParams = { id, from: 'saved' };
++  mockParams = { id, from: 'list' };
+   const navigator = { letGo: () => {} };
+   function Stack() {
+     const [shown, setShown] = useState(true);
+@@ -869,18 +883,18 @@ test('a scan that is gone says so', async () => {
+   expect(screen.getByText('This scan is no longer here. Go back and read the photo again.')).toBeOnTheScreen();
+ });
+ 
+-test('from a read, TalkBack starts at the strip; opened from Home or Saved, it stays put', async () => {
++test('from a read, TalkBack starts at the strip; opened from a list or a session, it stays put', async () => {
+   await show('inv_0007');
+   expect(focusedTestIDs()).toEqual([['status-strip', 'focus']]);
+   focus.mockClear();
+-  await show('inv_0007', { from: 'recent' });
+-  await show('inv_0007', { from: 'saved' });
++  await show('inv_0007', { from: 'list' });
++  await show('inv_0007', { from: 'session' });
+   await show('blank_page', { source: 'gallery' }); // no form, no strip
+   expect(focus).not.toHaveBeenCalled();
+ });
+ 
+ test('a sheet gives TalkBack focus back to the row that opened it; a chip, to its row', async () => {
+-  const id = await show('inv_0007', { from: 'recent' });
++  const id = await show('inv_0007', { from: 'list' });
+   await press(screen.getByTestId('row-terms'));
+   expect(header('Terms')).toBeOnTheScreen();
+   focus.mockClear();
+@@ -896,7 +910,7 @@ test('a sheet gives TalkBack focus back to the row that opened it; a chip, to it
+ 
+ test('Save in a one-box sheet sends TalkBack focus to the strip, which says the new state', async () => {
+   // Ruling T13-1: the sheet's own focus return, once it has gone, lands on the strip, not the row
+-  const id = await show('inv_0007', { from: 'recent' });
++  const id = await show('inv_0007', { from: 'list' });
+   await press(screen.getByTestId('row-date'));
+   focus.mockClear();
+   await act(async () => fireEvent.changeText(screen.getByLabelText('What the box says'), '13/45/2026'));
+@@ -944,7 +958,7 @@ test('closing a save sheet gives TalkBack focus back to Save', async () => {
+   /** The last view TalkBack focus went to, as its pressable's props. */
+   const lastFocus = () => focus.mock.calls.at(-1);
+   // an invoice's save sheet
+-  await show('inv_0007', { source: 'gallery', from: 'recent' });
++  await show('inv_0007', { source: 'gallery', from: 'list' });
+   await press(screen.getByTestId('save-open'));
+   expect(header('Save as a sale')).toBeOnTheScreen();
+   focus.mockClear();
+@@ -956,7 +970,7 @@ test('closing a save sheet gives TalkBack focus back to Save', async () => {
+   ]);
+ 
+   // a 2307's
+-  await show('bir2307_text_1', { source: 'pdf', from: 'recent' });
++  await show('bir2307_text_1', { source: 'pdf', from: 'list' });
+   await press(screen.getByTestId('save-open'));
+   expect(header('Save 2307')).toBeOnTheScreen();
+   focus.mockClear();
+@@ -970,7 +984,7 @@ test('closing a save sheet gives TalkBack focus back to Save', async () => {
+   // what Save opens first in annotation mode: the boxes not checked yet
+   mockTeam = true;
+   await act(async () => updateSettings({ annotation: true }));
+-  await show('inv_0007', { source: 'gallery', from: 'recent' });
++  await show('inv_0007', { source: 'gallery', from: 'list' });
+   await press(screen.getByTestId('save-open'));
+   expect(header('Check every box first')).toBeOnTheScreen();
+   focus.mockClear();
+@@ -1206,7 +1220,7 @@ test('Retake runs once, however fast it is tapped twice (ruling T25b-2)', async
+       await fireEvent.press(button('Retake'));
+       await fireEvent.press(button('Retake'));
+     });
+-  await show('inv_0007', { source: 'camera', from: 'recent' }); // opened from Recent scans: back
++  await show('inv_0007', { source: 'camera', from: 'list' }); // opened from a list: back
+   await doubleTap();
+   expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+ 
+@@ -1215,7 +1229,7 @@ test('Retake runs once, however fast it is tapped twice (ruling T25b-2)', async
+   expect(mockNavigation.goBack).toHaveBeenCalledTimes(2);
+ 
+   mockNavigation.canGoBack.mockReturnValue(false); // with nothing under it: the camera, once
+-  await show('inv_0007', { source: 'gallery', from: 'recent' });
++  await show('inv_0007', { source: 'gallery', from: 'list' });
+   await doubleTap();
+   expect(mockRouter.replace.mock.calls).toEqual([['/camera']]);
+ 
+@@ -1261,3 +1275,184 @@ test('a retake shows the reading card for what it reads, and a read that fails s
+   expect(dialogWords(alert)).toStrictEqual([["Couldn't open that photo."]]); // one sentence: a title alone
+   expect(mockToast).not.toHaveBeenCalled();
+ });
++
++// Spec §6.4 (the plan's calls 15 and 16): the Scan screen in a session, opened from its screen (from: 'session'), or
++// from Done's one photo (no from). Each test takes its own session, so the scans other tests left don't join it.
++
++let sessions = 0;
++/** A new session's id, and a camera photo of a fixture in it, taken `minute` minutes past 9 on the pinned day. */
++function newSession() {
++  const id = `S${++sessions}`;
++  const take = (stem: string, minute: number) =>
++    addScan({
++      label: 'Camera photo',
++      source: 'camera',
++      session: id,
++      at: new Date(2026, 10, 18, 9, minute),
++      result: parseScanResult(coreJson(stem)),
++    });
++  return { id, take };
++}
++/** Opens a scan's Scan screen in its session: from its screen, by default, or from Done's one photo ('done': no from). */
++async function openIn(session: string, id: string, by: 'session' | 'done' = 'session') {
++  mockParams = { id, from: by === 'done' ? undefined : by, session };
++  await render(<Result />);
++}
++const doubleTap = (name: string, second = name) =>
++  act(async () => {
++    await fireEvent.press(button(name));
++    await fireEvent.press(button(second));
++  });
++
++test('in a session, after a save, Next invoice replaces this screen with the next one', async () => {
++  const s = newSession();
++  const a = s.take('inv_0007', 0);
++  s.take('blank_page', 1); // not found: Next invoice skips it
++  const c = s.take('inv_0007', 2);
++  await openIn(s.id, a);
++  expect(barButtons()).toEqual(['Retake', 'Save sale']); // not saved yet: today's bar
++  await act(async () => saveScan(a, DETAILS));
++  expect(barButtons()).toEqual(['Retake', 'Next invoice']);
++  await press(button('Next invoice'));
++  expect(mockRouter.replace.mock.calls).toEqual([[{ pathname: '/result', params: { id: c, from: 'session', session: s.id } }]]);
++  expect(mockRouter.push).not.toHaveBeenCalled();
++  expect(mockRouter.dismissTo).not.toHaveBeenCalled();
++
++  // any saved, unchanged scan in a session (ruling P-F17): from Done's one photo too
++  mockRouter.replace.mockClear();
++  await openIn(s.id, a, 'done');
++  expect(barButtons()).toEqual(['Retake', 'Next invoice']);
++  await press(button('Next invoice'));
++  expect(mockRouter.replace.mock.calls).toEqual([[{ pathname: '/result', params: { id: c, from: 'session', session: s.id } }]]);
++
++  // opened from a list, it's in no session: today's bar
++  mockParams = { id: a, from: 'list' };
++  await render(<Result />);
++  expect(barButtons()).toEqual(['Retake', 'Save changes']);
++});
++
++test('the last one saved: Back to session', async () => {
++  const s = newSession();
++  const a = s.take('inv_0007', 0);
++  const b = s.take('inv_0007', 1);
++  await saveScan(a, DETAILS);
++  await openIn(s.id, b);
++  await act(async () => saveScan(b, DETAILS));
++  expect(barButtons()).toEqual(['Retake', 'Back to session']);
++  await press(button('Back to session'));
++  // the session's screen in the Sessions tab, Sessions under it, this screen gone
++  expect(mockRouter.dismissTo.mock.calls).toEqual([
++    [{ pathname: '/sessions/[id]', params: { id: s.id } }, { withAnchor: true }],
++  ]);
++  expect(mockRouter.replace).not.toHaveBeenCalled();
++  expect(mockRouter.navigate).not.toHaveBeenCalled();
++
++  // saved, from its session's screen: Retake goes back to it
++  await openIn(s.id, b);
++  await press(button('Retake'));
++  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
++});
++
++test('a change after the save brings Save changes back', async () => {
++  const s = newSession();
++  const a = s.take('inv_0007', 0);
++  s.take('inv_0007', 1);
++  await openIn(s.id, a);
++  await act(async () => saveScan(a, DETAILS));
++  expect(barButtons()).toEqual(['Retake', 'Next invoice']);
++  await act(async () => setEdit(a, 'invoice_no', '0007999'));
++  expect(barButtons()).toEqual(['Retake', 'Save changes']);
++  expect(screen.getByTestId('save-open')).toHaveTextContent('Save changes');
++});
++
++test('in a session, the not-found bar is Retake alone, and Retake opens the camera in the session, once', async () => {
++  await loadSession(); // no camera session yet
++  const relink = jest.spyOn(sessionStore, 'retakeIn');
++  const s = newSession();
++  const blank = s.take('blank_page', 0);
++  await openIn(s.id, blank);
++  expect(barButtons()).toEqual(['Retake']); // the gallery and the PDF are in the camera's tray
++  await doubleTap('Retake');
++  expect(mockRouter.dismissTo.mock.calls).toEqual([['/camera']]);
++  expect(relink).toHaveBeenCalledTimes(1); // a refused tap re-links nothing
++  expect(currentSession()).toMatchObject({ id: s.id, open: true, replaces: blank });
++  expect(mockNavigation.goBack).not.toHaveBeenCalled();
++  expect(mockLibrary).not.toHaveBeenCalled();
++
++  // a PDF's too, and from Done's one photo
++  mockRouter.dismissTo.mockClear();
++  const pdf = await act(async () =>
++    addScan({ label: 'PDF', source: 'pdf', session: s.id, result: parseScanResult(coreJson('blank_page')) }),
++  );
++  await openIn(s.id, pdf, 'done');
++  expect(barButtons()).toEqual(['Retake']);
++  await press(button('Retake'));
++  expect(mockRouter.dismissTo.mock.calls).toEqual([['/camera']]);
++  expect(currentSession()).toMatchObject({ id: s.id, replaces: pdf });
++  expect(mockPick).not.toHaveBeenCalled();
++
++  // an unsaved scan whose form was found, from a gallery photo: the camera in the session too, not the gallery
++  mockRouter.dismissTo.mockClear();
++  const found = await act(async () =>
++    addScan({ label: 'Photo', source: 'gallery', session: s.id, result: parseScanResult(coreJson('inv_0007')) }),
++  );
++  await openIn(s.id, found);
++  expect(barButtons()).toEqual(['Retake', 'Save sale']);
++  await press(button('Retake'));
++  expect(mockRouter.dismissTo.mock.calls).toEqual([['/camera']]);
++  expect(currentSession()).toMatchObject({ id: s.id, replaces: found });
++  expect(mockLibrary).not.toHaveBeenCalled();
++  relink.mockRestore();
++});
++
++test('Next invoice and Back to session run once on a double tap', async () => {
++  // Review Focus 5: inside one act() scope, nothing re-renders between the two taps
++  const s = newSession();
++  const a = s.take('inv_0007', 0);
++  s.take('inv_0007', 1);
++  await saveScan(a, DETAILS);
++  await openIn(s.id, a);
++  await doubleTap('Next invoice');
++  expect(mockRouter.replace).toHaveBeenCalledTimes(1);
++
++  const t = newSession();
++  const only = await act(async () => t.take('inv_0007', 0));
++  await act(async () => saveScan(only, DETAILS));
++  await openIn(t.id, only, 'done');
++  await doubleTap('Back to session');
++  expect(mockRouter.dismissTo).toHaveBeenCalledTimes(1);
++
++  // one guard for the screen (ruling T6-1): a Retake, then Next invoice, in one go, leaves it once
++  mockRouter.replace.mockClear();
++  await openIn(s.id, a);
++  await doubleTap('Retake', 'Next invoice');
++  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
++  expect(mockRouter.replace).not.toHaveBeenCalled();
++});
++
++test('⋮ deletes an unsaved scan from before the update, with no session (ruling P-F10)', async () => {
++  // kept before camera first: no session id, so it opens straight to its Scan screen, and only ⋮ can delete it
++  const id = addScan({ label: 'Photo from gallery', source: 'gallery', result: parseScanResult(coreJson('inv_0007')) });
++  expect(getScan(id)!.session).toBeUndefined();
++  mockParams = { id, from: 'list' };
++  await render(<Result />);
++  placeMenu();
++  await press(button('More options'));
++  expect(screen.queryByRole('menuitem', { name: 'Delete saved scan' })).toBeNull();
++  await press(screen.getByRole('menuitem', { name: 'Delete this scan' }));
++  expect(alert).toHaveBeenCalledWith('Delete this scan?', "It's removed from this phone.", [
++    { text: 'Cancel', style: 'cancel', onPress: expect.any(Function) },
++    { text: 'Delete', style: 'destructive', onPress: expect.any(Function) },
++  ]);
++  expect(getScan(id)).toBeDefined(); // nothing yet: Cancel keeps it
++  await act(async () => alertButtons()[1].onPress!());
++  expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
++  expect(getScan(id)).toBeUndefined();
++  // it goes back showing its header as it was, never that the scan is gone
++  expect(header('MyBizMate Sales Invoice')).toBeOnTheScreen();
++  expect(screen.queryByText(/no longer here/)).toBeNull();
++
++  // a scan whose form wasn't found has ⋮ too
++  await show('blank_page', { source: 'gallery' });
++  expect(within(screen.getByTestId('header')).getByRole('button', { name: 'More options' })).toBeOnTheScreen();
++});
+diff --git a/__tests__/save.test.tsx b/__tests__/save.test.tsx
+index 1e2759f1..5b8a7e7e 100644
+--- a/__tests__/save.test.tsx
++++ b/__tests__/save.test.tsx
+@@ -26,7 +26,7 @@ import { pinToday } from '../test-utils/today';
+ // save loads while it runs and runs once; after it, the sheet closes and a snackbar says so, with View, which opens
+ // See invoices for the kind, in the Export tab (the plan's call 14).
+ 
+-let mockParams: { id?: string; from?: string } = {};
++let mockParams: { id?: string; from?: string; session?: string } = {};
+ let mockTeam = false;
+ const mockToast = jest.fn();
+ const mockPush = jest.fn();
+@@ -78,7 +78,8 @@ async function show(
+ ): Promise<string> {
+   const result = parseScanResult(coreJson(stem));
+   opts.edit?.(result);
+-  const id = addScan({ label: 'Camera photo', source: opts.source ?? 'camera', result });
++  // in act: the screen a test showed before re-renders with the sessions (useSessions)
++  const id = await act(async () => addScan({ label: 'Camera photo', source: opts.source ?? 'camera', result }));
+   mockParams = { id };
+   await render(<Result />);
+   return id;
+@@ -379,6 +380,41 @@ test('a re-save says Changes saved', async () => {
+   expect(mockDismissTo).toHaveBeenLastCalledWith({ pathname: '/export/invoices', params: { kind: 'sale' } }, { withAnchor: true });
+ });
+ 
++test("in a session the save's snackbar has no View", async () => {
++  // the plan's call 15: today's words, with no full stop (ruling P-F15); the bar goes on to the next invoice instead
++  const id = addScan({
++    label: 'Camera photo',
++    source: 'camera',
++    session: 'S-save',
++    result: parseScanResult(coreJson('inv_0007')),
++  });
++  mockParams = { id, session: 'S-save' };
++  await render(<Result />);
++  await saveSale();
++  expect(mockToast.mock.calls).toEqual([['Saved as a sale']]);
++  expect(screen.queryByTestId('save-open')).toBeNull(); // saved: Back to session, in its place
++  await act(async () => setEdit(id, 'invoice_no', '0007999'));
++  await press(screen.getByTestId('save-open')); // Save changes, after a change
++  await press(screen.getByTestId('save-confirm'));
++  expect(mockToast.mock.calls.at(-1)).toEqual(['Changes saved']);
++  // a 2307's too
++  const cert = await act(async () =>
++    addScan({
++      label: 'PDF',
++      source: 'pdf',
++      session: 'S-save',
++      result: parseScanResult(coreJson('bir2307_text_1')),
++    }),
++  );
++  mockParams = { id: cert, from: 'session', session: 'S-save' };
++  await render(<Result />);
++  await press(screen.getByTestId('save-open'));
++  await type('Offset account', '1205');
++  await press(screen.getByTestId('save-confirm'));
++  expect(mockToast.mock.calls.at(-1)).toEqual(['Saved as a 2307']);
++  expect(mockDismissTo).not.toHaveBeenCalled();
++});
++
+ test("a failed save keeps the sheet open, and says so in it, not behind it", async () => {
+   // Review Focus 1: a message raised while the sheet is open shows in the sheet's own host, above its scrim, not in
+   // the root layout's under it. These messages go through the real toast.
+@@ -811,7 +847,7 @@ test('a scan saved before the save kept its marks says only what its import row
+   const id = await show('inv_0007');
+   await checkEveryBox(id);
+   await saveSale();
+-  // its scan.json without the marks, as a save before this change wrote it, opened again from Saved
++  // its scan.json without the marks, as a save before this change wrote it, opened again from a list
+   const kept = keptScan(id);
+   delete kept.savedMarks;
+   memoryFs.files.set(`file:///docs/saved/${id}/scan.json`, JSON.stringify(kept));
+@@ -820,7 +856,7 @@ test('a scan saved before the save kept its marks says only what its import row
+     await openSaved(id);
+   });
+   expect(getScan(id)!.savedMarks).toBe('');
+-  mockParams = { id, from: 'saved' };
++  mockParams = { id, from: 'list' };
+   await render(<Result />);
+   expect(screen.getByText(SAVED)).toBeTruthy();
+   await act(async () => setEdit(id, 'item1_unit', 'pcs'));
+diff --git a/__tests__/sessionFlow.test.tsx b/__tests__/sessionFlow.test.tsx
+index b183d0e4..cc5ece3a 100644
+--- a/__tests__/sessionFlow.test.tsx
++++ b/__tests__/sessionFlow.test.tsx
+@@ -1,6 +1,8 @@
+ import { router } from 'expo-router';
+ import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+ 
++import { saveScan } from '../lib/saved';
++import { recentScans } from '../lib/scans';
+ import { currentSession, loadSession } from '../lib/session';
+ import { CAPTURE_GRACE_MS, currentShutter } from '../lib/shutter';
+ import type { ScanResult } from '../modules/scanner';
+@@ -180,3 +182,43 @@ test("Done on a second session, with the first one's screen left in Sessions, sh
+   expect(screen).toHavePathname('/camera');
+   expect(router.canGoBack()).toBe(false);
+ });
++
++test('Back to session lands on the session screen in the Sessions tab, with nothing above it', async () => {
++  // Done's one photo opens its Scan screen, in the session (the plan's call 16); once it's saved, the last one left,
++  // Back to session goes down to that session's screen, with Sessions under it, and the Scan screen gone
++  await act(async () => mockReads.splice(0).forEach((r) => r.resolve(parseScanResult(coreJson('inv_0007', null)))));
++  await act(() => loadSession());
++  memoryFs.reset();
++  photos = 0;
++  mockTakePhoto.mockClear();
++  await renderRouter(
++    appRoutes({ '(tabs)/camera': require('../app/(tabs)/camera').default, result: require('../app/result').default }),
++    { initialUrl: '/camera' },
++  );
++  await settle();
++  await send('status', { status: 'looking', form: null });
++  await shoot();
++  const id = currentSession()!.id;
++  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Done · 1' })));
++  await read();
++  await grace();
++  expect(screen).toHavePathname('/result');
++  const scan = recentScans().find((s) => s.session === id)!;
++  expect(screen).toHaveSearchParams({ id: scan.id, session: id });
++
++  await act(async () => saveScan(scan.id, { taxType: 'VAT', account: '4010', terms: 'account', atc: '' }));
++  await settle();
++  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Back to session' })));
++  await settle();
++  expect(screen).toHavePathname(`/sessions/${id}`);
++  expect(onTop()).toEqual(['Session: on top']);
++  expect(tab('Sessions')).toBeSelected();
++  expect(screen.queryByRole('button', { name: 'Back to session' })).toBeNull(); // the Scan screen has gone
++
++  await act(() => router.back());
++  expect(screen).toHavePathname('/sessions');
++  expect(onTop()).toEqual(['Sessions: on top']);
++  await act(() => router.back());
++  expect(screen).toHavePathname('/camera');
++  expect(router.canGoBack()).toBe(false);
++});
+diff --git a/app/(tabs)/index.tsx b/app/(tabs)/index.tsx
+index 890e2377..4c1e8d52 100644
+--- a/app/(tabs)/index.tsx
++++ b/app/(tabs)/index.tsx
+@@ -148,7 +148,7 @@ export default function Home() {
+               <RecentRow
+                 key={scan.id}
+                 scan={scan}
+-                onPress={() => push({ pathname: '/result', params: { id: scan.id, from: 'recent' } })}
++                onPress={() => push({ pathname: '/result', params: { id: scan.id, from: 'list' } })}
+               />
+             ))}
+             <Text style={[type.label, styles.note]}>The last 20 scans stay here. Save a scan to keep it.</Text>
+diff --git a/app/result.tsx b/app/result.tsx
+index ca5d9f7b..c3306078 100644
+--- a/app/result.tsx
++++ b/app/result.tsx
+@@ -32,19 +32,20 @@ import { Tap } from '../components/Tap';
+ import { TermsSheet } from '../components/TermsSheet';
+ import { TEAM_BUILD } from '../lib/build';
+ import { localIsoDate } from '../lib/checks/dates';
+-import { confirmDeleteSaved } from '../lib/confirmDelete';
++import { confirmDeleteScan } from '../lib/confirmDelete';
+ import { blockWords, saveBlock } from '../lib/exportRows';
+ import { flagTarget, PAYOR_ROW } from '../lib/flagTargets';
+ import { formatClock, formatMs, formatSeconds, monthDay } from '../lib/format';
+ import { FORMS } from '../lib/forms';
+ import { addItem } from '../lib/lists';
+-import { useGoBackOrHome } from '../lib/navigation';
++import { useGoBackOrHome, useOpenOnce } from '../lib/navigation';
+ import { boxValue, type SaleView } from '../lib/sale';
+ import { compareWithSample, sampleInfo } from '../lib/samples';
+ import type { SavedSummary } from '../lib/saved';
+ import { useScanFlow } from '../lib/scanFlow';
+ import { shownLabel, useScanCheck } from '../lib/scanState';
+ import { getScan, type InvoiceKind, isTextPdf, type StoredScan, subscribeRecent, updateScan } from '../lib/scans';
++import { nextToCheck, useSessions } from '../lib/sessions';
+ import { colors, radius, space, type } from '../lib/theme';
+ import { toast } from '../lib/toast';
+ import { uncheckedBoxes } from '../lib/training/boxes';
+@@ -54,7 +55,14 @@ import type { ScanResult } from '../modules/scanner';
+ // scan); the status strip is pinned under it, with a flag chip per thing to check. The scroll holds the saved line, the
+ // kind switch (invoices only), the invoice or the 2307 as a ledger, and the footnote; the bottom bar holds Retake and
+ // the save. Every row opens what the camera saw in its boxes, each box fixable, and the checks run again. When the
+-// form wasn't found, the photo and how to retake it take the strip's and the ledger's place.
++// form wasn't found, the photo and how to retake it take the strip's and the ledger's place. ⋮ deletes the scan, saved
++// or not (ruling P-F10: a scan from before the update, with no session, opens straight to this screen).
++//
++// In a session (spec §6.4, the plan's call 16: `session`, from its screen or from Done's one photo), the not-found bar
++// is Retake alone, and an unsaved scan's Retake opens the camera in that session. Once saved and unchanged, the primary
++// is Next invoice, this screen replaced by the session's next one to check, or Back to session when none is left; a
++// change after the save brings Save changes back. The save's snackbar then has no View: the bar does that job. Every
++// press that opens or leaves goes through the screen's one guard (ruling T6-1), so a double tap runs once.
+ 
+ const KINDS = [
+   { value: 'sale', label: 'Sale' },
+@@ -86,9 +94,13 @@ type Opening = SheetOpen & { n: number; rowKey?: string };
+ const dayOf = (iso: string) => monthDay(localIsoDate(new Date(iso)));
+ 
+ export default function Result() {
+-  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
+-  const flow = useScanFlow();
++  // from: 'session' (its session's screen, or Next invoice), 'list' (Sessions, a search, See invoices or Home), or none
++  // (straight from a read: Done's one photo, a sample); session: the session it's in (Done's one photo's too)
++  const { id, from, session } = useLocalSearchParams<{ id: string; from?: 'session' | 'list'; session?: string }>();
++  const once = useOpenOnce(); // one guard for every press that opens or leaves (ruling T6-1)
++  const flow = useScanFlow(once);
+   const goBackOrHome = useGoBackOrHome();
++  const { sessions, statuses } = useSessions();
+   const scan = useSyncExternalStore(subscribeRecent, () => (id ? getScan(id) : undefined));
+   const { sale, cert, state, saved, summary, annotation } = useScanCheck(scan);
+   // Deleted from ⋮: the header's words as they were, while the screen goes back.
+@@ -120,7 +132,7 @@ export default function Result() {
+   const supplier = useLingering(open?.kind === 'supplier' ? open : null);
+   const save = useLingering(open?.kind === 'save' ? open : null);
+ 
+-  // Straight from a read (not opened from Home or Saved): TalkBack starts at the strip, which says where it stands.
++  // Straight from a read (not opened from a list or a session): TalkBack starts at the strip, which says where it stands.
+   useEffect(() => {
+     if (from === undefined && stripRef.current) AccessibilityInfo.sendAccessibilityEvent(stripRef.current, 'focus');
+   }, [from]);
+@@ -141,7 +153,9 @@ export default function Result() {
+   const found = state.kind !== 'not_found';
+   const isSample = scan.source === 'sample';
+   const isSaved = saved !== 'no' && summary !== undefined;
+-  const back = from === 'recent' || from === 'saved';
++  // Retake goes back: opened from a list, or a saved scan from its session's screen (the plan's call 16)
++  const back = from === 'list' || (from === 'session' && scan.saved !== null);
++  const inSession = session !== undefined;
+   const title = found && r.form ? FORMS[r.form].title : 'Scan';
+   const subtitle = subtitleOf(scan, found, sale, isSaved ? summary : undefined);
+ 
+@@ -197,26 +211,41 @@ export default function Result() {
+   }
+ 
+   /**
+-   * ⋮ › Delete saved scan, asked as Saved's long press asks it (lib/confirmDelete). Delete first leaves, then deletes,
+-   * in the one press: the screen shows only its header from then on, so the scan's going, once saved.json is written,
+-   * never shows as "This scan is no longer here".
++   * ⋮ › Delete saved scan, or Delete this scan for one not saved, asked as a session's rows ask it (lib/confirmDelete).
++   * Delete first leaves, then deletes, in the one press: the screen shows only its header from then on, so the scan's
++   * going, once saved.json or recent.json is written, never shows as "This scan is no longer here".
+    */
+-  function confirmDelete(scanId: string) {
+-    confirmDeleteSaved(scanId, () => {
++  function confirmDelete(it: StoredScan) {
++    void confirmDeleteScan(it, () => {
+       setLeaving({ title, subtitle });
+       goBackOrHome();
+     });
+   }
+ 
+-  const retake = () => flow.retake(scan, back);
+-  const buttons: ButtonProps[] = !found
++  const retake = () => flow.retake(scan, { back, session: session ?? null });
++  const group = inSession ? sessions.find((s) => s.id === session) : undefined;
++  const next = group ? nextToCheck(group, statuses, scan.id) : null;
++  /** Saved and unchanged, in a session: on to its next scan to check, in this screen's place, or back to it. */
++  const onward: ButtonProps =
++    next !== null
++      ? {
++          label: 'Next invoice',
++          onPress: () => once.replace({ pathname: '/result', params: { id: next, from: 'session', session } }),
++        }
++      : {
++          label: 'Back to session',
++          // the session's screen in the Sessions tab, with Sessions under it, and nothing above it
++          onPress: () => once.navigate({ pathname: '/sessions/[id]', params: { id: session ?? '' } }, { withAnchor: true }),
++        };
++  // today's bar: in a session too, until it's saved, and again after a change since the save
++  const todays: ButtonProps[] = !found
+     ? [
+         scan.source === 'pdf'
+           ? { label: 'Choose a PDF', variant: 'secondary', onPress: () => flow.fromPdf({ replace: true }) }
+           : { label: 'Choose a photo', variant: 'secondary', onPress: () => flow.fromGallery({ replace: true }) },
+         {
+           label: 'Retake',
+-          // the plan's call 8: the camera, or the camera app again; opened from Home or Saved, back
++          // the plan's call 8: the camera, or the camera app again; opened from a list, back
+           onPress: back || scan.source === 'camera' || scan.source === 'camera_app' ? retake : flow.toCamera,
+         },
+       ]
+@@ -226,23 +255,25 @@ export default function Result() {
+           { label: 'Retake', variant: 'secondary', onPress: retake },
+           { label: saveLabel, testID: 'save-open', onPress: openSave, ref: saveButton },
+         ];
++  const buttons: ButtonProps[] =
++    inSession && !found
++      ? [{ label: 'Retake', onPress: retake }] // the gallery and the PDF are in the camera's tray (call 16)
++      : inSession && saved === 'unchanged'
++        ? [{ label: 'Retake', variant: 'secondary', onPress: retake }, onward]
++        : todays;
+ 
+   const header = (
+     <Header
+       title={title}
+       subtitle={subtitle}
+       right={
+-        found || isSaved ? (
+-          <>
+-            {found ? <PhotoThumb result={r} onPress={() => setViewing(true)} /> : null}
+-            {isSaved ? (
+-              // The menu's anchor: a view of its own, so Android measures it where it is.
+-              <View ref={moreRef} collapsable={false}>
+-                <IconButton icon={More} label="More options" onPress={() => setMenuOpen(true)} />
+-              </View>
+-            ) : null}
+-          </>
+-        ) : undefined
++        <>
++          {found ? <PhotoThumb result={r} onPress={() => setViewing(true)} /> : null}
++          {/* The menu's anchor: a view of its own, so Android measures it where it is. */}
++          <View ref={moreRef} collapsable={false}>
++            <IconButton icon={More} label="More options" onPress={() => setMenuOpen(true)} />
++          </View>
++        </>
+       }
+     />
+   );
+@@ -354,6 +385,7 @@ export default function Result() {
+           sale={sale}
+           onClose={closeSheet}
+           returnFocus={saveButton}
++          inSession={inSession}
+         />
+       ) : null}
+       {save && cert ? (
+@@ -364,17 +396,22 @@ export default function Result() {
+           view={cert}
+           onClose={closeSheet}
+           returnFocus={saveButton}
++          inSession={inSession}
+         />
+       ) : null}
+       <PhotoViewer visible={viewing} result={r} onClose={() => setViewing(false)} />
+-      {isSaved ? (
+-        <Menu
+-          visible={menuOpen}
+-          anchor={moreRef}
+-          items={[{ label: 'Delete saved scan', destructive: true, onPress: () => confirmDelete(scan.id) }]}
+-          onClose={() => setMenuOpen(false)}
+-        />
+-      ) : null}
++      <Menu
++        visible={menuOpen}
++        anchor={moreRef}
++        items={[
++          {
++            label: scan.saved ? 'Delete saved scan' : 'Delete this scan',
++            destructive: true,
++            onPress: () => confirmDelete(scan),
++          },
++        ]}
++        onClose={() => setMenuOpen(false)}
++      />
+       <ReadingOverlay visible={flow.reading} what={flow.readingWhat ?? 'photo'} />
+     </View>
+   );
+diff --git a/components/SaveSheet.tsx b/components/SaveSheet.tsx
+index 46407a5e..bd698a91 100644
+--- a/components/SaveSheet.tsx
++++ b/components/SaveSheet.tsx
+@@ -29,7 +29,7 @@ import { codeKeyboard, TextField } from './TextField';
+ // what's still marked to check, which saving doesn't wait for. Cancel and the save are the sheet's pinned actions
+ // (ruling T7-4). The save's press returns its promise, so the button loads while the save runs and a double tap saves
+ // once (Review Focus 3). After a save, the sheet closes, and a snackbar says so, with View, which opens Saved for the
+-// kind. A save that fails keeps the sheet open, and says so in it, above the scrim (Review Focus 1).
++// kind (none in a session). A save that fails keeps the sheet open, and says so in it, above the scrim (Review Focus 1).
+ 
+ export const TAX_TYPES = [
+   { value: 'VAT', label: 'VAT' },
+@@ -68,12 +68,14 @@ export function SaveSheet({
+   sale,
+   onClose,
+   returnFocus,
++  inSession = false,
+ }: {
+   visible: boolean;
+   scan: StoredScan;
+   sale: SaleView;
+   onClose: () => void;
+   returnFocus?: RefObject<ViewInstance | null>; // Save, which opened it
++  inSession?: boolean; // opened in a session: the snackbar after the save has no View
+ }) {
+   const s = useSyncExternalStore(subscribeSettings, settings);
+   const isSale = scan.kind === 'sale';
+@@ -84,7 +86,7 @@ export function SaveSheet({
+   const [terms, setTerms] = useState<Terms | null>(before?.terms ?? sale.terms ?? (sale.party.listParty?.terms || null));
+   const [atc, setAtc] = useState(before?.atc ?? s.atc);
+   const codes = useCodes(scan);
+-  const run = useSave(scan, isSale ? 'sale' : 'purchase', "Couldn't save the invoice.", onClose);
++  const run = useSave(scan, isSale ? 'sale' : 'purchase', "Couldn't save the invoice.", onClose, inSession);
+   const taxType = chosenType ?? sale.taxType; // the suggestion follows the VAT answer until the person picks one
+   const askVat = isSale && s.vatRegistered === null;
+   const ready = account.trim() !== '' && terms !== null && !askVat && codes.ready;
+@@ -167,17 +169,19 @@ export function CertSaveSheet({
+   view,
+   onClose,
+   returnFocus,
++  inSession = false,
+ }: {
+   visible: boolean;
+   scan: StoredScan;
+   view: CertView;
+   onClose: () => void;
+   returnFocus?: RefObject<ViewInstance | null>; // Save, which opened it
++  inSession?: boolean; // opened in a session: the snackbar after the save has no View
+ }) {
+   const s = useSyncExternalStore(subscribeSettings, settings);
+   const [account, setAccount] = useState(scan.saved?.details.account ?? s.offsetAccount);
+   const codes = useCodes(scan);
+-  const run = useSave(scan, '2307', "Couldn't save the 2307.", onClose);
++  const run = useSave(scan, '2307', "Couldn't save the 2307.", onClose, inSession);
+   const ready = account.trim() !== '' && codes.ready;
+   const { cert, payor, problems } = view;
+ 
+@@ -216,10 +220,11 @@ export function CertSaveSheet({
+ /**
+  * The save itself: the scan is saved (again) with what the sheet asks. Then the sheet closes, and a snackbar says so,
+  * "Saved as a sale" (or a purchase, or a 2307; "Changes saved" for a re-save), with View, which opens See invoices
+- * for the kind in the Export tab. A save that fails keeps the sheet open, and says so in it. Its promise settles when
+- * it's done.
++ * for the kind in the Export tab. In a session, the same words with no action (camera first's call 15): the Scan screen
++ * goes on to the next invoice, then back to the session. A save that fails keeps the sheet open, and says so in it.
++ * Its promise settles when it's done.
+  */
+-function useSave(scan: StoredScan, kind: Kind, failed: string, onClose: () => void) {
++function useSave(scan: StoredScan, kind: Kind, failed: string, onClose: () => void, inSession: boolean) {
+   const { navigate } = useOpenOnce();
+   return async (details: SaveDetails, tag: SourceTag | null): Promise<void> => {
+     const wasSaved = scan.saved !== null; // as the scan was before this save
+@@ -230,7 +235,12 @@ function useSave(scan: StoredScan, kind: Kind, failed: string, onClose: () => vo
+       return;
+     }
+     onClose();
+-    toast(wasSaved ? 'Changes saved' : `Saved as a ${kind}`, {
++    const words = wasSaved ? 'Changes saved' : `Saved as a ${kind}`;
++    if (inSession) {
++      toast(words);
++      return;
++    }
++    toast(words, {
+       label: 'View',
+       // See invoices for the kind, in the Export tab, with its first step under it (the plan's call 14)
+       onPress: () => navigate({ pathname: '/export/invoices', params: { kind } }, { withAnchor: true }),
+diff --git a/lib/navigation.ts b/lib/navigation.ts
+index 323b8293..867f2c23 100644
+--- a/lib/navigation.ts
++++ b/lib/navigation.ts
+@@ -30,6 +30,7 @@ export function useGoBackOrHome(): () => void {
+  * two different presses can't open two screens either (ruling T6-1: with a guard each, Home's Your lists then Take
+  * photo, in one go, pushed Your lists, and the camera's href, resolved over it, a second tabs).
+  * - push: a screen over this one.
++ * - replace: a screen in this one's place (the Scan screen's Next invoice: the session's next scan to check).
+  * - navigate: a tab, or a screen in one. While the tabs are on top when it runs (read then: tabsOnTop), it navigates:
+  *   the tabs switch. With a screen above them (the Scan screen), it's expo-router's dismissTo: the screens over the tabs
+  *   go, and the tabs switch, since navigate
+@@ -37,15 +38,13 @@ export function useGoBackOrHome(): () => void {
+  *   from inside the tabs). Its options are the router's: withAnchor puts a tab's own list under a screen opened in it
+  *   (Done's session screen, with Sessions under it). Its `before` runs first, and only when the guard lets the tab
+  *   open: a session screen's Retake makes that session the camera's (lib/session's retakeIn) only if the camera opens.
++ * - leave: a press that leaves this screen some other way, behind the same guard (the Scan screen's Retake going back,
++ *   or down to the camera), so a Retake and a Next invoice in one go leave it once.
+  * - busy: whether one of them has opened, until this screen is on top again: a press that isn't an open (a delete's
+  *   dialog) waits for it too.
+  * On the live root's router, useRouter(), as useGoBackOrHome goes to the camera (ruling T26-4).
+  */
+-export function useOpenOnce(): {
+-  push: (href: Href) => void;
+-  navigate: (href: Href, options?: NavigateOptions, before?: () => void) => void;
+-  busy: () => boolean;
+-} {
++export function useOpenOnce(): OpenOnce {
+   const router = useRouter();
+   const navigation = useNavigation();
+   const opened = useRef(false); // set at once, so a second press is refused before the screen or tab is up
+@@ -63,6 +62,8 @@ export function useOpenOnce(): {
+   };
+   return {
+     push: (href) => once(() => router.push(href)),
++    replace: (href) => once(() => router.replace(href)),
++    leave: (go) => once(go),
+     busy,
+     navigate: (href, options, before) =>
+       once(() => {
+@@ -74,6 +75,15 @@ export function useOpenOnce(): {
+   };
+ }
+ 
++/** A screen's one guard for its presses that open a screen or a tab, or leave it (useOpenOnce). */
++export type OpenOnce = {
++  push: (href: Href) => void;
++  replace: (href: Href) => void;
++  navigate: (href: Href, options?: NavigateOptions, before?: () => void) => void;
++  leave: (go: () => void) => void;
++  busy: () => boolean;
++};
++
+ type NavigateOptions = Parameters<ReturnType<typeof useRouter>['navigate']>[1];
+ 
+ /** useOpenOnce's push, for a screen that only pushes. */
+diff --git a/lib/scanFlow.ts b/lib/scanFlow.ts
+index f4feb3af..72a8d449 100644
+--- a/lib/scanFlow.ts
++++ b/lib/scanFlow.ts
+@@ -2,11 +2,12 @@ import { useIsFocused, useRouter } from 'expo-router';
+ import { useEffect, useRef, useState } from 'react';
+ 
+ import { readPdf, scanPhoto, type ScanResult } from '../modules/scanner';
+-import { useGoBackOrHome } from './navigation';
++import { type OpenOnce, useGoBackOrHome, useOpenOnce } from './navigation';
+ import { cameraAppPhoto, letGoOfPdf, pickPdf, pickPhoto } from './pickers';
+ import { pdfFailed, photoFailed, useSayWhy } from './readFailures';
+ import { SAMPLES, sampleUri } from './samples';
+ import { addScan, type ScanSource, type StoredScan } from './scans';
++import { retakeIn } from './session';
+ 
+ type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean };
+ 
+@@ -16,13 +17,15 @@ type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean
+  * the queue (lib/captureQueue). One at a time: while one is being picked or read (busy), another does nothing. While
+  * one is read, readingWhat says what it is (a photo, a sample's too, or a PDF), for the reading card. A failure that
+  * stops a capture is said in a dialog, in plain words (lib/readFailures' useSayWhy, with sayingWhy while it's up): the
+- * scanner's own message shows in team builds only.
++ * scanner's own message shows in team builds only. A Retake that leaves the screen goes through the screen's one guard
++ * when it gives it (lib/navigation's useOpenOnce: the Scan screen's, which its Next invoice shares), else its own.
+  */
+-export function useScanFlow() {
++export function useScanFlow(shared?: OpenOnce) {
+   const router = useRouter();
+   const goBackOrHome = useGoBackOrHome();
++  const own = useOpenOnce();
++  const open = shared ?? own; // set at once, so a second Retake is refused before the screen has gone
+   const busyRef = useRef(false);
+-  const leaving = useRef(false); // set at once, so a second Retake is refused before the screen has gone
+   const [busy, setBusy] = useState(false);
+   const { sayWhy, sayingWhy } = useSayWhy();
+   const [readingWhat, setReading] = useState<'photo' | 'pdf' | null>(null);
+@@ -152,14 +155,21 @@ export function useScanFlow() {
+   }
+ 
+   /**
+-   * Retake: the same source again (for a PDF, the picker again); back after a sample or a scan opened from Home's
+-   * Recent scans or Saved (Home when there's nothing to go back to: useGoBackOrHome). Going back, or to the camera,
+-   * leaves the screen at once, and runs once (ruling T25b-2), as the header's Back does: going
+-   * back queues a GO_BACK per call, so a fast double tap would leave the screen under this one too. A picker can run
+-   * again once it's done (oneAtATime).
++   * Retake (the plan's call 16): back after a sample, or when the Scan screen says so (how.back: opened from a list, or
++   * a saved scan from its session's screen; the camera when there's nothing to go back to: useGoBackOrHome). An
++   * unsaved scan in a session: the camera, in that session, its next photo replacing this scan once it reads (lib/
++   * session's retakeIn, run only when the camera opens). Else the same source again (for a PDF, the picker again).
++   * Going back, or to the camera, leaves the screen at once, and runs once (ruling T25b-2), as the header's Back does:
++   * going back queues a GO_BACK per call, so a fast double tap would leave the screen under this one too. A picker can
++   * run again once it's done (oneAtATime).
+    */
+-  async function retake(scan: StoredScan, openedFromRecent: boolean): Promise<void> {
+-    if (openedFromRecent || scan.source === 'sample') return leaveOnce(goBackOrHome);
++  async function retake(scan: StoredScan, how: { back: boolean; session: string | null }): Promise<void> {
++    if (how.back || scan.source === 'sample') return leaveOnce(goBackOrHome);
++    const session = how.session;
++    if (session !== null && scan.saved === null) {
++      // the camera's session only if the camera opens: a refused tap re-links nothing (as the session screen's Retake)
++      return open.navigate('/camera', undefined, () => retakeIn(session, scan.id, new Date()));
++    }
+     if (scan.source === 'camera') return toCamera();
+     if (scan.source === 'camera_app') return fromCameraApp({ replace: true });
+     if (scan.source === 'pdf') return fromPdf({ replace: true });
+@@ -177,9 +187,7 @@ export function useScanFlow() {
+ 
+   /** Leaves the screen, once: a second tap before it has gone does nothing. */
+   function leaveOnce(leave: () => void): void {
+-    if (leaving.current) return;
+-    leaving.current = true;
+-    leave();
++    open.leave(leave);
+   }
+ 
+   const reading = readingWhat !== null;
