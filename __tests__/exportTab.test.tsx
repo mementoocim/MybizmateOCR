@@ -994,10 +994,12 @@ test('a mark that finishes after the person has left: no going back, no message,
   // another tab while it's written
   await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Home' })));
   expect(onTop()).toEqual(['Home: on top']);
+  focus.mockClear();
   await act(async () => release());
   expect(savedSummary(id)!.exportedAt).toBe(NOW.toISOString());
   expect(onTop()).toEqual(['Home: on top']);
   expect(mockToast).not.toHaveBeenCalled();
+  expect(focused()).toEqual([]); // the question cleared on a hidden tab sends TalkBack nowhere (ruling T10-6)
   // back on the Export tab: the file, where it was, with no question left over what has been marked
   await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Export' })));
   expect(header('Export sales')).toBeOnTheScreen();

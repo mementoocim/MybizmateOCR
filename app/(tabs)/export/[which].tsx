@@ -180,11 +180,12 @@ function FileOf({ which }: { which: Which }) {
     };
   }
 
-  // One Header for both steps, so the question's title takes TalkBack focus as it shows (focusKey: ruling T10-4).
+  // One Header for both steps, so the question's title takes TalkBack focus as it shows (focusKey: ruling T10-4), and
+  // only then: the question cleared, by Not yet or by a mark finished on another tab, sends none (ruling T10-6).
   // The question has no Back: Not yet is its way out, and Android's back leaves it the same way.
   return (
     <Screen
-      header={<Header title={page.title} onBack={asked ? null : undefined} focusKey={asked ? 'asked' : 'file'} />}>
+      header={<Header title={page.title} onBack={asked ? null : undefined} focusKey={asked ? 'asked' : undefined} />}>
       {page.content}
     </Screen>
   );
