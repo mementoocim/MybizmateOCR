@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import { Image, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 
 import { Button } from '../../components/Buttons';
@@ -62,6 +63,10 @@ export default function Home() {
   const { sessions, statuses } = useSessions();
   const [samplesOpen, setSamplesOpen] = useState(false);
   const samplesButton = useRef<ViewInstance>(null); // TalkBack focus goes back to it when the sheet closes
+  // Drawn again each time Home is on top again: the greeting, the date and Last session's day are as of then, not of
+  // when the tab first mounted (ruling T12-3; the tabs keep it mounted under the others).
+  const [, looked] = useReducer((n: number) => n + 1, 0);
+  useFocusEffect(useCallback(() => looked(), []));
   const now = new Date();
 
   // Get set up: any rows in the lists, and the export defaults (a VAT status chosen and a revenue account)

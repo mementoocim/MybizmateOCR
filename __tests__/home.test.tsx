@@ -196,6 +196,27 @@ test('the header: the greeting for the time of day, and the date', async () => {
   }
 });
 
+test('the greeting, the date and the last session are as of when Home is looked at, back on top (T12-3)', async () => {
+  // the tabs keep Home mounted under the others: it was drawn at 11:55, and shown again at 12:05
+  jest.setSystemTime(at(24, 11, 55));
+  await render(<Home />);
+  await act(async () => {
+    scan('inv_0007', { session: 'S1', at: at(24, 11, 50) });
+  });
+  const title = () => within(screen.getByTestId('header')).getByRole('header').props.children;
+  expect(title()).toBe('Good morning');
+  expect(within(card('Last session')).getByText('Today, 11:50 AM · 1 invoice')).toBeOnTheScreen();
+  jest.setSystemTime(at(24, 12, 5));
+  await backHome();
+  expect(title()).toBe('Good afternoon');
+  // past midnight: another day, and the session was yesterday's
+  jest.setSystemTime(at(25, 0, 5));
+  await backHome();
+  expect(title()).toBe('Good morning');
+  expect(within(screen.getByTestId('header')).getByText(longDay(at(25, 0, 5)))).toBeOnTheScreen();
+  expect(within(card('Last session')).getByText('Yesterday, 11:50 AM · 1 invoice')).toBeOnTheScreen();
+});
+
 test('a first run: Get set up, and Take your first photo with the three tips; Open the camera opens it', async () => {
   await render(<Home />);
   expect(cardTitles()).toEqual(['Get set up 0 of 2', 'Take your first photo']);

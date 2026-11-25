@@ -30,7 +30,7 @@ export function useScanFlow(shared?: OpenOnce) {
   const [busy, setBusy] = useState(false);
   const { sayWhy, sayingWhy } = useSayWhy();
   const [readingWhat, setReading] = useState<'photo' | 'pdf' | null>(null);
-  // false once the screen is left: a read that ends after that is kept in Recent scans, and nothing opens.
+  // false once the screen is left: a read that ends after that is kept with the recent scans, and nothing opens.
   const focused = useIsFocused();
   const here = useRef(true);
   useEffect(() => {
@@ -58,7 +58,7 @@ export function useScanFlow(shared?: OpenOnce) {
     return true;
   }
 
-  /** Reads it, keeps it in Recent scans and opens its result. A failure is told in its own words. */
+  /** Reads it, keeps it with the recent scans and opens its result. A failure is told in its own words. */
   async function readAndOpen(
     read: () => Promise<ScanResult>,
     scan: Pick<StoredScan, 'label' | 'source' | 'sampleId'>,

@@ -4,9 +4,9 @@ import { colors, space, touch, type } from '../lib/theme';
 import { Tap } from './Tap';
 
 // Design B §5.6: a section strip, the web's table header. A sand strip with its title on the left, as a header for
-// TalkBack, and on the right a column's name ("Amount"), a count ("0 of 2") or a text action ("All saved ›"). All in
-// the overline style. The action fills the strip's height and reaches its right edge, so it's a 48 dp target; the
-// strip grows to hold it.
+// TalkBack, and on the right a column's name ("Amount"), a count ("0 of 2") or a text action (none uses one since
+// Home became cards). All in the overline style. The action fills the strip's height and reaches its right edge, so
+// it's a 48 dp target; the strip grows to hold it.
 
 export function SectionHeader({
   title,
@@ -15,7 +15,7 @@ export function SectionHeader({
 }: {
   title: string;
   right?: string | null; // "Amount", "0 of 2"
-  action?: { label: string; onPress: () => void } | null; // "All saved ›"
+  action?: { label: string; onPress: () => void } | null; // a text action, "Label ›"
 }) {
   return (
     <View style={styles.strip}>

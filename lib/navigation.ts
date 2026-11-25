@@ -38,6 +38,9 @@ export function useGoBackOrHome(): () => void {
  *   from inside the tabs). Its options are the router's: withAnchor puts a tab's own list under a screen opened in it
  *   (Done's session screen, with Sessions under it). Its `before` runs first, and only when the guard lets the tab
  *   open: a session screen's Retake makes that session the camera's (lib/session's retakeIn) only if the camera opens.
+ *   A tab with a Stack of its own (Sessions, Export) is first taken back to its first screen (popTabToTop), so the
+ *   screen opened sits alone over it: navigate pushes, so a second step 1, or a file's screen left above it, would be
+ *   under the new one (ruling T12-1: Home's Go to Export while a file was up; T12-2: the save's View).
  * - leave: a press that leaves this screen some other way, behind the same guard (the Scan screen's Retake going back,
  *   or down to the camera), so a Retake and a Next invoice in one go leave it once.
  * - busy: whether one of them has opened, until this screen is on top again: a press that isn't an open (a delete's
@@ -68,6 +71,7 @@ export function useOpenOnce(): OpenOnce {
     navigate: (href, options, before) =>
       once(() => {
         before?.();
+        popTabToTop(navigation, href);
         const tabs = tabsOnTop(navigation); // as things are now: a snackbar's View can outlive its screen (T10-1)
         if (!options) return tabs ? router.navigate(href) : router.dismissTo(href);
         return tabs ? router.navigate(href, options) : router.dismissTo(href, options);
@@ -96,10 +100,37 @@ export function useNavigateOnce(): (href: Href) => void {
   return useOpenOnce().navigate;
 }
 
+type NavState = { key?: string; type?: string; index?: number; routes?: readonly { name: string; state?: NavState }[] };
 type Nav = {
-  getState(): { type?: string; index?: number; routes?: readonly { name: string }[] } | undefined;
+  getState(): NavState | undefined;
   getParent(): Nav | undefined;
+  dispatch?(action: { type: string; target?: string }): void;
 };
+
+/** The tabs' state, going up from this screen: the tab navigator's own, or the (tabs) route's in a Stack above. */
+function tabsState(navigation: Nav): NavState | undefined {
+  for (let nav: Nav | undefined = navigation; nav; nav = nav.getParent()) {
+    const state = nav.getState();
+    if (state?.type === 'tab') return state;
+    const tabs = state?.routes?.find((r) => r.name === '(tabs)');
+    if (tabs) return tabs.state;
+  }
+  return undefined;
+}
+
+/**
+ * The tab an href opens, back to its first screen when its own Stack has more on it: the POP_TO_TOP a second press on
+ * its tab sends, aimed at that Stack by its key (a targeted action goes up the tree, then down, to the navigator with
+ * that key). "/export", "/export/invoices" and "/sessions/[id]" open in theirs; the camera, Home and Profile have none,
+ * and a tab not opened yet has no Stack yet, so nothing is sent.
+ */
+function popTabToTop(navigation: Nav, href: Href): void {
+  const path = typeof href === 'string' ? href : (href.pathname ?? '');
+  const tab = path.split(/[/?#]/)[1];
+  const stack = tabsState(navigation)?.routes?.find((r) => r.name === tab)?.state;
+  if (stack?.type !== 'stack' || !stack.key || (stack.index ?? 0) === 0) return;
+  navigation.dispatch?.({ type: 'POP_TO_TOP', target: stack.key });
+}
 
 /**
  * Whether the tabs are what's on top now, read from the live state when it's called: the root Stack's focused route,

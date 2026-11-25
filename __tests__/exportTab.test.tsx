@@ -1001,7 +1001,7 @@ test('a mark that finishes after the person has left: no going back, no message,
   expect(mockToast).not.toHaveBeenCalled();
   expect(focused()).toEqual([]); // the question cleared on a hidden tab sends TalkBack nowhere (ruling T10-6)
   // back on the Export tab: the file, where it was, with no question left over what has been marked
-  await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Export' })));
+  await act(async () => fireEvent.press(screen.getByRole('tab', { name: /^Export/ })));
   expect(header('Export sales')).toBeOnTheScreen();
   expect(screen.queryByText(QUESTION)).toBeNull();
   expect(line('Sales, Nothing to export for this choice')).toBeOnTheScreen();
@@ -1399,9 +1399,64 @@ test("from Home's Go to Export: one file screen at a time, the new one with noth
   expect(line('Purchases, 1 · ₱24,377.00')).toBeOnTheScreen();
   const files = screen.queryAllByRole('header', { name: /^Export (sales|purchases)$/, includeHiddenElements: true });
   expect(files.map((h) => h.props.children)).toEqual(['Export purchases']);
-  // Back: step 1. (Go to Export while a file is up stacks a second step 1 under the tabs' router: Task 12's report.)
+  // Back: step 1, then the camera
   await press(button('Back'));
   expect(header(STEP_1)).toBeOnTheScreen();
+  await systemBack();
+  expect(onTop()).toEqual(['Camera: on top']);
+});
+
+// ---- Fix round 1 of Task 12 (rulings T12-1 and T12-2) ----
+
+/** The Export screens in the tab's Stack, under the top one too, by their titles. */
+const exportScreens = () =>
+  screen
+    .queryAllByRole('header', { name: /^(Send to MyBizMate|Export (sales|purchases)|Sales|Purchases)$/, includeHiddenElements: true })
+    .map((h) => h.props.children);
+
+/** The Export tab showing the sales' file, opened from its step 1. */
+async function salesFileUp() {
+  await saveInvoice();
+  await renderRouter(LIVE_ROUTES, { initialUrl: '/camera' });
+  await act(async () => fireEvent.press(screen.getByRole('tab', { name: /^Export/ })));
+  await press(button(/^Sales, /));
+  expect(header('Export sales')).toBeOnTheScreen();
+}
+
+test("Home's Go to Export with a file up: step 1 alone, then Back to the camera (T12-1)", async () => {
+  // a NAVIGATE pushes: the tab's Stack was step 1, the file, then a second step 1, and Back showed the file again
+  await salesFileUp();
+  await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Home' })));
+  await press(button('Go to Export'));
+  expect(header(STEP_1)).toBeOnTheScreen();
+  expect(exportScreens()).toEqual([STEP_1]);
+  await systemBack();
+  expect(onTop()).toEqual(['Camera: on top']);
+
+  // the bar's own Export icon still goes back to where the tab was
+  await act(async () => fireEvent.press(screen.getByRole('tab', { name: /^Export/ })));
+  await press(button(/^Sales, /));
+  await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Home' })));
+  await act(async () => fireEvent.press(screen.getByRole('tab', { name: /^Export/ })));
+  expect(header('Export sales')).toBeOnTheScreen();
+});
+
+test("a save's View with a file up: See invoices alone over step 1, then Back to the camera (T12-2)", async () => {
+  await salesFileUp();
+  const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('inv_0007')) });
+  await act(() => router.push({ pathname: '/result', params: { id } }));
+  await press(screen.getByTestId('save-open'));
+  await press(screen.getByText('Not VAT-registered'));
+  await act(async () => fireEvent.changeText(screen.getByLabelText('Revenue account'), '4010'));
+  await press(screen.getByTestId('save-confirm'));
+  await act(async () => lastAction().onPress());
+  expect(screen).toHavePathname('/export/invoices');
+  expect(header('Sales')).toBeOnTheScreen();
+  expect(exportScreens()).toEqual([STEP_1, 'Sales']);
+  await systemBack();
+  expect(header(STEP_1)).toBeOnTheScreen();
+  await systemBack();
+  expect(onTop()).toEqual(['Camera: on top']);
 });
 
 test("the question's title takes TalkBack focus as it shows (T10-4)", async () => {

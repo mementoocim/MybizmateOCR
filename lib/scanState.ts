@@ -9,11 +9,11 @@ import { marksOf, rowsNow, type SavedSummary, savedSummary, subscribeSaved, summ
 import type { StoredScan } from './scans';
 import { annotationOn, settings, subscribeSettings } from './settings';
 
-// Design B §9.5 and §9.2: a scan's one state, which the status strip and Home's badge both show, so the two always
-// agree. In the old status card's order: its form not found; things to check, which come first; what it still needs
-// before it can be saved (a 2307 with no payments read, say, or boxes not checked yet in annotation mode); or checks
-// passed. Samples are made up, so they're never blocked: their screen says why they can't be saved. Apart from that,
-// whether a saved scan has changed since it was saved.
+// Design B §9.5 and §9.2: a scan's one state, which the status strip and the scan's badge on Sessions and its session
+// screen (lib/sessions' scanBadge) both show, so the two always agree. In the old status card's order: its form not
+// found; things to check, which come first; what it still needs before it can be saved (a 2307 with no payments read,
+// say, or boxes not checked yet in annotation mode); or checks passed. Samples are made up, so they're never blocked:
+// their screen says why they can't be saved. Apart from that, whether a saved scan has changed since it was saved.
 
 export type ScanState =
   | { kind: 'not_found' }
@@ -46,15 +46,15 @@ export function savedStateOf(scan: StoredScan, summary: SavedSummary | undefined
 
 /**
  * A scan's label as the screens show it: a PDF's is its file's own name, without the "PDF: " it's kept with
- * ("sales_text_1.pdf"). The Scan screen's subtitle when the form wasn't found, and Home's recent rows.
+ * ("sales_text_1.pdf"). The Scan screen's subtitle when the form wasn't found, and a scan's rows on Sessions.
  */
 export function shownLabel(scan: Pick<StoredScan, 'label'>): string {
   return scan.label.replace(/^PDF: /, '');
 }
 
 /**
- * Home's badge for a recent scan: one state, the first that applies. Changed, then Saved; Sample; then the scan's
- * state: Couldn't find the form, N to check, Can't save yet, Checks passed.
+ * A recent scan's badge (design B's, under lib/sessions' scanBadge): one state, the first that applies. Changed, then
+ * Saved; Sample; then the scan's state: Couldn't find the form, N to check, Can't save yet, Checks passed.
  */
 export function homeBadge(scan: StoredScan, state: ScanState, saved: SavedState): BadgeSpec {
   if (saved === 'changed') return { label: 'Changed', tone: 'warning' };
@@ -74,7 +74,7 @@ export function homeBadge(scan: StoredScan, state: ScanState, saved: SavedState)
 
 /**
  * A scan's checks and state, kept up to date with the lists, the settings and its saved summary. The checks run once
- * per scan as it stands (saleOf, certOf): the Scan screen, Home's rows and Saved share each run. No scan
+ * per scan as it stands (saleOf, certOf): the Scan screen, Sessions and the session screen share each run. No scan
  * (one that's gone): no state.
  */
 export function useScanCheck(scan: StoredScan | undefined): {

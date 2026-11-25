@@ -35,7 +35,7 @@ export default function ExportScreen() {
       key={which}
       title={FILES[which].row}
       sub={n > 0 ? `${n} to export` : 'All exported'}
-      // a count in the figure style, as Home's To export rows (ruling T18-3); All exported is words, in sans (T18-5)
+      // a count in the figure style (ruling T18-3); All exported is words, in sans (T18-5)
       subMono={n > 0}
       amount={n > 0 && total !== null ? peso(total) : null}
       chevron
