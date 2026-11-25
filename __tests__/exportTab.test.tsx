@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { act, fireEvent, renderRouter, screen, within } from 'expo-router/testing-library';
 import { File } from 'expo-file-system';
-import { Alert, type AlertButton, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Alert, type AlertButton, StyleSheet } from 'react-native';
 
 import { type IconComponent, Share } from '../components/icons';
 import * as exportFile from '../lib/exportFile';
@@ -18,6 +18,7 @@ import {
   savedSummary,
 } from '../lib/saved';
 import { addScan, type InvoiceKind, type Kind, updateScan } from '../lib/scans';
+import { updateSettings } from '../lib/settings';
 import { currentSnack, dismissSnack, type SnackAction } from '../lib/snackbar';
 import { bar, colors, space, touch, type } from '../lib/theme';
 import { parseScanResult } from '../modules/scanner/src/parse';
@@ -44,7 +45,20 @@ const mockAvailable = jest.fn(async () => true);
 
 jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(async () => {}) }));
 jest.mock('../components/BrandSplash', () => ({ BrandSplash: () => null })); // the scanner's start (splash.test)
-jest.mock('../modules/scanner', () => ({ scanPhoto: jest.fn(), readPdf: jest.fn() }));
+jest.mock('../modules/scanner', () => ({
+  enhance: async (_uri: string, mode: string) => `file:///x/${mode}.img`,
+  saveToPictures: jest.fn(),
+  scanPhoto: jest.fn(),
+  readPdf: jest.fn(),
+  displayName: jest.fn(),
+  releaseAccess: jest.fn(),
+}));
+jest.mock('expo-image-picker', () => ({
+  launchImageLibraryAsync: jest.fn(),
+  requestCameraPermissionsAsync: jest.fn(),
+  launchCameraAsync: jest.fn(),
+}));
+jest.mock('expo-asset', () => ({ Asset: { fromModule: () => ({ downloadAsync: async () => ({ localUri: 'file:///s' }) }) } }));
 // Ruling P8: the toast's arguments go through as given, so a message without an action is checked by its words alone.
 jest.mock('../lib/toast', () => ({ toast: (...args: unknown[]) => mockToast(...args) }));
 jest.mock('expo-sharing', () => ({
@@ -63,6 +77,12 @@ const ROUTES = appRoutes({
   '(tabs)/export/[which]': require('../app/(tabs)/export/[which]'),
   '(tabs)/export/invoices': require('../app/(tabs)/export/invoices'),
 });
+/** The same, with the Scan screen and Home as they are: where View and Home's To export rows start from. */
+const LIVE_ROUTES = {
+  ...ROUTES,
+  result: require('../app/result'),
+  '(tabs)/index': require('../app/(tabs)/index'),
+};
 
 const NOW = new Date(2026, 9, 5, 10, 0); // Oct 5, 2026: inv_0007, dated Sep 20, is last month's
 const LATER = new Date(2026, 9, 5, 10, 5); // when the person answers the question, a while after the share
@@ -263,6 +283,7 @@ beforeEach(async () => {
   await loadSaved(); // nothing saved
   await clearParties('customer');
   await clearParties('supplier');
+  await updateSettings({ vatRegistered: null, revenueAccount: '', annotation: false }); // a first save asks for VAT
   alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   const left = currentSnack(); // a message a test left up, with no host now to take it down
   if (left) dismissSnack(left.id);
@@ -958,7 +979,7 @@ test("a mark that can't be written says so on the screen, marks nothing, and run
   expect(header(STEP_1)).toBeOnTheScreen();
 });
 
-test('a mark that finishes after the person has left: no going back, no message (ruling T8-3)', async () => {
+test('a mark that finishes after the person has left: no going back, no message, and the question has gone (rulings T8-3, T10-3)', async () => {
   const realMark = savedStore.markExported;
   let release = () => {};
   const held = new Promise<void>((resolve) => (release = resolve));
@@ -976,6 +997,12 @@ test('a mark that finishes after the person has left: no going back, no message 
   await act(async () => release());
   expect(savedSummary(id)!.exportedAt).toBe(NOW.toISOString());
   expect(onTop()).toEqual(['Home: on top']);
+  expect(mockToast).not.toHaveBeenCalled();
+  // back on the Export tab: the file, where it was, with no question left over what has been marked
+  await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Export' })));
+  expect(header('Export sales')).toBeOnTheScreen();
+  expect(screen.queryByText(QUESTION)).toBeNull();
+  expect(line('Sales, Nothing to export for this choice')).toBeOnTheScreen();
   expect(mockToast).not.toHaveBeenCalled();
 });
 
@@ -1297,4 +1324,166 @@ test('a kind with nothing: No purchases saved', async () => {
   await screen.unmount();
   await showInvoices('sale', []);
   expect(screen.getByText('No sales saved')).toBeOnTheScreen();
+});
+
+// ---- Fix round 1 (rulings T10-1 to T10-5) ----
+
+const focus = jest.mocked(AccessibilityInfo.sendAccessibilityEvent);
+/** The titles TalkBack focus was sent to since the last clear, in order. */
+const focused = () =>
+  focus.mock.calls.map(([view]) => String((view as unknown as { props: { children: unknown } }).props.children));
+/** The last snackbar's action: View. */
+const lastAction = () => mockToast.mock.calls.at(-1)![1] as SnackAction;
+
+/** A camera scan of inv_0007 on its Scan screen, over the camera, saved as a sale with the save sheet. */
+async function saveOnScanScreen() {
+  const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('inv_0007')) });
+  await renderRouter(LIVE_ROUTES, { initialUrl: '/camera' });
+  await act(() => router.push({ pathname: '/result', params: { id } }));
+  await press(screen.getByTestId('save-open'));
+  await press(screen.getByText('Not VAT-registered'));
+  await act(async () => fireEvent.changeText(screen.getByLabelText('Revenue account'), '4010'));
+  await press(screen.getByTestId('save-confirm'));
+  expect(mockToast).toHaveBeenCalledWith('Saved as a sale', { label: 'View', onPress: expect.any(Function) });
+  return id;
+}
+
+test("View on a save's snackbar opens See invoices for its kind, from the Scan screen or once it has gone (T10-1)", async () => {
+  // pressed while the Scan screen is still on top: the screens over the tabs go, and See invoices shows, step 1 under it
+  await saveOnScanScreen();
+  await act(async () => lastAction().onPress());
+  expect(screen).toHavePathname('/export/invoices');
+  expect(header('Sales')).toBeOnTheScreen();
+  expect(rows()).toEqual([`TorresConstruction Supply, Sale · Sep${NBSP}20 · SI 0007655, 24,377.00, To export`]);
+  await systemBack();
+  expect(header(STEP_1)).toBeOnTheScreen();
+  await systemBack();
+  expect(onTop()).toEqual(['Camera: on top']);
+  expect(router.canGoBack()).toBe(false);
+
+  // pressed once the Scan screen has gone, the snackbar still up over the camera: the same
+  await screen.unmount();
+  mockToast.mockReset();
+  memoryFs.reset();
+  await loadSaved();
+  await updateSettings({ vatRegistered: null, revenueAccount: '', annotation: false });
+  await saveOnScanScreen();
+  await systemBack();
+  expect(onTop()).toEqual(['Camera: on top']);
+  await act(async () => lastAction().onPress());
+  expect(screen).toHavePathname('/export/invoices');
+  expect(header('Sales')).toBeOnTheScreen();
+  await systemBack();
+  expect(header(STEP_1)).toBeOnTheScreen();
+});
+
+test("Home's To export rows: one file screen at a time, the new one with nothing of the last one's (T10-2)", async () => {
+  await saveInvoice();
+  await saveInvoice({ purchase: true });
+  await renderRouter(LIVE_ROUTES, { initialUrl: '/camera' });
+  await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Home' })));
+  await press(button(/^Sales, /));
+  expect(header('Export sales')).toBeOnTheScreen();
+  await press(radio('All'));
+
+  // Home again, then its purchases' row: the purchases' file in the sales' place
+  await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Home' })));
+  await press(button(/^Purchases, /));
+  expect(header('Export purchases')).toBeOnTheScreen();
+  expect(screen.getByRole('radio', { name: 'Not exported yet', checked: true })).toBeOnTheScreen();
+  expect(line('Purchases, 1 · ₱24,377.00')).toBeOnTheScreen();
+  const files = screen.queryAllByRole('header', { name: /^Export (sales|purchases)$/, includeHiddenElements: true });
+  expect(files.map((h) => h.props.children)).toEqual(['Export purchases']);
+  // Back: step 1, then the camera
+  await press(button('Back'));
+  expect(header(STEP_1)).toBeOnTheScreen();
+  await systemBack();
+  expect(onTop()).toEqual(['Camera: on top']);
+});
+
+test("the question's title takes TalkBack focus as it shows (T10-4)", async () => {
+  await saveInvoice();
+  await openAt('/export/sale');
+  focus.mockClear();
+  // a file error moves no focus: its banner is read out where it is
+  mockAvailable.mockResolvedValueOnce(false);
+  await press(button('Share the file'));
+  expect(focused()).toEqual([]);
+  await press(button('Share the file'));
+  expect(header(QUESTION)).toBeOnTheScreen();
+  expect(focused()).toEqual([QUESTION]);
+  // a failed mark keeps the step: no focus moves again
+  focus.mockClear();
+  const write = jest.spyOn(File.prototype, 'write').mockRejectedValue(new Error('No space left on device'));
+  await press(button('Mark 1 as exported'));
+  expect(focused()).toEqual([]);
+  write.mockRestore();
+});
+
+/** Holds openSaved until released, then reads as it does. */
+function holdOpenSaved() {
+  const real = savedStore.openSaved;
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const spy = jest.spyOn(savedStore, 'openSaved').mockImplementation(async (id) => {
+    await held;
+    return real(id);
+  });
+  return { spy, release: () => act(async () => release()) };
+}
+/** Two summary-only sales, each with its scan.json, as an earlier version saved them. */
+async function twoSavedSales() {
+  for (const id of ['a', 'b']) {
+    memoryFs.files.set(
+      `file:///docs/saved/${id}/scan.json`,
+      JSON.stringify({
+        id,
+        label: 'Camera photo',
+        source: 'camera',
+        at: '2026-10-05T01:00:00.000Z',
+        result: parseScanResult(coreJson('inv_0007')),
+        edits: {},
+        terms: null,
+        kind: 'sale',
+        party: null,
+        saved: { savedAt: '2026-10-05T01:00:00.000Z', details: INVOICE },
+      }),
+    );
+  }
+  await showInvoices('sale', [
+    invoice('sale', '2026-10-06', { id: 'a', partyName: 'Store A' }),
+    invoice('sale', '2026-10-05', { id: 'b', partyName: 'Store B' }),
+  ]);
+}
+
+test('See invoices: a second row pressed while a scan is read back opens nothing (T10-5)', async () => {
+  await twoSavedSales();
+  const { spy, release } = holdOpenSaved();
+  await press(button(/^Store A, /));
+  await press(button(/^Store B, /));
+  expect(spy).toHaveBeenCalledTimes(1);
+  await release();
+  expect(screen).toHaveSearchParams({ id: 'a', from: 'list' });
+  expect(spy).toHaveBeenCalledTimes(1);
+});
+
+test('See invoices: a long press while a scan is read back asks nothing (T10-5)', async () => {
+  await twoSavedSales();
+  const { release } = holdOpenSaved();
+  await press(button(/^Store A, /));
+  await longPress(button(/^Store B, /));
+  expect(alert).not.toHaveBeenCalled();
+  await release();
+  expect(screen).toHavePathname('/result');
+});
+
+test('See invoices: another tab while a scan is read back, and it opens nothing (T10-5)', async () => {
+  await twoSavedSales();
+  const { release } = holdOpenSaved();
+  await press(button(/^Store A, /));
+  await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Home' })));
+  await release();
+  expect(onTop()).toEqual(['Home: on top']);
+  expect(screen).not.toHavePathname('/result');
+  expect(mockToast).not.toHaveBeenCalled();
 });

@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useNavigation } from 'expo-router';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Banner } from '../../../components/Banner';
@@ -84,6 +84,7 @@ function FileOf({ which }: { which: Which }) {
   };
 
   const words = FILES[which];
+  let page: { title: string; content: ReactNode };
   if (asked) {
     const { at, ids } = asked;
     const n = ids.length;
@@ -97,12 +98,18 @@ function FileOf({ which }: { which: Which }) {
         if (mounted.current) setError(MARK_FAILED); // nothing was marked: the question stays, to try again
         return;
       }
-      if (!here()) return; // left while it was written (ruling T8-3)
+      if (!here()) {
+        // left while it was written (ruling T8-3): no going back, nothing said; and back here, no question left over
+        // what has been marked, but the file as it is now (T10-3)
+        if (mounted.current) setAsked(null);
+        return;
+      }
       leave();
       toast(`Marked ${n} ${n === 1 ? one : many} as exported.`);
     };
-    return (
-      <Screen header={<Header title="Did the file go where you wanted?" onBack={null} />}>
+    page = {
+      title: 'Did the file go where you wanted?',
+      content: (
         <View style={styles.body}>
           {/* first, as the file's step has it (ruling T18-4) */}
           {error ? <Banner tone="danger" text={error} live /> : null}
@@ -118,54 +125,67 @@ function FileOf({ which }: { which: Which }) {
             ]}
           />
         </View>
-      </Screen>
-    );
+      ),
+    };
+  } else {
+    const file = chosen(which, range, theLists);
+    const share = async () => {
+      setError(null);
+      const shared = await shareFile(file.write, XLSX_MIME);
+      if (!mounted.current) return;
+      if (shared.ok) setAsked({ at: shared.at, ids: file.ids });
+      else setError(shared.message);
+    };
+    const kept = which === 'parties' ? 0 : saved.filter((s) => s.kind === which).length;
+    page = {
+      title: words.title,
+      content: (
+        <>
+          <View style={styles.body}>
+            {/* first, so it shows where the person is looking, never below the fold (rulings T18-4, P-F14) */}
+            {error ? <Banner tone="danger" text={error} live /> : null}
+            <Text style={[type.body, styles.mute]}>{words.subtitle}</Text>
+            <SummaryBox
+              lines={[
+                { key: 'File', value: `${words.file} · .xlsx` },
+                file.ids.length > 0
+                  ? { key: words.key, value: file.count, mono: true }
+                  : { key: words.key, value: NOTHING },
+              ]}
+            />
+          </View>
+          {which !== 'parties' ? (
+            <View style={styles.rows}>
+              <ListRow
+                title="See invoices"
+                sub={`${kept} saved`}
+                subMono
+                chevron
+                onPress={() => push({ pathname: '/export/invoices', params: { kind: which } })}
+              />
+            </View>
+          ) : null}
+          <View style={styles.body}>
+            <ChoiceChips<ExportRange> label="Which ones" options={words.ranges} value={range} onChange={setRange} />
+            {file.warnings.map((warning) => (
+              <Banner key={warning} tone="warning" text={warning} />
+            ))}
+            {which === 'parties' ? <Text style={[type.body, styles.mute]}>{PARTIES_NOTE}</Text> : null}
+            <ButtonRow
+              buttons={[{ label: 'Share the file', icon: Share, disabled: file.ids.length === 0, onPress: share }]}
+            />
+          </View>
+        </>
+      ),
+    };
   }
 
-  const file = chosen(which, range, theLists);
-  const share = async () => {
-    setError(null);
-    const shared = await shareFile(file.write, XLSX_MIME);
-    if (!mounted.current) return;
-    if (shared.ok) setAsked({ at: shared.at, ids: file.ids });
-    else setError(shared.message);
-  };
-  const kept = which === 'parties' ? 0 : saved.filter((s) => s.kind === which).length;
-
+  // One Header for both steps, so the question's title takes TalkBack focus as it shows (focusKey: ruling T10-4).
+  // The question has no Back: Not yet is its way out, and Android's back leaves it the same way.
   return (
-    <Screen header={<Header title={words.title} />}>
-      <View style={styles.body}>
-        {/* first, so it shows where the person is looking, never below the fold (rulings T18-4, P-F14) */}
-        {error ? <Banner tone="danger" text={error} live /> : null}
-        <Text style={[type.body, styles.mute]}>{words.subtitle}</Text>
-        <SummaryBox
-          lines={[
-            { key: 'File', value: `${words.file} · .xlsx` },
-            file.ids.length > 0 ? { key: words.key, value: file.count, mono: true } : { key: words.key, value: NOTHING },
-          ]}
-        />
-      </View>
-      {which !== 'parties' ? (
-        <View style={styles.rows}>
-          <ListRow
-            title="See invoices"
-            sub={`${kept} saved`}
-            subMono
-            chevron
-            onPress={() => push({ pathname: '/export/invoices', params: { kind: which } })}
-          />
-        </View>
-      ) : null}
-      <View style={styles.body}>
-        <ChoiceChips<ExportRange> label="Which ones" options={words.ranges} value={range} onChange={setRange} />
-        {file.warnings.map((warning) => (
-          <Banner key={warning} tone="warning" text={warning} />
-        ))}
-        {which === 'parties' ? <Text style={[type.body, styles.mute]}>{PARTIES_NOTE}</Text> : null}
-        <ButtonRow
-          buttons={[{ label: 'Share the file', icon: Share, disabled: file.ids.length === 0, onPress: share }]}
-        />
-      </View>
+    <Screen
+      header={<Header title={page.title} onBack={asked ? null : undefined} focusKey={asked ? 'asked' : 'file'} />}>
+      {page.content}
     </Screen>
   );
 }

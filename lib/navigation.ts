@@ -30,8 +30,9 @@ export function useGoBackOrHome(): () => void {
  * two different presses can't open two screens either (ruling T6-1: with a guard each, Home's Your lists then Take
  * photo, in one go, pushed Your lists, and the camera's href, resolved over it, a second tabs).
  * - push: a screen over this one.
- * - navigate: a tab, or a screen in one. From inside the tabs, it navigates: the tabs switch. From a screen above them
- *   (the Scan screen), it's expo-router's dismissTo: the screens over the tabs go, and the tabs switch, since navigate
+ * - navigate: a tab, or a screen in one. While the tabs are on top when it runs (read then: tabsOnTop), it navigates:
+ *   the tabs switch. With a screen above them (the Scan screen), it's expo-router's dismissTo: the screens over the tabs
+ *   go, and the tabs switch, since navigate
  *   would push a second tabs over the first, and Back would show the screen just left (while dismissTo does nothing
  *   from inside the tabs). Its options are the router's: withAnchor puts a tab's own list under a screen opened in it
  *   (Done's session screen, with Sessions under it). Its `before` runs first, and only when the guard lets the tab
@@ -66,7 +67,7 @@ export function useOpenOnce(): {
     navigate: (href, options, before) =>
       once(() => {
         before?.();
-        const tabs = inTabs(navigation);
+        const tabs = tabsOnTop(navigation); // as things are now: a snackbar's View can outlive its screen (T10-1)
         if (!options) return tabs ? router.navigate(href) : router.dismissTo(href);
         return tabs ? router.navigate(href, options) : router.dismissTo(href, options);
       }),
@@ -85,11 +86,24 @@ export function useNavigateOnce(): (href: Href) => void {
   return useOpenOnce().navigate;
 }
 
-/** Whether a screen is inside the tabs: a tab, or a screen in a tab's own Stack. */
-type Nav = { getState(): { type?: string } | undefined; getParent(): Nav | undefined };
-function inTabs(navigation: Nav): boolean {
+type Nav = {
+  getState(): { type?: string; index?: number; routes?: readonly { name: string }[] } | undefined;
+  getParent(): Nav | undefined;
+};
+
+/**
+ * Whether the tabs are what's on top now, read from the live state when it's called: the root Stack's focused route,
+ * found going up from this screen's navigation (a navigator's state is its current one, even for a screen that has
+ * gone, as the Scan screen has once View is pressed on its snackbar over the camera: ruling T10-1). Where no navigator
+ * holds the tabs (a suite's mock), whether this screen is inside them: a tab, or a screen in a tab's own Stack.
+ */
+function tabsOnTop(navigation: Nav): boolean {
+  let inTabs = false;
   for (let nav: Nav | undefined = navigation; nav; nav = nav.getParent()) {
-    if (nav.getState()?.type === 'tab') return true;
+    const state = nav.getState();
+    if (state?.type === 'tab') inTabs = true;
+    const routes = state?.routes;
+    if (routes?.some((r) => r.name === '(tabs)')) return routes[state?.index ?? 0]?.name === '(tabs)';
   }
-  return false;
+  return inTabs;
 }

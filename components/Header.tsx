@@ -1,5 +1,5 @@
-import { type ReactNode, useRef } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { type ReactNode, useEffect, useRef } from 'react';
+import { AccessibilityInfo, Image, StyleSheet, Text, type TextInstance, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useGoBackOrHome } from '../lib/navigation';
@@ -24,6 +24,7 @@ export function Header({
   backIcon = 'back',
   right,
   tone = 'light',
+  focusKey,
 }: {
   title?: string;
   subtitle?: string | null;
@@ -32,6 +33,7 @@ export function Header({
   backIcon?: 'back' | 'close'; // spoken "Back" or "Close"
   right?: ReactNode; // up to two IconButtons, or the photo thumbnail
   tone?: 'light' | 'dark'; // dark: the photo viewer (viewer fill, cameraText)
+  focusKey?: string; // a screen with steps: the step shown; a new one moves TalkBack focus to the title, as a sheet's
 }) {
   const insets = useSafeAreaInsets();
   const goBackOrHome = useGoBackOrHome();
@@ -40,6 +42,15 @@ export function Header({
   const close = backIcon === 'close';
   const hasBack = onBack !== null;
   const hasRight = Boolean(right);
+  const titleRef = useRef<TextInstance>(null);
+  // A new step on the same screen (the Export tab's question): TalkBack focus to its title, as a sheet's focusKey has
+  // it. Not as the screen opens: the screen's own focus is the system's.
+  const lastStep = useRef(focusKey);
+  useEffect(() => {
+    const newStep = focusKey !== undefined && focusKey !== lastStep.current;
+    lastStep.current = focusKey;
+    if (newStep && titleRef.current) AccessibilityInfo.sendAccessibilityEvent(titleRef.current, 'focus');
+  }, [focusKey]);
 
   /**
    * The default Back, once: going back queues a GO_BACK per call, so a fast double tap would
@@ -72,7 +83,10 @@ export function Header({
             </View>
           ) : (
             title !== undefined && (
-              <Text accessibilityRole="header" style={[type.headerTitle, { color: dark ? colors.cameraText : colors.ink }]}>
+              <Text
+                ref={titleRef}
+                accessibilityRole="header"
+                style={[type.headerTitle, { color: dark ? colors.cameraText : colors.ink }]}>
                 {title}
               </Text>
             )
