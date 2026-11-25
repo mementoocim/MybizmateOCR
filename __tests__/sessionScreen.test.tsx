@@ -584,6 +584,18 @@ test('with no scans in it, the header has no count: never 0 invoices', async () 
   expect(screen.getByText('Session · 1 invoice')).toBeOnTheScreen();
 });
 
+test("with no scans in it, the header keeps the session's start time when a retry fails again", async () => {
+  // a session id starts with its start time (call 23); a failed retry replaces its failed read with a later time
+  const id = `${at(9, 41).getTime()}-qa01`;
+  failedReadsIn(id, [[at(9, 45), UNREADABLE_PHOTO]]);
+  await showSession(id);
+  expect(screen.getByRole('header', { name: 'Today, 9:41 AM' })).toBeOnTheScreen();
+
+  await act(async () => addFailedRead(id, UNREADABLE_PHOTO, at(9, 50), currentSession()!.failed[0].at));
+  expect(currentSession()!.failed).toHaveLength(1);
+  expect(screen.getByRole('header', { name: 'Today, 9:41 AM' })).toBeOnTheScreen();
+});
+
 test("Retake on the photos that couldn't be read: the camera, in this session, trying the oldest again", async () => {
   // ruling T9-5
   scan('inv_0007', { at: at(9, 41) });

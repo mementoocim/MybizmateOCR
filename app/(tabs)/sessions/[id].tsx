@@ -27,6 +27,7 @@ import {
   type Session,
   scanBadge,
   scanFields,
+  scanTimeOf,
   scanSub,
   sessionTitle,
   tallyOf,
@@ -90,7 +91,7 @@ function SessionOf({ id }: { id: string }) {
   const title = found
     ? sessionTitle(found.at, new Date())
     : failed.length > 0
-      ? sessionTitle(new Date(failed[0].at), new Date())
+      ? sessionTitle(scanTimeOf(id, failed[0].at), new Date()) // its id's start time: a failed retry doesn't move it
       : 'Session';
   const header = (
     // with no scans in it (its photos all failed to read, or were deleted), no count: never "0 invoices" (ruling T9-4)
