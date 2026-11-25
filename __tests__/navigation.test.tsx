@@ -1,10 +1,11 @@
 import { router, useIsFocused, useRouter } from 'expo-router';
 import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+import { useEffect } from 'react';
 import { Text } from 'react-native';
 
 import { Button } from '../components/Buttons';
 import { Header } from '../components/Header';
-import { usePushOnce } from '../lib/navigation';
+import { useOpenOnce, usePushOnce } from '../lib/navigation';
 import { currentSnack } from '../lib/snackbar';
 import { toast } from '../lib/toast';
 import { appRoutes } from '../test-utils/routes';
@@ -161,4 +162,37 @@ test("after Android restarts the screen, a message from before it has gone, with
   expect(currentSnack()).toBeNull();
   expect(screen.queryByText('Saved as a sale')).toBeNull();
   expect(view).not.toHaveBeenCalled();
+});
+
+test('Back to session keeps the session screen that was up, with where it was scrolled to (ruling T12-5)', async () => {
+  // a session screen counts its mounts; the Scan screen above the tabs goes back to it, as result.tsx's Back to session
+  let mounts = 0;
+  function Session() {
+    useEffect(() => void (mounts += 1), []);
+    return <Where name="Session" />;
+  }
+  function Scan() {
+    const open = useOpenOnce();
+    return (
+      <>
+        <Where name="Scan" />
+        <Button
+          label="Back to session"
+          onPress={() => open.navigate({ pathname: '/sessions/[id]', params: { id: 'S2' } }, { withAnchor: true })}
+        />
+        <Button label="Go to Sessions" onPress={() => open.navigate('/sessions')} />
+      </>
+    );
+  }
+  await renderRouter(appRoutes({ '(tabs)/sessions/[id]': Session, result: Scan }), { initialUrl: '/sessions/S2' });
+  expect(mounts).toBe(1);
+  await act(() => router.push('/result'));
+  await press('Back to session');
+  expect(onTop()).toEqual(['Session: on top']);
+  expect(mounts).toBe(1); // not popped and pushed again
+  // a link to the tab's first screen still takes it back there, with nothing above it (ruling T12-1)
+  await act(() => router.push('/result'));
+  await press('Go to Sessions');
+  expect(screen).toHavePathname('/sessions');
+  expect(screen.queryByText(/^Session: /)).toBeNull();
 });

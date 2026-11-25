@@ -122,15 +122,22 @@ function tabsState(navigation: Nav): NavState | undefined {
  * The tab an href opens, back to its first screen when its own Stack has more on it: the POP_TO_TOP a second press on
  * its tab sends, aimed at that Stack by its key (a targeted action goes up the tree, then down, to the navigator with
  * that key). "/export", "/export/invoices" and "/sessions/[id]" open in theirs; the camera, Home and Profile have none,
- * and a tab not opened yet has no Stack yet, so nothing is sent.
+ * and a tab not opened yet has no Stack yet, so nothing is sent. Nor when the Stack is its first screen and, over it,
+ * one of the screens shown one at a time (a session, a file: dangerouslySingular) that this href opens: that screen
+ * stays, with where it was scrolled to, and only its params change (ruling T12-5: Back to session).
  */
 function popTabToTop(navigation: Nav, href: Href): void {
   const path = typeof href === 'string' ? href : (href.pathname ?? '');
-  const tab = path.split(/[/?#]/)[1];
+  const [, tab, screen] = path.split(/[?#]/)[0].split('/');
   const stack = tabsState(navigation)?.routes?.find((r) => r.name === tab)?.state;
   if (stack?.type !== 'stack' || !stack.key || (stack.index ?? 0) === 0) return;
+  const top = stack.routes?.[stack.index ?? 0]?.name;
+  if (stack.index === 1 && screen !== undefined && SINGULAR.has(screen) && top === screen) return;
   navigation.dispatch?.({ type: 'POP_TO_TOP', target: stack.key });
 }
+
+/** The screens a tab's Stack shows one at a time (their layouts' dangerouslySingular): a session, an export file. */
+const SINGULAR: ReadonlySet<string> = new Set(['[id]', '[which]']);
 
 /**
  * Whether the tabs are what's on top now, read from the live state when it's called: the root Stack's focused route,
