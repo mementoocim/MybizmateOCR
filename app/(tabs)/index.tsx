@@ -1,159 +1,152 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Image, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 
-import { ButtonRow } from '../../components/BottomBar';
 import { Button } from '../../components/Buttons';
+import { Card } from '../../components/Card';
 import { Header } from '../../components/Header';
-import { IconButton } from '../../components/IconButton';
-import { Camera, FileText, ImageIcon, ListIcon, Lock, SettingsIcon } from '../../components/icons';
+import { Lock, Send } from '../../components/icons';
 import { ListRow } from '../../components/ListRow';
 import { ReadingOverlay } from '../../components/ReadingOverlay';
-import { RecentRow } from '../../components/RecentRow';
 import { Screen } from '../../components/Screen';
-import { SectionHeader } from '../../components/SectionHeader';
 import { Sheet } from '../../components/Sheet';
 import { totalOf, waitingOf } from '../../lib/exportFile';
-import { peso } from '../../lib/format';
+import { greeting, longDay, peso } from '../../lib/format';
 import { lists, subscribeLists } from '../../lib/lists';
 import { useOpenOnce } from '../../lib/navigation';
 import { type SavedSummary, savedList, subscribeSaved } from '../../lib/saved';
 import { SAMPLES } from '../../lib/samples';
 import { useScanFlow } from '../../lib/scanFlow';
 import { type Kind, recentScans, subscribeRecent } from '../../lib/scans';
+import { countLine, homeCounts, oldestWithWork, type Session, sessionTitle, useSessions } from '../../lib/sessions';
 import { settings, subscribeSettings, updateSettings } from '../../lib/settings';
 import { colors, radius, space, touch, type } from '../../lib/theme';
 
-// Design B §9.2: Home as a workspace. The header has the wordmark, and Your lists and Settings as icon buttons. Then,
-// top to bottom: capture (Take photo; From gallery and Import PDF; what the app reads); on a first run, the tips; "Get
-// set up" until both its steps are done, once; what's waiting to export, per kind; the recent scans, each with its
-// state; then the samples and the footer. The reading card shows over all of it while a capture is read, and a capture
-// that fails says why in a dialog (lib/scanFlow).
+// Camera first (spec §6.5, the plan's call 18, the approved mockup): Home as cards, top to bottom, each with at most
+// one button. The header greets by the time of day, with the date under it. Then: "Get set up" until both its steps are
+// done, once; before any scan, "Take your first photo", pointing at the bar's round button; what's left to check or to
+// retake, which Check now opens; what's ready to send to MyBizMate, per kind; the last session; then the samples and the
+// footer. Every press goes through the screen's one guard (ruling T6-1), the sample's read too. The reading card shows
+// over it all while a sample is read.
 
 const TIPS = ['The whole form in the photo', 'Flat on a table, in good light', 'Phone straight above it, no shadows'];
 
-/** The To export rows, one per kind with anything waiting, in this order. */
-const EXPORTS: readonly { kind: Kind; title: string; sub: (n: number) => string }[] = [
-  { kind: 'sale', title: 'Sales', sub: (n) => `${n} to export` },
-  { kind: 'purchase', title: 'Purchases', sub: (n) => `${n} to export` },
-  { kind: '2307', title: '2307s', sub: (n) => `${n} to export · Tax withheld` },
+/** Ready to send's lines, one per kind with anything waiting, in this order. */
+const KINDS: readonly { kind: Kind; title: string }[] = [
+  { kind: 'sale', title: 'Sales' },
+  { kind: 'purchase', title: 'Purchases' },
+  { kind: '2307', title: '2307s' },
 ];
 
 const LOCK = 16; // dp: the footer's lock, beside its overline
 
 const handwriting = (font: string) => `${font === 'PatrickHand' ? 'Patrick Hand' : font} handwriting`;
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** The To check card's title: "2 invoices to check and 1 photo to retake", or either part alone. */
+function toCheckTitle({ toCheck, retake }: { toCheck: number; retake: number }): string {
+  const parts: string[] = [];
+  if (toCheck > 0) parts.push(`${plural(toCheck, 'invoice', 'invoices')} to check`);
+  if (retake > 0) parts.push(`${plural(retake, 'photo', 'photos')} to retake`);
+  return parts.join(' and ');
+}
 
 export default function Home() {
-  // one guard for every press (ruling T6-1): push, a screen over the tabs; navigate, another tab (the camera, Profile)
-  const { push, navigate: navigateOnce } = useOpenOnce();
-  const flow = useScanFlow();
+  // one guard for every press (ruling T6-1): push, a screen over the tabs; navigate, another tab or a screen in one
+  const open = useOpenOnce();
+  const { push, navigate: navigateOnce } = open;
+  const flow = useScanFlow(open);
   const recent = useSyncExternalStore(subscribeRecent, recentScans); // a scan read on any screen shows at once
   const saved = useSyncExternalStore(subscribeSaved, savedList);
   const theLists = useSyncExternalStore(subscribeLists, lists);
   const theSettings = useSyncExternalStore(subscribeSettings, settings);
+  const { sessions, statuses } = useSessions();
   const [samplesOpen, setSamplesOpen] = useState(false);
   const samplesButton = useRef<ViewInstance>(null); // TalkBack focus goes back to it when the sheet closes
+  const now = new Date();
 
   // Get set up: any rows in the lists, and the export defaults (a VAT status chosen and a revenue account)
   const listsDone = theLists.parties.length + theLists.items.length > 0;
   const defaultsDone = theSettings.vatRegistered !== null && theSettings.revenueAccount.trim() !== '';
   const settingUp = !theSettings.setupDone;
   useEffect(() => {
-    // Both done: the section goes for good (the plan's call 12), whether or not anything was scanned. It's set once:
-    // the store's own value, so a second run before the re-render doesn't write it again.
+    // Both done: the card goes for good (the plan's call 12), whether or not anything was scanned. It's set once: the
+    // store's own value, so a second run before the re-render doesn't write it again.
     if (settingUp && listsDone && defaultsDone && !settings().setupDone) void updateSettings({ setupDone: true });
   }, [settingUp, listsDone, defaultsDone]);
 
   const firstRun = recent.length === 0 && saved.length === 0; // a sample counts as a scan
-  // The Export tab: a kind's file, with the tab's first step under it; or the first step, for every kind
-  const openExport = (kind?: Kind) =>
-    kind
-      ? navigateOnce({ pathname: '/export/[which]', params: { which: kind } }, { withAnchor: true })
-      : navigateOnce('/export');
+  const counts = homeCounts(sessions, statuses); // samples count nowhere (ruling T4-1)
+  const lastSession = sessions.find((s) => s.id !== null) ?? null; // newest first
 
-  const header = (
-    <Header
-      brand
-      onBack={null}
-      right={
-        <>
-          <IconButton icon={ListIcon} label="Your lists" onPress={() => push('/lists')} />
-          <IconButton icon={SettingsIcon} label="Settings" onPress={() => navigateOnce('/profile')} />
-        </>
-      }
-    />
-  );
+  /** A session's screen in the Sessions tab, its list under it; a scan with no session id, its Scan screen. */
+  const openSession = (s: Session) =>
+    s.id !== null
+      ? navigateOnce({ pathname: '/sessions/[id]', params: { id: s.id } }, { withAnchor: true })
+      : push({ pathname: '/result', params: { id: s.members[0].id, from: 'list' } });
+  const checkNow = () => {
+    const s = oldestWithWork(sessions, statuses);
+    if (s) openSession(s);
+  };
 
   return (
     <View style={styles.root}>
-      <Screen header={header}>
-        <View style={styles.capture}>
-          <Button
-            label="Take photo"
-            size="large"
-            icon={Camera}
-            disabled={flow.reading}
-            onPress={() => navigateOnce('/camera')}
-          />
-          <ButtonRow
-            buttons={[
-              {
-                label: 'From gallery',
+      <Screen header={<Header title={greeting(now)} subtitle={longDay(now)} onBack={null} />}>
+        <View style={styles.cards}>
+          {settingUp && (
+            <Card title={`Get set up ${Number(listsDone) + Number(defaultsDone)} of 2`}>
+              <View style={styles.rows}>
+                <ListRow
+                  title="Import your customers and items"
+                  sub="So scans can check names, TINs and prices"
+                  chevron
+                  checked={listsDone}
+                  onPress={() => push('/lists')}
+                />
+                <ListRow
+                  title="Set your export defaults"
+                  sub="VAT status and accounts for MyBizMate"
+                  chevron
+                  checked={defaultsDone}
+                  onPress={() => navigateOnce('/profile')}
+                />
+              </View>
+            </Card>
+          )}
+
+          {firstRun && (
+            <Card
+              title="Take your first photo"
+              body="The round button at the bottom opens the camera."
+              action={{ label: 'Open the camera', onPress: () => navigateOnce('/camera') }}>
+              <Tips />
+            </Card>
+          )}
+
+          {counts.toCheck + counts.retake > 0 && (
+            <Card title={toCheckTitle(counts)} tone="attention" action={{ label: 'Check now', onPress: checkNow }} />
+          )}
+
+          {waitingOf(null, saved).length > 0 && (
+            <Card
+              title="Ready to send to MyBizMate"
+              action={{
+                label: 'Go to Export',
                 variant: 'secondary',
-                icon: ImageIcon,
-                disabled: flow.reading,
-                onPress: () => flow.fromGallery(),
-              },
-              {
-                label: 'Import PDF',
-                variant: 'secondary',
-                icon: FileText,
-                disabled: flow.reading,
-                onPress: () => flow.fromPdf(),
-              },
-            ]}
-          />
-          {/* caps by the overline style: MYBIZMATE INVOICE · SERVICE INVOICE · BIR 2307, the form's name kept on one
-              line by a no-break space */}
-          <Text style={[type.overline, styles.caption]}>{'MyBizMate invoice · Service Invoice · BIR\u00A02307'}</Text>
+                icon: Send,
+                onPress: () => navigateOnce('/export'),
+              }}>
+              <ToSend saved={saved} />
+            </Card>
+          )}
+
+          {lastSession && (
+            <Card
+              title="Last session"
+              body={`${sessionTitle(lastSession.at, now)} · ${countLine(lastSession)}`}
+              action={{ label: 'Open the session', variant: 'secondary', onPress: () => openSession(lastSession) }}
+            />
+          )}
         </View>
-
-        {firstRun && <Tips />}
-
-        {settingUp && (
-          <>
-            <SectionHeader title="Get set up" right={`${Number(listsDone) + Number(defaultsDone)} of 2`} />
-            <ListRow
-              title="Import your customers and items"
-              sub="So scans can check names, TINs and prices"
-              chevron
-              checked={listsDone}
-              onPress={() => push('/lists')}
-            />
-            <ListRow
-              title="Set your export defaults"
-              sub="VAT status and accounts for MyBizMate"
-              chevron
-              checked={defaultsDone}
-              onPress={() => navigateOnce('/profile')}
-            />
-          </>
-        )}
-
-        {saved.length > 0 && <ToExport saved={saved} onOpen={openExport} />}
-
-        {recent.length > 0 && (
-          <>
-            <SectionHeader title="Recent scans" />
-            {recent.map((scan) => (
-              <RecentRow
-                key={scan.id}
-                scan={scan}
-                onPress={() => push({ pathname: '/result', params: { id: scan.id, from: 'list' } })}
-              />
-            ))}
-            <Text style={[type.label, styles.note]}>The last 20 scans stay here. Save a scan to keep it.</Text>
-          </>
-        )}
 
         <View style={styles.end}>
           <Button ref={samplesButton} variant="text" label="Try a sample invoice" onPress={() => setSamplesOpen(true)} />
@@ -179,6 +172,7 @@ export default function Home() {
             sub={handwriting(s.font)}
             leading={<Image source={s.source} style={styles.thumb} />}
             onPress={() => {
+              if (open.busy()) return; // another press has opened a screen: this one waits
               setSamplesOpen(false);
               void flow.fromSample(s.id);
             }}
@@ -191,75 +185,60 @@ export default function Home() {
   );
 }
 
-/** Before the first scan: three numbered tips, each one stop for TalkBack. */
+/** The first photo's three numbered tips, each one stop for TalkBack. */
 function Tips() {
   return (
-    <>
-      <SectionHeader title="Before your first scan" />
-      <View style={styles.tips}>
-        {TIPS.map((tip, i) => (
-          <View key={tip} accessible style={styles.tip}>
-            <Text style={[type.figure, styles.tipNumber]}>{`${i + 1}`}</Text>
-            <Text style={[type.body, styles.tipText]}>{tip}</Text>
-          </View>
-        ))}
-      </View>
-    </>
+    <View style={styles.tips}>
+      {TIPS.map((tip, i) => (
+        <View key={tip} accessible style={styles.tip}>
+          <Text style={[type.figure, styles.tipNumber]}>{`${i + 1}`}</Text>
+          <Text style={[type.body, styles.tipText]}>{tip}</Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
 /**
- * The saved scans: a row per kind with any waiting to export (lib/exportFile's waitingOf, as Export counts them), with
- * their count (figureSmall) and total (figure), each opening its file in the Export tab; or, with none waiting, one row
- * saying everything is exported, which opens the tab, as All saved does.
+ * The saved scans waiting to go out (lib/exportFile's waitingOf, as Export counts them): a line per kind with any, its
+ * count (value) on the left and its total (figure) on the right, one stop for TalkBack.
  */
-function ToExport({ saved, onOpen }: { saved: readonly SavedSummary[]; onOpen: (kind?: Kind) => void }) {
-  if (waitingOf(null, saved).length === 0) {
-    return (
-      <>
-        <SectionHeader title="Saved" />
-        <ListRow title="Everything is exported" chevron onPress={() => onOpen()} />
-      </>
-    );
-  }
+function ToSend({ saved }: { saved: readonly SavedSummary[] }) {
+  const lines = KINDS.map((k) => ({ ...k, mine: waitingOf(k.kind, saved) })).filter((k) => k.mine.length > 0);
   return (
-    <>
-      <SectionHeader title="To export" action={{ label: 'All saved', onPress: () => onOpen() }} />
-      {EXPORTS.map(({ kind, title, sub }) => {
-        const mine = waitingOf(kind, saved);
-        if (mine.length === 0) return null;
+    <View>
+      {lines.map(({ kind, title, mine }, i) => {
+        const label = `${title} · ${mine.length}`;
+        const total = peso(totalOf(mine));
         return (
-          <ListRow
+          <View
             key={kind}
-            title={title}
-            sub={sub(mine.length)}
-            subMono
-            amount={peso(totalOf(mine))}
-            chevron
-            onPress={() => onOpen(kind)}
-          />
+            testID={`send-${kind}`}
+            accessible
+            accessibilityLabel={`${label}, ${total}`}
+            style={[styles.line, i > 0 && styles.lineAfter]}>
+            <Text style={[type.value, styles.lineTitle]}>{label}</Text>
+            <Text style={[type.figure, styles.lineTotal]}>{total}</Text>
+          </View>
         );
       })}
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  capture: { padding: space.l, gap: space.s },
-  caption: { color: colors.mute, textAlign: 'center' },
-  tips: {
-    gap: space.s,
-    paddingVertical: space.m,
-    paddingHorizontal: space.l,
-    backgroundColor: colors.panel,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.hairline,
-  },
+  cards: { gap: space.m, paddingTop: space.l },
+  // the rows reach the card's edges, their own gutter in place of its padding
+  rows: { marginHorizontal: -space.l, borderTopWidth: 1, borderTopColor: colors.hairline },
+  tips: { gap: space.s, paddingVertical: space.xs },
   tip: { flexDirection: 'row', gap: space.m },
   tipNumber: { color: colors.brandText },
   tipText: { flex: 1, color: colors.ink },
-  note: { color: colors.mute, paddingTop: space.s, paddingHorizontal: space.l },
+  line: { flexDirection: 'row', alignItems: 'baseline', gap: space.m, paddingVertical: space.xs },
+  lineAfter: { borderTopWidth: 1, borderTopColor: colors.hairline },
+  lineTitle: { flex: 1, color: colors.ink },
+  lineTotal: { color: colors.ink, textAlign: 'right' },
   end: { alignItems: 'center', gap: space.s, paddingTop: space.l, paddingHorizontal: space.l },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs },
   footerText: { flexShrink: 1, color: colors.mute, textAlign: 'center' },

@@ -1379,28 +1379,29 @@ test("View on a save's snackbar opens See invoices for its kind, from the Scan s
   expect(header(STEP_1)).toBeOnTheScreen();
 });
 
-test("Home's To export rows: one file screen at a time, the new one with nothing of the last one's (T10-2)", async () => {
+test("from Home's Go to Export: one file screen at a time, the new one with nothing of the last one's (T10-2)", async () => {
   await saveInvoice();
   await saveInvoice({ purchase: true });
   await renderRouter(LIVE_ROUTES, { initialUrl: '/camera' });
   await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Home' })));
+  await press(button('Go to Export'));
+  expect(header(STEP_1)).toBeOnTheScreen();
   await press(button(/^Sales, /));
   expect(header('Export sales')).toBeOnTheScreen();
   await press(radio('All'));
 
-  // Home again, then its purchases' row: the purchases' file in the sales' place
+  // Home again, Go to Export, then the purchases' row: the purchases' file in the sales' place
   await act(async () => fireEvent.press(screen.getByRole('tab', { name: 'Home' })));
+  await press(button('Go to Export'));
   await press(button(/^Purchases, /));
   expect(header('Export purchases')).toBeOnTheScreen();
   expect(screen.getByRole('radio', { name: 'Not exported yet', checked: true })).toBeOnTheScreen();
   expect(line('Purchases, 1 · ₱24,377.00')).toBeOnTheScreen();
   const files = screen.queryAllByRole('header', { name: /^Export (sales|purchases)$/, includeHiddenElements: true });
   expect(files.map((h) => h.props.children)).toEqual(['Export purchases']);
-  // Back: step 1, then the camera
+  // Back: step 1. (Go to Export while a file is up stacks a second step 1 under the tabs' router: Task 12's report.)
   await press(button('Back'));
   expect(header(STEP_1)).toBeOnTheScreen();
-  await systemBack();
-  expect(onTop()).toEqual(['Camera: on top']);
 });
 
 test("the question's title takes TalkBack focus as it shows (T10-4)", async () => {

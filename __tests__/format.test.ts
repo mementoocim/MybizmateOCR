@@ -3,6 +3,8 @@ import {
   formatClock,
   formatMs,
   formatSeconds,
+  greeting,
+  longDay,
   monthDay,
   monthSpan,
   monthYear,
@@ -92,4 +94,27 @@ test("a read's time keeps its unit on its line: a no-break space, never a plain 
 
 test('a clock time', () => {
   expect(formatClock(new Date(2026, 10, 20, 14, 41))).toBe('2:41 PM');
+});
+
+test('greeting', () => {
+  // by the phone's clock: morning until 12:00, afternoon until 18:00, then evening
+  const at = (h: number, m = 0) => greeting(new Date(2026, 10, 24, h, m));
+  expect(at(0)).toBe('Good morning');
+  expect(at(6, 30)).toBe('Good morning');
+  expect(at(11, 59)).toBe('Good morning');
+  expect(at(12)).toBe('Good afternoon');
+  expect(at(17, 59)).toBe('Good afternoon');
+  expect(at(18)).toBe('Good evening');
+  expect(at(23, 59)).toBe('Good evening');
+});
+
+test('longDay', () => {
+  const nbsp = String.fromCharCode(0xa0);
+  // the weekday in full, then the short date, its day kept on its line (a no-break space, as monthDay has it)
+  expect(longDay(new Date(2026, 10, 24, 9, 41))).toBe(`Tuesday, Nov${nbsp}24`);
+  expect(longDay(new Date(2026, 10, 24, 9, 41))).toBe(`Tuesday, ${monthDay('2026-11-24')}`);
+  expect(longDay(new Date(2026, 0, 4))).toBe(`Sunday, Jan${nbsp}4`);
+  expect(longDay(new Date(2026, 11, 31, 23, 59))).toBe(`Thursday, Dec${nbsp}31`);
+  expect(longDay(new Date(2026, 10, 28))).toBe(`Saturday, Nov${nbsp}28`);
+  expect(longDay(new Date(2026, 10, 24)).split(', ')[1]).not.toContain(' ');
 });

@@ -17,8 +17,9 @@ type ReadOptions = { sampleId?: string; deletePhoto?: boolean; replace?: boolean
  * the queue (lib/captureQueue). One at a time: while one is being picked or read (busy), another does nothing. While
  * one is read, readingWhat says what it is (a photo, a sample's too, or a PDF), for the reading card. A failure that
  * stops a capture is said in a dialog, in plain words (lib/readFailures' useSayWhy, with sayingWhy while it's up): the
- * scanner's own message shows in team builds only. A Retake that leaves the screen goes through the screen's one guard
- * when it gives it (lib/navigation's useOpenOnce: the Scan screen's, which its Next invoice shares), else its own.
+ * scanner's own message shows in team builds only. The result opening, and a Retake that leaves the screen,
+ * go through the screen's one guard when it gives it (lib/navigation's useOpenOnce: the Scan screen's, which its Next
+ * invoice shares; Home's, which its cards share), else its own.
  */
 export function useScanFlow(shared?: OpenOnce) {
   const router = useRouter();
@@ -71,8 +72,8 @@ export function useScanFlow(shared?: OpenOnce) {
       const id = addScan({ ...scan, result });
       if (!here.current) return;
       const target = { pathname: '/result', params: { id } } as const;
-      if (replace) router.replace(target);
-      else router.push(target);
+      if (replace) open.replace(target);
+      else open.push(target);
     } catch (e: unknown) {
       sayWhy(failed(e));
     }

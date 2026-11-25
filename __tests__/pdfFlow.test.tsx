@@ -1,14 +1,18 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 
-import Home from '../app/(tabs)/index';
+import { Button } from '../components/Buttons';
+import { ReadingOverlay } from '../components/ReadingOverlay';
+import { useScanFlow } from '../lib/scanFlow';
 import { getScan } from '../lib/scans';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
 import { dialogWords } from '../test-utils/dialogs';
 import { memoryFs } from '../test-utils/memoryFs';
+import { focusAgain } from '../test-utils/screenFocus';
 
-// Import PDF, on Home: the system's file picker hands over a PDF, the scanner reads its page 1 (readPdf) and its
+// Importing a PDF straight away (lib/scanFlow's fromPdf: the Scan screen's Choose a PDF, and its Retake for a PDF;
+// Home had an Import PDF until camera first moved it into the camera's tray): the system's file picker hands over a PDF, the scanner reads its page 1 (readPdf) and its
 // result opens, labelled with the file's name. A PDF the scanner refuses is named in plain words, in a dialog: the
 // reason as its title and what to do as its message, or one sentence as a title alone (the plan's call 16, rulings
 // T16-1 and T16-1a).
@@ -73,9 +77,25 @@ function picked(uri: string, name: string | null, type = 'application/pdf') {
 async function importPdf(answer: object) {
   mockPick.mockResolvedValueOnce(answer);
   await act(async () => fireEvent.press(screen.getByText('Import PDF')));
+  await act(async () => focusAgain()); // back from the result it opened: the next one opens too
 }
 
 const refused = (code: string) => Object.assign(new Error(`refused: ${code}`), { code });
+/**
+ * A screen with lib/scanFlow's two straight-away reads, a PDF and a gallery photo, and its reading card, as Home had
+ * them before camera first.
+ */
+function Reader() {
+  const flow = useScanFlow();
+  return (
+    <>
+      <Button label="Import PDF" onPress={() => flow.fromPdf()} />
+      <Button label="From gallery" onPress={() => flow.fromGallery()} />
+      <ReadingOverlay visible={flow.reading} what={flow.readingWhat ?? 'photo'} />
+    </>
+  );
+}
+
 const labels = () => mockPush.mock.calls.map(([to]) => getScan(to.params.id)?.label);
 
 let alert: jest.SpyInstance;
@@ -88,7 +108,7 @@ beforeEach(async () => {
   mockReadPdf.mockResolvedValue(parseScanResult(coreJson('sales_text_0')));
   mockDisplayName.mockImplementation(async (uri: string) => names.get(uri) ?? null);
   alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-  await render(<Home />);
+  await render(<Reader />);
 });
 
 afterEach(() => alert.mockRestore());
@@ -102,7 +122,6 @@ test('a PDF is read and opened', async () => {
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
   const scan = getScan(mockPush.mock.calls[0][0].params.id);
   expect(scan).toMatchObject({ label: 'PDF: sales_text_0.pdf', source: 'pdf' });
-  expect(screen.getAllByText('sales_text_0.pdf').length).toBeGreaterThan(0); // in Recent scans, by its file name
   expect(screen.queryByText(/msf/)).toBeNull(); // never the link's own id
   expect(memoryFs.files.has(uri)).toBe(true); // the person's file is only read
   expect(alert).not.toHaveBeenCalled();
@@ -154,7 +173,7 @@ test('a refused PDF says why in a dialog', async () => {
   await act(async () => refuse(refused('pdf_password')));
   expect(dialogWords(alert)).toEqual([['That PDF has a password.', 'Save a copy without one, then import it.']]);
   expect(screen.queryByText('Reading…')).toBeNull();
-  expect(screen.queryByText('locked.pdf')).toBeNull(); // nothing in Recent scans
+  expect(screen.queryByText('locked.pdf')).toBeNull();
   expect(mockPush).not.toHaveBeenCalled();
 });
 
@@ -169,7 +188,7 @@ test.each([
   await importPdf(picked(`${STORAGE}${code}.pdf`, `${code}.pdf`));
   expect(dialogWords(alert)).toStrictEqual([dialog]); // once, with exactly these words
   expect(mockPush).not.toHaveBeenCalled();
-  expect(screen.queryByText(`${code}.pdf`)).toBeNull(); // nothing in Recent scans
+  expect(screen.queryByText(`${code}.pdf`)).toBeNull();
   expect(screen.queryByText('Reading…')).toBeNull();
 });
 

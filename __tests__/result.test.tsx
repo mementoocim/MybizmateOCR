@@ -1,9 +1,8 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react-native';
 import { Profiler, useEffect, useState } from 'react';
 import { AccessibilityInfo, Alert, type AlertButton, ScrollView, View } from 'react-native';
 
 import Result from '../app/result';
-import { RecentRow } from '../components/RecentRow';
 import { certOf } from '../lib/cert';
 import { localIsoDate } from '../lib/checks/dates';
 import { blockWords, saveBlock } from '../lib/exportRows';
@@ -12,6 +11,7 @@ import { clearItems, lists } from '../lib/lists';
 import * as savedStore from '../lib/saved';
 import { markExported, savedSummary, saveScan } from '../lib/saved';
 import { addScan, confirmBox, getScan, loadRecent, setEdit, updateScan } from '../lib/scans';
+import { homeBadge, useScanCheck } from '../lib/scanState';
 import * as sessionStore from '../lib/session';
 import { currentSession, loadSession } from '../lib/session';
 import type { ScanSource } from '../lib/scans';
@@ -467,9 +467,9 @@ test('annotation mode blocks an unchecked save', async () => {
   expect(blockWords('unchecked', scan())).toBe('Check every box first: 1 left.');
   await press(screen.getByLabelText('Close'));
 
-  // Home's recent row agrees with the strip: it can't be saved yet (design B §9.2: the badge, without the reason)
-  await render(<RecentRow scan={scan()} onPress={() => {}} />);
-  expect(screen.getByRole('button', { name: /, Can't save yet$/ })).toBeTruthy();
+  // the scan's badge agrees with the strip: it can't be saved yet (design B §9.2: the badge, without the reason)
+  const { result: check } = await renderHook(() => useScanCheck(scan()));
+  expect(homeBadge(scan(), check.current.state!, check.current.saved).label).toBe("Can't save yet");
 
   // once every box is checked, Save opens the save sheet
   await act(async () => confirmBox(id, 'period_from'));

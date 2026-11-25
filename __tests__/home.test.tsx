@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react-n
 import { Alert } from 'react-native';
 
 import Home from '../app/(tabs)/index';
+import { longDay } from '../lib/format';
 import { addItem, addParty, clearItems, clearParties } from '../lib/lists';
 import { loadSaved } from '../lib/saved';
 import { SAMPLES } from '../lib/samples';
@@ -10,23 +11,20 @@ import { settings, updateSettings } from '../lib/settings';
 import { colors, touch, type } from '../lib/theme';
 import { parseScanResult } from '../modules/scanner/src/parse';
 import { coreJson } from '../test-utils/coreJson';
-import { dialogWords } from '../test-utils/dialogs';
 import { memoryFs } from '../test-utils/memoryFs';
 import { focusAgain } from '../test-utils/screenFocus';
 import { pinToday } from '../test-utils/today';
 import { typeStylesOf } from '../test-utils/typeStyles';
 
-// Design B §9.2: Home as a workspace. The header's wordmark and two icon buttons; capture first; on a first run, the
-// tips; "Get set up" until it's done, once; what's waiting to export, per kind; the recent scans with their state;
-// then the samples and the footer. A capture that fails says why in a dialog (the plan's call 16).
+// Camera first (spec §6.5, the plan's call 18): Home as cards, each with at most one button. The header greets by the
+// time of day, with the date; "Get set up" until it's done, once; before any scan, "Take your first photo"; what's left
+// to check or to retake, which Check now opens; what's ready to send to MyBizMate, per kind; the last session; then the
+// samples and the footer. Every press goes through the screen's one guard (ruling T6-1, Review Focus 5).
 
 let mockTeam = false;
 const mockPush = jest.fn();
-const mockNavigate = jest.fn(); // another tab: the camera, Profile (lib/navigation's useNavigateOnce)
+const mockNavigate = jest.fn(); // another tab, or a screen in one: the camera, Profile, Export, a session
 const mockScanPhoto = jest.fn();
-const mockLibrary = jest.fn();
-const mockPick = jest.fn();
-const mockReadPdf = jest.fn();
 
 jest.mock('expo-router', () => ({
   // Home is a tab (lib/navigation: going back, and whether it's in the tabs)
@@ -49,8 +47,8 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('../modules/scanner', () => ({
   scanPhoto: (uri: string, options: object) => mockScanPhoto(uri, options),
-  readPdf: (uri: string) => mockReadPdf(uri),
-  displayName: async () => 'locked.pdf',
+  readPdf: jest.fn(),
+  displayName: async () => 'a.pdf',
   releaseAccess: async () => undefined,
 }));
 jest.mock('../lib/build', () => ({
@@ -59,20 +57,20 @@ jest.mock('../lib/build', () => ({
   },
 }));
 jest.mock('expo-image-picker', () => ({
-  launchImageLibraryAsync: () => mockLibrary(),
+  launchImageLibraryAsync: jest.fn(),
   requestCameraPermissionsAsync: jest.fn(),
   launchCameraAsync: jest.fn(),
 }));
 jest.mock('expo-asset', () => ({
   Asset: { fromModule: () => ({ downloadAsync: async () => ({ localUri: 'file:///bundle/sample.jpg' }) }) },
 }));
-jest.mock('expo-file-system', () => {
-  const memory = require('../test-utils/memoryFs').memoryFs.module;
-  return { ...memory, File: Object.assign(memory.File, { pickFileAsync: (options: object) => mockPick(options) }) };
-});
+jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.module);
+
+const NOW = new Date(2026, 10, 20, 9, 0); // a Friday morning
+const at = (day: number, h: number, m = 0) => new Date(2026, 10, day, h, m);
 
 beforeAll(() => {
-  pinToday(new Date(2026, 10, 20, 9, 0)); // a gallery scan is checked as of the day it's read
+  pinToday(NOW); // a scan is checked as of the day it's read
 });
 
 afterAll(() => {
@@ -83,8 +81,8 @@ let alert: jest.SpyInstance;
 
 beforeEach(async () => {
   jest.clearAllMocks();
+  jest.setSystemTime(NOW);
   mockTeam = false;
-  mockLibrary.mockResolvedValue({ canceled: false, assets: [{ uri: 'content://media/1' }] });
   mockScanPhoto.mockResolvedValue(parseScanResult(coreJson('inv_0007')));
   alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   // a first run: nothing scanned or saved, empty lists, no export defaults, and not set up yet
@@ -107,6 +105,23 @@ const header = (name: string) => screen.getByRole('header', { name });
 const iconsIn = (node: Instance, color: string) => node.queryAll((n) => n.props.stroke === color);
 /** Back on Home from the screen a press opened: its next press opens one again (lib/navigation's usePushOnce). */
 const backHome = () => act(async () => focusAgain());
+/** The cards' titles, top to bottom. */
+const cardTitles = () =>
+  screen.queryAllByTestId('card').map((c) => within(c).getByRole('header').props.children as string);
+const card = (title: string) => screen.getAllByTestId('card').find((c) => within(c).queryByRole('header', { name: title }))!;
+
+/** A scan read now (or at a time), in a session or in none. */
+function scan(fixture: string, opts: { session?: string; at?: Date; source?: 'camera' | 'sample' | 'pdf' } = {}) {
+  const source = opts.source ?? 'camera';
+  return addScan({
+    label: source === 'sample' ? 'Sample 0007' : 'Camera photo',
+    source,
+    sampleId: source === 'sample' ? 'inv_0007' : undefined,
+    result: parseScanResult(coreJson(fixture)),
+    session: opts.session,
+    at: opts.at,
+  });
+}
 
 const EXPORTED = '2026-11-19T02:00:00.000Z';
 let saves = 0;
@@ -126,13 +141,13 @@ function summary(kind: 'sale' | 'purchase' | '2307', total: number, exportedAt: 
 }
 
 /** The saved scans, as if saved.json held these when the app started. */
-async function savedAre(...summaries: ReturnType<typeof summary>[]) {
+async function savedAre(...summaries: (ReturnType<typeof summary> & { session?: string })[]) {
   memoryFs.files.set('file:///docs/saved.json', JSON.stringify(summaries));
   await act(async () => loadSaved());
 }
 
-/** Home's To export rows, top to bottom, by what TalkBack says. */
-const exportRows = () => screen.getAllByRole('button', { name: /to export/ }).map((r) => r.props.accessibilityLabel);
+/** Ready to send's lines, top to bottom, by what TalkBack says. */
+const sendLines = () => screen.queryAllByTestId(/^send-/).map((l) => l.props.accessibilityLabel);
 
 const CUSTOMER = {
   code: 'C001',
@@ -150,162 +165,70 @@ const CUSTOMER = {
   fromScan: false,
 } as const;
 
-test('the header: the wordmark, Your lists and Settings, which opens Profile; no menu', async () => {
-  for (const team of [false, true]) {
-    mockTeam = team; // a team build has the speed test in Settings › Team tools, never on Home
+test('the header: the greeting for the time of day, and the date', async () => {
+  const nbsp = String.fromCharCode(0xa0);
+  for (const [when, words, date] of [
+    [at(24, 9, 41), 'Good morning', `Tuesday, Nov${nbsp}24`],
+    [at(24, 11, 59), 'Good morning', `Tuesday, Nov${nbsp}24`],
+    [at(24, 12, 0), 'Good afternoon', `Tuesday, Nov${nbsp}24`],
+    [at(25, 17, 59), 'Good afternoon', `Wednesday, Nov${nbsp}25`],
+    [at(25, 18, 0), 'Good evening', `Wednesday, Nov${nbsp}25`],
+  ] as const) {
+    jest.setSystemTime(when);
     await render(<Home />);
-    expect(header('mybizmate.io')).toBeOnTheScreen();
-    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^More/ })).toBeNull(); // the ⋮ menu went
-    expect(screen.queryByTestId('menu')).toBeNull();
-    expect(screen.queryByText('Saved invoices')).toBeNull();
-    expect(screen.queryByText('Speed test')).toBeNull();
+    const top = within(screen.getByTestId('header'));
+    expect(top.getByRole('header').props.children).toBe(words);
+    const sub = top.getByText(date);
+    expect(sub.props.children).toBe(longDay(when));
+    expect(sub).toHaveStyle({ ...type.overline, color: colors.mute });
     await screen.unmount();
   }
 
-  await render(<Home />);
-  const top = within(screen.getByTestId('header'));
-  for (const name of ['Your lists', 'Settings']) {
-    expect(top.getByRole('button', { name })).toHaveStyle({ width: touch.target, height: touch.target });
+  // no Back, no wordmark, no icon buttons: the tabs' bar has Profile, and Get set up has the lists
+  for (const team of [false, true]) {
+    mockTeam = team; // a team build has the speed test in Settings › Team tools, never on Home
+    await render(<Home />);
+    const top = within(screen.getByTestId('header'));
+    expect(top.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryByTestId('header-logo')).toBeNull();
+    expect(screen.queryByText('Speed test')).toBeNull();
+    await screen.unmount();
   }
-  await press(top.getByRole('button', { name: 'Your lists' }));
-  expect(mockPush).toHaveBeenLastCalledWith('/lists');
-  await backHome();
-  await press(top.getByRole('button', { name: 'Settings' }));
-  expect(mockNavigate).toHaveBeenLastCalledWith('/profile'); // the Profile tab
-  expect(mockPush).toHaveBeenCalledTimes(1);
 });
 
-test('a press opens its screen once, until Home is on top again (final review, Minor 4)', async () => {
-  // a double tap on Take photo pushed two cameras, one over the other
+test('a first run: Get set up, and Take your first photo with the three tips; Open the camera opens it', async () => {
   await render(<Home />);
-  // A fast double tap: inside one act() scope, nothing re-renders between the two taps.
-  await act(async () => {
-    await fireEvent.press(button('Take photo'));
-    await fireEvent.press(button('Take photo'));
-  });
-  expect(mockNavigate.mock.calls).toEqual([['/camera']]); // the camera tab
-  // the screen's other tab presses too, while the camera opens
-  await press(within(screen.getByTestId('header')).getByRole('button', { name: 'Settings' }));
-  expect(mockNavigate.mock.calls).toEqual([['/camera']]);
-  // back on Home, a press opens its screen again
-  await backHome();
-  await press(button('Take photo'));
-  expect(mockNavigate.mock.calls).toEqual([['/camera'], ['/camera']]);
-  expect(mockPush).not.toHaveBeenCalled();
-});
-
-test("a push and a tab share Home's one guard: two presses at once open only the first (ruling T6-1)", async () => {
-  // a guard each let both through: Your lists pushed, then the camera's href resolved over it, a second tabs
-  await render(<Home />);
-  const yourLists = () => within(screen.getByTestId('header')).getByRole('button', { name: 'Your lists' });
-  await act(async () => {
-    await fireEvent.press(yourLists());
-    await fireEvent.press(button('Take photo'));
-  });
-  expect(mockPush.mock.calls).toEqual([['/lists']]);
-  expect(mockNavigate).not.toHaveBeenCalled();
-
-  // the other way round, back on Home: the camera tab only
-  await backHome();
-  await act(async () => {
-    await fireEvent.press(button('Take photo'));
-    await fireEvent.press(yourLists());
-  });
-  expect(mockNavigate.mock.calls).toEqual([['/camera']]);
-  expect(mockPush.mock.calls).toEqual([['/lists']]);
-});
-
-test('capture: Take photo, From gallery, Import PDF, and what it reads', async () => {
-  await render(<Home />);
-  // Take photo: primary and large, on a line of its own
-  const take = button('Take photo');
-  expect(take).toHaveStyle({ minHeight: 56, backgroundColor: colors.brand });
-  await press(take);
-  expect(mockNavigate).toHaveBeenLastCalledWith('/camera'); // the camera tab
-
-  // under it, side by side: From gallery and Import PDF, both secondary
-  const row = within(screen.getByTestId('button-row'));
-  expect(row.queryByRole('button', { name: 'Take photo' })).toBeNull();
-  const gallery = row.getByRole('button', { name: 'From gallery' });
-  const pdf = row.getByRole('button', { name: 'Import PDF' });
-  for (const b of [gallery, pdf]) expect(b).toHaveStyle({ backgroundColor: colors.panel, borderColor: colors.outline });
-
-  // what it reads, in caps by the overline style
-  const caption = screen.getByText('MyBizMate invoice · Service Invoice · BIR 2307');
-  expect(caption).toHaveStyle({ ...type.overline, color: colors.mute, textAlign: 'center' });
-  // the form's name stays on one line: a no-break space joins BIR and 2307 (QA pass 1 had "… · BIR" / "2307")
-  expect(String(caption.props.children).toUpperCase()).toBe('MYBIZMATE INVOICE · SERVICE INVOICE · BIR\u00A02307');
-
-  // From gallery reads the photo and opens its result. The picker hands over its own copy in the app's cache; the
-  // scanner deletes only files inside the cache, never the person's photo.
-  await press(gallery);
-  expect(mockScanPhoto).toHaveBeenCalledWith('content://media/1', { deletePhoto: true });
-  expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/result', params: { id: expect.any(String) } });
-
-  // Import PDF opens the system's file picker, for PDFs
-  mockPick.mockResolvedValue({ canceled: true, result: null });
-  await press(pdf);
-  expect(mockPick).toHaveBeenCalledWith({ mimeTypes: ['application/pdf'] });
-});
-
-test('two quick presses scan once; while it reads, the card is up and capture waits', async () => {
-  let finish: (v: unknown) => void = () => {};
-  mockScanPhoto.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
-  await render(<Home />);
-  // A fast double tap: inside one act() scope, React doesn't re-render the button as busy between the two presses.
-  await act(async () => {
-    await fireEvent.press(button('From gallery'));
-    await fireEvent.press(button('From gallery'));
-  });
-  expect(mockScanPhoto).toHaveBeenCalledTimes(1);
-  expect(screen.getByText('Reading…')).toBeTruthy();
-  expect(screen.getByText('Straightening the photo and reading every box')).toBeTruthy();
-  for (const name of ['Take photo', 'From gallery', 'Import PDF']) expect(button(name)).toBeDisabled();
-  await act(async () => finish(parseScanResult(coreJson('inv_0007'))));
-  expect(screen.queryByText('Reading…')).toBeNull();
-  for (const name of ['Take photo', 'From gallery', 'Import PDF']) expect(button(name)).toBeEnabled();
-});
-
-test('a refused PDF says why in a dialog', async () => {
-  const file = 'content://com.android.externalstorage.documents/document/primary%3ADownload%2Flocked.pdf';
-  const result = { uri: file, name: 'locked.pdf', type: 'application/pdf' };
-  mockPick.mockResolvedValueOnce({ canceled: false, result });
-  mockReadPdf.mockRejectedValueOnce(Object.assign(new Error('refused'), { code: 'pdf_password' }));
-  await render(<Home />);
-  await act(async () => fireEvent.press(screen.getByText('Import PDF')));
-  // the reason, then what to do
-  expect(dialogWords(alert)).toEqual([['That PDF has a password.', 'Save a copy without one, then import it.']]);
-  expect(screen.queryByText('Reading…')).toBeNull();
-  expect(mockPush).not.toHaveBeenCalled();
-});
-
-test('first run: the tips until the first scan, and a sample counts', async () => {
-  await render(<Home />);
-  expect(header('Before your first scan')).toBeOnTheScreen();
+  expect(cardTitles()).toEqual(['Get set up 0 of 2', 'Take your first photo']);
+  const first = within(card('Take your first photo'));
+  expect(first.getByText('The round button at the bottom opens the camera.')).toHaveStyle({ color: colors.mute });
   const tips = ['The whole form in the photo', 'Flat on a table, in good light', 'Phone straight above it, no shadows'];
   tips.forEach((tip, i) => {
-    expect(screen.getByText(tip)).toHaveStyle({ ...type.body, color: colors.ink });
-    expect(screen.getByText(`${i + 1}`)).toHaveStyle({ ...type.figure, color: colors.brandText });
+    expect(first.getByText(tip)).toHaveStyle({ ...type.body, color: colors.ink });
+    expect(first.getByText(`${i + 1}`)).toHaveStyle({ ...type.figure, color: colors.brandText });
   });
+  const openCamera = first.getByRole('button', { name: 'Open the camera' });
+  expect(openCamera).toHaveStyle({ backgroundColor: colors.brand }); // primary
+  await press(openCamera);
+  expect(mockNavigate.mock.calls).toEqual([['/camera']]); // the camera tab
+  // nothing to check, send or open yet
+  expect(screen.queryByText('Check now')).toBeNull();
+  expect(screen.queryByText('Ready to send to MyBizMate')).toBeNull();
+  expect(screen.queryByText('Last session')).toBeNull();
 
-  // a sample is a first scan too
-  await press(button('Try a sample invoice'));
-  await press(button('Sample 0007, Patrick Hand handwriting'));
-  expect(recentScans()).toHaveLength(1);
-  expect(screen.queryByText('Before your first scan')).toBeNull();
-  for (const tip of tips) expect(screen.queryByText(tip)).toBeNull();
-
-  // with no recent scan left, a saved one is enough
-  await savedAre(summary('sale', 100));
+  // the first scan: the card goes; with no recent scan left, a saved one is enough
+  await act(async () => {
+    scan('inv_0007', { session: 'S1' });
+  });
+  expect(screen.queryByText('Take your first photo')).toBeNull();
+  await savedAre(summary('sale', 100, EXPORTED));
   await act(async () => recentScans().forEach((s) => forgetScan(s.id)));
-  expect(screen.queryByText('Before your first scan')).toBeNull();
+  expect(screen.queryByText('Take your first photo')).toBeNull();
+  for (const tip of tips) expect(screen.queryByText(tip)).toBeNull();
 });
 
 test('Get set up: two rows, each checked when done, then gone for good', async () => {
   await render(<Home />);
-  expect(header('Get set up')).toBeOnTheScreen();
-  expect(screen.getByText('0 of 2')).toBeOnTheScreen();
+  expect(header('Get set up 0 of 2')).toBeOnTheScreen();
   const listsRow = () => button('Import your customers and items, So scans can check names, TINs and prices');
   const defaultsRow = () => button('Set your export defaults, VAT status and accounts for MyBizMate');
   const done = (row: Instance) => row.props.accessibilityState?.checked;
@@ -323,7 +246,7 @@ test('Get set up: two rows, each checked when done, then gone for good', async (
   });
   expect(done(listsRow())).toBe(true);
   expect(iconsIn(listsRow(), colors.success)).toHaveLength(1); // a check in the chevron's place
-  expect(screen.getByText('1 of 2')).toBeOnTheScreen();
+  expect(header('Get set up 1 of 2')).toBeOnTheScreen();
   await act(async () => clearItems());
   expect(done(listsRow())).toBe(false);
   await act(async () => {
@@ -339,25 +262,65 @@ test('Get set up: two rows, each checked when done, then gone for good', async (
   expect(settings().setupDone).toBe(false);
   await act(async () => updateSettings({ revenueAccount: '4010' }));
 
-  // both done: the section goes, for good, with nothing scanned yet
-  expect(screen.queryByText('Get set up')).toBeNull();
+  // both done: the card goes, for good, with nothing scanned yet
+  expect(screen.queryByText(/^Get set up/)).toBeNull();
   expect(screen.queryByText('Import your customers and items')).toBeNull();
   expect(settings().setupDone).toBe(true);
-  expect(header('Before your first scan')).toBeOnTheScreen();
+  expect(cardTitles()).toEqual(['Take your first photo']);
   await act(async () => clearParties('customer'));
   await act(async () => updateSettings({ vatRegistered: null, revenueAccount: '' }));
-  expect(screen.queryByText('Get set up')).toBeNull();
+  expect(screen.queryByText(/^Get set up/)).toBeNull();
   await screen.unmount();
   await render(<Home />);
-  expect(screen.queryByText('Get set up')).toBeNull();
+  expect(screen.queryByText(/^Get set up/)).toBeNull();
   expect(settings().setupDone).toBe(true);
 });
 
-test("To export: a row per kind with its count and total; a row opens its file in the Export tab", async () => {
+test('N invoices to check, and the photos to retake; Check now opens the oldest session with something left', async () => {
+  await updateSettings({ setupDone: true });
   await render(<Home />);
-  expect(screen.queryByText('To export')).toBeNull(); // nothing saved: no section
-  expect(screen.queryByText('Saved')).toBeNull();
+  // one to check: in the singular, and no retake part
+  await act(async () => {
+    scan('inv_0007', { session: 'S2', at: at(20, 8, 30) });
+  });
+  expect(cardTitles()[0]).toBe('1 invoice to check');
+  const attention = card('1 invoice to check');
+  expect(attention).toHaveStyle({ backgroundColor: colors.warningTint, borderColor: colors.warningLine });
+  // a retake only: that part alone
+  await act(async () => recentScans().forEach((s) => forgetScan(s.id)));
+  await act(async () => {
+    scan('blank_page', { session: 'S2', at: at(20, 8, 30) });
+  });
+  expect(cardTitles()[0]).toBe('1 photo to retake');
 
+  // both, in the plural, joined by "and"; an older session with work, and a newer one; a sample counts nowhere
+  await act(async () => {
+    scan('blank_page', { session: 'S1', at: at(19, 16, 10) });
+    scan('inv_0007', { session: 'S3', at: at(20, 8, 45) });
+    scan('inv_0007', { session: 'S3', at: at(20, 8, 46) });
+    scan('inv_0007', { source: 'sample', at: at(18, 9, 0) });
+  });
+  expect(cardTitles()[0]).toBe('2 invoices to check and 2 photos to retake');
+  const checkNow = button('Check now');
+  expect(checkNow).toHaveStyle({ backgroundColor: colors.brand }); // primary
+  await press(checkNow);
+  // the oldest session with a scan left, in the Sessions tab, its list under it
+  expect(mockNavigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id: 'S1' } }, { withAnchor: true }]]);
+
+  // a scan with no session id, older still, with something left: its Scan screen, from a list
+  await backHome();
+  let older = '';
+  await act(async () => {
+    older = scan('blank_page', { at: at(17, 10, 0) });
+  });
+  expect(cardTitles()[0]).toBe('2 invoices to check and 3 photos to retake');
+  await press(button('Check now'));
+  expect(mockPush.mock.calls).toEqual([[{ pathname: '/result', params: { id: older, from: 'list' } }]]);
+});
+
+test("Ready to send to MyBizMate: each kind's count and total; Go to Export", async () => {
+  await updateSettings({ setupDone: true });
+  await render(<Home />);
   await savedAre(
     summary('sale', 1200.5),
     summary('sale', 38240),
@@ -365,107 +328,161 @@ test("To export: a row per kind with its count and total; a row opens its file i
     summary('purchase', 5000, EXPORTED),
     summary('2307', 4160.86),
   );
-  expect(header('To export')).toBeOnTheScreen();
-  // every purchase went out, so there's no Purchases row
-  expect(exportRows()).toEqual(['Sales, 2 to export, ₱39,440.50', '2307s, 1 to export · Tax withheld, ₱4,160.86']);
-  expect(screen.getByText('₱39,440.50')).toHaveStyle({ ...type.figure, textAlign: 'right' });
-  // the counts in the figure style too (design §9.2): figureSmall, in mute
-  for (const count of ['2 to export', '1 to export · Tax withheld']) {
-    const sub = screen.getByText(count);
-    expect(typeStylesOf(sub)).toEqual(['figureSmall']); // mono: a label of the same size flattens alike here
-    expect(sub).toHaveStyle({ ...type.figureSmall, color: colors.mute });
-  }
-  expect(iconsIn(button(/^Sales, /), colors.chevron)).toHaveLength(1);
-  await press(button(/^Sales, /));
-  expect(mockNavigate).toHaveBeenLastCalledWith(
-    { pathname: '/export/[which]', params: { which: 'sale' } },
-    { withAnchor: true },
-  );
-  await backHome();
-  await press(button(/^2307s, /));
-  expect(mockNavigate).toHaveBeenLastCalledWith(
-    { pathname: '/export/[which]', params: { which: '2307' } },
-    { withAnchor: true },
-  );
-  // All saved: every kind, the Export tab
-  await backHome();
-  await press(button('All saved'));
-  expect(mockNavigate).toHaveBeenLastCalledWith('/export'); // the Export tab's first step
+  expect(header('Ready to send to MyBizMate')).toBeOnTheScreen();
+  // every purchase went out, so there's no Purchases line
+  expect(sendLines()).toEqual(['Sales · 2, ₱39,440.50', '2307s · 1, ₱4,160.86']);
+  expect(typeStylesOf(screen.getByText('Sales · 2'))).toEqual(['value']);
+  const total = screen.getByText('₱39,440.50');
+  expect(typeStylesOf(total)).toEqual(['figure']);
+  expect(total).toHaveStyle({ textAlign: 'right' });
+  const go = within(card('Ready to send to MyBizMate')).getByRole('button', { name: 'Go to Export' });
+  expect(go).toHaveStyle({ backgroundColor: colors.panel, borderColor: colors.outline }); // secondary
+  await press(go);
+  expect(mockNavigate.mock.calls).toEqual([['/export']]); // the Export tab
 
   // purchases waiting too, between the two; a total in the millions in full
   await savedAre(summary('2307', 10039.79), summary('purchase', 12345000), summary('purchase', 678.9), summary('sale', 100));
-  expect(exportRows()).toEqual([
-    'Sales, 1 to export, ₱100.00',
-    'Purchases, 2 to export, ₱12,345,678.90',
-    '2307s, 1 to export · Tax withheld, ₱10,039.79',
-  ]);
+  expect(sendLines()).toEqual(['Sales · 1, ₱100.00', 'Purchases · 2, ₱12,345,678.90', '2307s · 1, ₱10,039.79']);
   expect(screen.getByText('₱12,345,678.90').props.numberOfLines).toBeUndefined();
-  await backHome();
-  await press(button(/^Purchases, /));
-  expect(mockNavigate).toHaveBeenLastCalledWith(
-    { pathname: '/export/[which]', params: { which: 'purchase' } },
-    { withAnchor: true },
-  );
-});
 
-test('everything exported: Saved, Everything is exported, which opens the Export tab', async () => {
-  await render(<Home />);
+  // everything exported: no card
   await savedAre(summary('sale', 100, EXPORTED), summary('2307', 50, EXPORTED));
-  expect(header('Saved')).toBeOnTheScreen();
-  expect(screen.queryByText('To export')).toBeNull();
-  expect(screen.queryByRole('button', { name: 'All saved' })).toBeNull();
-  const row = button('Everything is exported');
-  expect(iconsIn(row, colors.chevron)).toHaveLength(1);
-  await press(row);
-  expect(mockNavigate).toHaveBeenLastCalledWith('/export'); // the Export tab's first step
-
-  // one waiting again: To export
-  await savedAre(summary('sale', 100, EXPORTED), summary('sale', 200));
-  expect(header('To export')).toBeOnTheScreen();
-  expect(screen.queryByText('Everything is exported')).toBeNull();
-  expect(exportRows()).toEqual(['Sales, 1 to export, ₱200.00']);
+  expect(screen.queryByText('Ready to send to MyBizMate')).toBeNull();
+  expect(screen.queryByText('Go to Export')).toBeNull();
 });
 
-test('recent scans: title, time and form, and the badge; the caption says 20', async () => {
+test('Last session: its time and count; Open the session opens it', async () => {
+  await updateSettings({ setupDone: true });
   await render(<Home />);
-  expect(screen.queryByText('Recent scans')).toBeNull(); // none yet
-  expect(screen.queryByText('The last 20 scans stay here. Save a scan to keep it.')).toBeNull();
-
-  await press(button('From gallery'));
-  expect(header('Recent scans')).toBeOnTheScreen();
-  // the time on a 12-hour clock and the form's name, then the scan's state
-  const row = button('Photo from gallery, 9:00 AM · MyBizMate Sales Invoice, Checks passed');
-  // the badge: spoken with its row, not a stop of its own (ruling T4-4)
-  expect(within(row).getByText('Checks passed', { includeHiddenElements: true })).toHaveStyle({ color: colors.success });
-  await press(row);
-  // from a list: the Scan screen's Retake goes back (ruling P-F16, until Task 12's Home)
-  expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/result', params: { id: recentScans()[0].id, from: 'list' } });
-  expect(screen.getByText('The last 20 scans stay here. Save a scan to keep it.')).toHaveStyle({
-    ...type.label,
-    color: colors.mute,
-  });
-
-  // newest first; a PDF by its file name, in full; no form found: the time alone
-  const name = 'Isabela Prime Builders and General Merchandise Trading 2026-11.pdf';
   await act(async () => {
-    addScan({ label: `PDF: ${name}`, source: 'pdf', result: parseScanResult(coreJson('sales_text_0')) });
-    addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('blank_page')) });
+    scan('inv_0007', { session: 'S1', at: at(19, 16, 10) });
+    scan('inv_0007', { session: 'S2', at: at(20, 8, 30) });
+    scan('blank_page', { session: 'S2', at: at(20, 8, 31) });
+    scan('inv_0007', { session: 'S2', at: at(20, 8, 32) });
+    scan('inv_0007', { at: at(20, 8, 50) }); // newer, but with no session id: not a session to open
+    scan('inv_0007', { source: 'sample', at: at(20, 8, 55) });
   });
-  const rows = screen.getAllByRole('button', { name: /, 9:00 AM/ }).map((r) => r.props.accessibilityLabel);
-  expect(rows).toHaveLength(3);
-  expect(rows[0]).toBe("Camera photo, 9:00 AM, Couldn't find the form");
-  expect(rows[1]).toMatch(/^Isabela Prime Builders and General Merchandise Trading 2026-11\.pdf, 9:00 AM · MyBizMate Sales Invoice, /);
-  expect(rows[2]).toBe('Photo from gallery, 9:00 AM · MyBizMate Sales Invoice, Checks passed');
-  expect(screen.getByText(name).props.numberOfLines).toBeUndefined();
-  expect(screen.queryByText(`PDF: ${name}`)).toBeNull();
+  const last = within(card('Last session'));
+  expect(last.getByText('Today, 8:30 AM · 3 invoices')).toHaveStyle({ color: colors.mute });
+  const openIt = last.getByRole('button', { name: 'Open the session' });
+  expect(openIt).toHaveStyle({ backgroundColor: colors.panel, borderColor: colors.outline }); // secondary
+  await press(openIt);
+  expect(mockNavigate.mock.calls).toEqual([[{ pathname: '/sessions/[id]', params: { id: 'S2' } }, { withAnchor: true }]]);
+  // the cards in their order
+  expect(cardTitles()).toEqual(['4 invoices to check and 1 photo to retake', 'Last session']);
+
+  // yesterday's, with one invoice
+  await act(async () => recentScans().forEach((s) => forgetScan(s.id)));
+  await act(async () => {
+    scan('inv_0007', { session: 'S1', at: at(19, 16, 10) });
+  });
+  expect(within(card('Last session')).getByText('Yesterday, 4:10 PM · 1 invoice')).toBeOnTheScreen();
 });
 
-test('a scan read on another screen shows in Recent scans at once', async () => {
+test('a sample opens its Scan screen, in no session', async () => {
   await render(<Home />);
+  await press(button('Try a sample invoice'));
+  await press(button('Sample 0051, Caveat handwriting'));
+  expect(screen.queryByText('Sample invoices')).toBeNull();
+  expect(mockScanPhoto).toHaveBeenCalledWith('file:///bundle/sample.jpg', { deletePhoto: false });
+  const [read] = recentScans();
+  expect(read).toMatchObject({ label: 'Sample 0051', source: 'sample', sampleId: 'inv_0051' });
+  expect(read.session).toBeUndefined();
+  expect(mockPush.mock.calls).toEqual([[{ pathname: '/result', params: { id: read.id } }]]);
+  // a first scan, so the first photo's card goes; and a sample is nothing to check, nor a session
+  expect(screen.queryByText('Take your first photo')).toBeNull();
+  expect(screen.queryByText('Check now')).toBeNull();
+  expect(screen.queryByText('Last session')).toBeNull();
+});
+
+test('nothing to do: no check card and no send card', async () => {
+  await updateSettings({ setupDone: true });
+  await render(<Home />);
+  // every scan saved and exported, in a session
+  await savedAre({ ...summary('sale', 100, EXPORTED), session: 'S1' });
+  expect(cardTitles()).toEqual(['Last session']);
+  expect(screen.queryByText(/to check|to retake/)).toBeNull();
+  expect(screen.queryByText('Ready to send to MyBizMate')).toBeNull();
+  // the end stays
+  expect(button('Try a sample invoice')).toBeOnTheScreen();
+  expect(screen.getByText('Read on this phone · no internet')).toBeOnTheScreen();
+});
+
+test("each card's button runs once on a double tap", async () => {
+  await render(<Home />);
+  await savedAre(summary('sale', 100));
   await act(async () => {
-    addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson('inv_0007')) });
+    scan('inv_0007', { session: 'S1', at: at(20, 8, 30) });
   });
-  expect(button(/^Camera photo, 9:00 AM · MyBizMate Sales Invoice, /)).toBeOnTheScreen();
+  // a fast double tap: inside one act() scope, nothing re-renders between the two taps
+  const twice = (name: string) =>
+    act(async () => {
+      await fireEvent.press(button(name));
+      await fireEvent.press(button(name));
+    });
+  const toSession = [{ pathname: '/sessions/[id]', params: { id: 'S1' } }, { withAnchor: true }];
+  for (const [name, call] of [
+    ['Check now', toSession],
+    ['Go to Export', ['/export']],
+    ['Open the session', toSession],
+  ] as const) {
+    mockNavigate.mockClear();
+    await twice(name);
+    expect([name, mockNavigate.mock.calls]).toEqual([name, [call]]);
+    await backHome();
+  }
+  await twice('Import your customers and items, So scans can check names, TINs and prices');
+  expect(mockPush.mock.calls).toEqual([['/lists']]);
+  await backHome();
+
+  // two cards at once share the one guard (ruling T6-1): only the first opens
+  mockNavigate.mockClear();
+  mockPush.mockClear();
+  await act(async () => {
+    await fireEvent.press(button('Check now'));
+    await fireEvent.press(button('Go to Export'));
+    await fireEvent.press(button('Import your customers and items, So scans can check names, TINs and prices'));
+  });
+  expect(mockNavigate.mock.calls).toEqual([toSession]);
+  expect(mockPush).not.toHaveBeenCalled();
+  // and a sample waits too, until Home is on top again
+  await press(button('Try a sample invoice'));
+  await press(button('Sample 0007, Patrick Hand handwriting'));
+  expect(mockScanPhoto).not.toHaveBeenCalled();
+  await backHome();
+  await press(button('Sample 0007, Patrick Hand handwriting'));
+  expect(mockScanPhoto).toHaveBeenCalledTimes(1);
+  expect(mockPush).toHaveBeenCalledTimes(1);
+  // its Scan screen opened behind the same guard: a card waits until Home is on top again
+  mockNavigate.mockClear();
+  await press(button('Go to Export'));
+  expect(mockNavigate).not.toHaveBeenCalled();
+
+  // the first photo's Open the camera, on a first run
+  await screen.unmount();
+  recentScans().forEach((s) => forgetScan(s.id));
+  await savedAre();
+  mockNavigate.mockClear();
+  await render(<Home />);
+  await twice('Open the camera');
+  expect(mockNavigate.mock.calls).toEqual([['/camera']]);
+});
+
+test('two quick presses on a sample read it once; while it reads, the card is up', async () => {
+  let finish: (v: unknown) => void = () => {};
+  mockScanPhoto.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+  await render(<Home />);
+  await press(button('Try a sample invoice'));
+  const sample = button('Sample 0007, Patrick Hand handwriting');
+  await act(async () => {
+    await fireEvent.press(sample);
+    await fireEvent.press(sample);
+  });
+  expect(mockScanPhoto).toHaveBeenCalledTimes(1);
+  expect(screen.getByText('Reading…')).toBeTruthy();
+  await act(async () => finish(parseScanResult(coreJson('inv_0007'))));
+  expect(screen.queryByText('Reading…')).toBeNull();
+  expect(mockPush).toHaveBeenCalledTimes(1);
 });
 
 test('Try a sample invoice opens the samples sheet, which closes', async () => {
@@ -491,14 +508,6 @@ test('Try a sample invoice opens the samples sheet, which closes', async () => {
   await press(button('Close'));
   expect(screen.queryByText('Sample invoices')).toBeNull();
   expect(mockScanPhoto).not.toHaveBeenCalled();
-
-  // a sample: the sheet closes and the sample is read
-  await press(button('Try a sample invoice'));
-  await press(button('Sample 0051, Caveat handwriting'));
-  expect(screen.queryByText('Sample invoices')).toBeNull();
-  expect(mockScanPhoto).toHaveBeenCalledWith('file:///bundle/sample.jpg', { deletePhoto: false });
-  expect(recentScans()[0]).toMatchObject({ label: 'Sample 0051', source: 'sample', sampleId: 'inv_0051' });
-  expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/result', params: { id: recentScans()[0].id } });
 });
 
 test('the footer', async () => {

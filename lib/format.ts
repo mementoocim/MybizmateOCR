@@ -93,3 +93,18 @@ export function monthSpan(from: string, to: string): string {
   if (fromYear !== toYear) return `${first} ${fromYear}–${last} ${toYear}`;
   return fromMonth === toMonth ? `${last} ${toYear}` : `${first}–${last} ${toYear}`;
 }
+
+/** Home's greeting, by the phone's clock: "Good morning" before 12:00, "Good afternoon" before 18:00, then evening. */
+export function greeting(d: Date): 'Good morning' | 'Good afternoon' | 'Good evening' {
+  const h = d.getHours();
+  if (h < 12) return 'Good morning';
+  return h < 18 ? 'Good afternoon' : 'Good evening';
+}
+
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const two = (n: number) => String(n).padStart(2, '0');
+
+/** Home's date, on the phone's clock: "Tuesday, Nov 24", its month and day joined as monthDay joins them. */
+export function longDay(d: Date): string {
+  return `${DAYS[d.getDay()]}, ${monthDay(`${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`)}`;
+}
