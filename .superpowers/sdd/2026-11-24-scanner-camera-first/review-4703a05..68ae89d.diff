@@ -1,0 +1,771 @@
+diff --git a/__tests__/camera.test.tsx b/__tests__/camera.test.tsx
+index 7153b577..f4de49ed 100644
+--- a/__tests__/camera.test.tsx
++++ b/__tests__/camera.test.tsx
+@@ -8,7 +8,7 @@ import { CAMERA_ERRORS, CAMERA_TEXT, PERMISSION_TEXT, statusText } from '../lib/
+ import { captures, pendingIn } from '../lib/captureQueue';
+ import { saveScan } from '../lib/saved';
+ import { getScan, recentScans } from '../lib/scans';
+-import { currentSession, loadSession, retakeIn } from '../lib/session';
++import { currentSession, loadSession, retakeIn, retryIn } from '../lib/session';
+ import { CAPTURE_GRACE_MS, currentShutter } from '../lib/shutter';
+ import { setStarted } from '../lib/startup';
+ import { colors, radius, touch, type } from '../lib/theme';
+@@ -1210,3 +1210,57 @@ test('a camera test image is marked', async () => {
+   await act(async () => saveScan(scan.id, details));
+   expect(getScan(scan.id)).toMatchObject({ testImage: true, saved: { details } });
+ });
++
++test("a Retake of a photo that couldn't be read: rearmed; a cancelled pick spends nothing; the next file tries it again, once", async () => {
++  // ruling T9-5, P-F9: the session screen's Retake on its photos that couldn't be read (lib/session's retryIn)
++  await open();
++  await photo('capture_1.jpg');
++  const id = sessionId()!;
++  await read(result('blank_page'));
++  await photo('capture_2.jpg');
++  await fail();
++  const [failed] = currentSession()!.failed;
++  const scansBefore = recentScans().map((s) => s.id);
++  await act(async () => retryIn(id, failed.at, new Date()));
++  await settle();
++  expect(mockRearm).toHaveBeenCalledTimes(1); // Auto takes the sheet in view, as for a Retake of a scan
++
++  // a cancelled gallery or PDF (the camera app is the start panel's: the test before covers it): all stay
++  for (const cancel of [() => press(button('Gallery')), () => press(button('Import PDF'))]) {
++    await cancel();
++    await settle();
++    expect(currentSession()).toMatchObject({ id, open: true, failed: [failed], retries: failed.at });
++    expect(recentScans().map((s) => s.id)).toEqual(scansBefore);
++  }
++
++  // the next pick that returns a file spends it; stored, the failed read goes
++  memoryFs.files.set('file:///cache/ImagePicker/g1.jpg', 'jpeg');
++  mockLibrary.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file:///cache/ImagePicker/g1.jpg' }] });
++  await press(button('Gallery'));
++  await settle();
++  expect(captures().map((c) => c.retries)).toEqual([failed.at]);
++  expect(currentSession()?.retries).toBeNull();
++  await photo('capture_3.jpg'); // once
++  expect(captures().map((c) => c.retries)).toEqual([failed.at, null]);
++  await read();
++  expect(currentSession()?.failed).toEqual([]);
++  expect(thumbs()).toEqual(['Photo 1, retake', 'Photo 2, read', 'Photo 3, reading']);
++  await read();
++  expect(currentSession()?.failed).toEqual([]);
++
++  // a camera photo and a PDF carry it the same way
++  await photo('capture_4.jpg');
++  await fail();
++  await act(async () => retryIn(id, currentSession()!.failed[0].at, new Date()));
++  await photo('capture_5.jpg');
++  expect(captures().map((c) => c.retries)).toEqual([currentSession()!.failed[0].at]);
++  await read();
++  await photo('capture_6.jpg');
++  await fail();
++  const pdfRetry = currentSession()!.failed[0].at;
++  await act(async () => retryIn(id, pdfRetry, new Date()));
++  mockPick.mockResolvedValueOnce({ canceled: false, result: { uri: 'content://docs/msf%3A54', type: 'application/pdf' } });
++  await press(button('Import PDF'));
++  await settle();
++  expect(captures().map((c) => c.retries)).toEqual([pdfRetry]);
++});
+diff --git a/__tests__/captureQueue.test.ts b/__tests__/captureQueue.test.ts
+index a51ce81b..aeb68b99 100644
+--- a/__tests__/captureQueue.test.ts
++++ b/__tests__/captureQueue.test.ts
+@@ -168,6 +168,8 @@ test("a photo moves into files/queue/<session>/ before it's read, named by its t
+       testImage: true,
+       name: null,
+       replaces: null,
++
++      retries: null,
+       reading: true,
+     },
+   ]);
+@@ -359,6 +361,8 @@ test("a PDF waits in memory, is read through readPdf, then the picker's access i
+       testImage: false,
+       name: 'a.pdf',
+       replaces: null,
++
++      retries: null,
+       reading: true,
+     },
+   ]);
+@@ -783,3 +787,79 @@ test("failedReadReason never holds the scanner's own message, in a team build to
+   await flush();
+   expect(memoryFs.files.get(SESSION_FILE)).not.toContain('ENOENT');
+ });
++
++test("a Retake of a read that failed: stored, form found or not, that failed read goes; failed again, it takes its place", async () => {
++  // ruling T9-5: the session screen's Retake for its photos that couldn't be read (lib/session's retryIn)
++  const { queue, scans, session } = m;
++  const { session: id } = session.takeCapture(T);
++  await queue.queuePhoto(photo('capture_1.jpg'), { session: id, source: 'camera' }, T);
++  await fail(new Error('boom'));
++  jest.setSystemTime(at(1));
++  await queue.queuePhoto(photo('capture_2.jpg'), { session: id, source: 'camera' }, at(1));
++  await fail({ code: 'ERR_UNREADABLE_IMAGE' });
++  const [first, second] = session.currentSession()!.failed;
++  expect([first.reason, second.reason]).toEqual([STOPPED, UNREADABLE]);
++
++  /** The Retake, then the camera's next photo. */
++  async function retry(failedAt: string, seconds: number, name: string) {
++    session.retryIn(id, failedAt, at(seconds));
++    const link = session.takeCapture(at(seconds));
++    expect(link).toEqual({ session: id, replaces: null, retries: failedAt });
++    await queue.queuePhoto(photo(name), { source: 'camera', ...link }, at(seconds));
++    expect(queue.captures()[0].retries).toBe(failedAt);
++  }
++
++  // failed again: in its place, with its new time and words; the count stays
++  jest.setSystemTime(at(10));
++  await retry(first.at, 10, 'capture_3.jpg');
++  await fail({ code: 'ERR_UNREADABLE_IMAGE' });
++  expect(session.currentSession()!.failed).toEqual([{ at: at(10).toISOString(), reason: UNREADABLE }, second]);
++
++  // stored with no form found: it goes all the same, and the scan is there to retake
++  await retry(second.at, 11, 'capture_4.jpg');
++  await read(result('blank_page'));
++  expect(session.currentSession()!.failed).toEqual([{ at: at(10).toISOString(), reason: UNREADABLE }]);
++  expect(scans.recentScans()).toHaveLength(1);
++
++  // read, but its scan couldn't be kept: a failed read again, in that one's place (ruling T3-3)
++  jest.setSystemTime(at(12));
++  jest.spyOn(scans, 'addScan').mockImplementationOnce(() => {
++    throw new Error('No space left on device');
++  });
++  await retry(at(10).toISOString(), 12, 'capture_5.jpg');
++  await read(result());
++  expect(session.currentSession()!.failed).toEqual([{ at: at(12).toISOString(), reason: STOPPED }]);
++
++  // stored with its form: the last one goes
++  await retry(at(12).toISOString(), 13, 'capture_6.jpg');
++  await read(result());
++  expect(session.currentSession()!.failed).toEqual([]);
++  await flush();
++  expect(JSON.parse(memoryFs.files.get(SESSION_FILE) as string)).toMatchObject({ failed: [], retries: null });
++});
++
++test("a capture with no retry link, or one whose session isn't the current one any more, leaves the failed reads alone", async () => {
++  const { queue, session } = m;
++  const { session: id } = session.takeCapture(T);
++  await queue.queuePhoto(photo('capture_1.jpg'), { session: id, source: 'camera' }, T);
++  await fail(new Error('boom'));
++  const failed = session.currentSession()!.failed;
++
++  // no link: a read stored, and one that fails, each beside it
++  await queue.queuePhoto(photo('capture_2.jpg'), { session: id, source: 'camera' }, at(1));
++  await read(result());
++  expect(session.currentSession()!.failed).toEqual(failed);
++  jest.setSystemTime(at(2));
++  await queue.queuePhoto(photo('capture_3.jpg'), { session: id, source: 'camera' }, at(2));
++  await fail(new Error('boom'));
++  expect(session.currentSession()!.failed).toEqual([...failed, { at: at(2).toISOString(), reason: STOPPED }]);
++
++  // a retry whose session another one has replaced by the time it's read: nothing changes on either
++  session.retryIn(id, failed[0].at, at(3));
++  const link = session.takeCapture(at(3));
++  await queue.queuePhoto(photo('capture_4.jpg'), { source: 'camera', ...link }, at(3));
++  session.endSession(id);
++  const other = session.takeCapture(at(4)).session;
++  await read(result());
++  expect(session.currentSession()).toMatchObject({ id: other, failed: [] });
++});
+diff --git a/__tests__/session.test.ts b/__tests__/session.test.ts
+index d2e758d2..7019595f 100644
+--- a/__tests__/session.test.ts
++++ b/__tests__/session.test.ts
+@@ -39,9 +39,9 @@ test('the first capture opens a session; the next ones join it, and session.json
+   expect(first.session.startsWith(`${T.getTime()}-`)).toBe(true); // the time it started (the plan's call 23)
+   expect(first.replaces).toBeNull();
+   const opened = s.currentSession();
+-  expect(opened).toEqual({ id: first.session, changedAt: T.toISOString(), open: true, failed: [], replaces: null });
++  expect(opened).toEqual({ id: first.session, changedAt: T.toISOString(), open: true, failed: [], replaces: null, retries: null });
+ 
+-  expect(s.takeCapture(at(MINUTE))).toEqual({ session: first.session, replaces: null });
++  expect(s.takeCapture(at(MINUTE))).toEqual({ session: first.session, replaces: null, retries: null });
+   expect(s.currentSession()).not.toBe(opened); // replaced, never changed in place: screens subscribe to it
+   expect(opened?.changedAt).toBe(T.toISOString());
+   expect(listener).toHaveBeenCalledTimes(2);
+@@ -54,6 +54,8 @@ test('the first capture opens a session; the next ones join it, and session.json
+     open: true,
+     failed: [],
+     replaces: null,
++
++    retries: null,
+   });
+ });
+ 
+@@ -72,6 +74,8 @@ test("Done ends it: the next capture opens another, and the ended one's failed r
+     open: false,
+     failed: [{ at: at(MINUTE).toISOString(), reason: UNREADABLE }],
+     replaces: null,
++
++    retries: null,
+   });
+ 
+   const next = s.takeCapture(at(2 * MINUTE));
+@@ -83,6 +87,8 @@ test("Done ends it: the next capture opens another, and the ended one's failed r
+     open: true,
+     failed: [],
+     replaces: null,
++
++    retries: null,
+   });
+   await flush();
+   expect(kept()).toEqual(s.currentSession());
+@@ -203,9 +209,11 @@ test("Retake: that session is the camera's again, and its next capture replaces
+     open: true,
+     failed: [],
+     replaces: 'scan-1',
++
++    retries: null,
+   });
+-  expect(s.takeCapture(at(2 * MINUTE))).toEqual({ session: b, replaces: 'scan-1' });
+-  expect(s.takeCapture(at(3 * MINUTE))).toEqual({ session: b, replaces: null });
++  expect(s.takeCapture(at(2 * MINUTE))).toEqual({ session: b, replaces: 'scan-1', retries: null });
++  expect(s.takeCapture(at(3 * MINUTE))).toEqual({ session: b, replaces: null, retries: null });
+ 
+   // a B that Done had ended keeps its failed reads
+   s.addFailedRead(b, UNREADABLE, at(4 * MINUTE));
+@@ -217,6 +225,8 @@ test("Retake: that session is the camera's again, and its next capture replaces
+     open: true,
+     failed: [{ at: at(4 * MINUTE).toISOString(), reason: UNREADABLE }],
+     replaces: 'scan-2',
++
++    retries: null,
+   });
+ 
+   // Done before that capture spends the link
+@@ -228,3 +238,72 @@ test("Retake: that session is the camera's again, and its next capture replaces
+   await flush();
+   expect(kept()).toEqual(s.currentSession());
+ });
++
++test("Retake of a read that failed: the camera's session again, with its failed reads; the next capture tries it, once", async () => {
++  // ruling T9-5
++  const s = S();
++  const { session: a } = s.takeCapture(T);
++  s.addFailedRead(a, STOPPED, at(MINUTE));
++  s.addFailedRead(a, UNREADABLE, at(2 * MINUTE));
++  s.endSession(a); // Done: its screen shows them
++  const failed = s.currentSession()!.failed;
++
++  s.retryIn(a, failed[0].at, at(3 * MINUTE));
++  expect(s.currentSession()).toEqual({
++    id: a,
++    changedAt: at(3 * MINUTE).toISOString(),
++    open: true,
++    failed,
++    replaces: null,
++    retries: failed[0].at,
++  });
++  expect(s.takeCapture(at(4 * MINUTE))).toEqual({ session: a, replaces: null, retries: failed[0].at });
++  expect(s.takeCapture(at(5 * MINUTE))).toEqual({ session: a, replaces: null, retries: null }); // spent
++
++  // failed again: in its place, with its new time and words
++  s.addFailedRead(a, UNREADABLE, at(6 * MINUTE), failed[0].at);
++  expect(s.currentSession()?.failed).toEqual([{ at: at(6 * MINUTE).toISOString(), reason: UNREADABLE }, failed[1]]);
++  // one gone by then is a new one
++  s.addFailedRead(a, STOPPED, at(7 * MINUTE), 'gone');
++  expect(s.currentSession()?.failed).toHaveLength(3);
++  // stored: it goes; one that isn't there, or another session's, changes nothing
++  s.clearFailedRead(a, failed[1].at);
++  expect(s.currentSession()?.failed.map((f) => f.at)).toEqual([at(6 * MINUTE).toISOString(), at(7 * MINUTE).toISOString()]);
++  const before = s.currentSession();
++  s.clearFailedRead(a, 'gone');
++  s.clearFailedRead('other', at(6 * MINUTE).toISOString());
++  expect(s.currentSession()).toBe(before);
++
++  // Done spends it, and so does a Retake of a scan; a new session starts with none
++  s.retryIn(a, at(6 * MINUTE).toISOString(), at(8 * MINUTE));
++  s.endSession(a);
++  expect(s.currentSession()).toMatchObject({ open: false, retries: null });
++  s.retryIn(a, at(6 * MINUTE).toISOString(), at(9 * MINUTE));
++  s.retakeIn(a, 'scan-1', at(9 * MINUTE));
++  expect(s.currentSession()).toMatchObject({ replaces: 'scan-1', retries: null });
++  s.endSession(a);
++  expect(s.takeCapture(at(10 * MINUTE))).toMatchObject({ replaces: null, retries: null });
++  expect(s.currentSession()).toMatchObject({ failed: [], retries: null });
++  await flush();
++  expect(kept()).toEqual(s.currentSession());
++});
++
++test('a session.json from before retries loads: closed, as every start closes it', async () => {
++  // data persists across updates: one kept by the last version has no `retries`
++  memoryFs.files.set(
++    FILE,
++    JSON.stringify({
++      id: '1795484460000-u5t9',
++      changedAt: T.toISOString(),
++      open: true,
++      failed: [{ at: T.toISOString(), reason: STOPPED }],
++      replaces: 'scan-1',
++    }),
++  );
++  const s = S();
++  await s.loadSession();
++  expect(s.currentSession()).toBeNull();
++  expect(memoryFs.files.get(FILE)).toBe('null');
++  const next = s.takeCapture(at(MINUTE));
++  expect(next).toMatchObject({ replaces: null, retries: null });
++});
+diff --git a/__tests__/sessionScreen.test.tsx b/__tests__/sessionScreen.test.tsx
+index 7842d553..4ebc70d9 100644
+--- a/__tests__/sessionScreen.test.tsx
++++ b/__tests__/sessionScreen.test.tsx
+@@ -12,7 +12,7 @@ import * as savedStore from '../lib/saved';
+ import { loadSaved, saveScan, savedSummary } from '../lib/saved';
+ import * as scansStore from '../lib/scans';
+ import { addScan, forgetScan, getScan, recentScans, type ScanSource, type StoredScan, updateScan } from '../lib/scans';
+-import { addFailedRead, currentSession, endSession, loadSession, retakeIn } from '../lib/session';
++import { addFailedRead, clearFailedRead, currentSession, endSession, loadSession, retakeIn } from '../lib/session';
+ import { savedSub } from '../lib/sessions';
+ import { settings, updateSettings } from '../lib/settings';
+ import { colors, type } from '../lib/theme';
+@@ -570,3 +570,90 @@ test("confirmDeleteScan: Delete runs the caller's step, then the delete; Cancel
+   expect(steps).toEqual(['before', 'deleteSaved']);
+   expect(deleteSaved).toHaveBeenCalledWith(saved);
+ });
++
++test('with no scans in it, the header has no count: never 0 invoices', async () => {
++  // ruling T9-4: every photo of the session failed to read
++  failedReadsIn('S1', [[at(9, 41), UNREADABLE_PHOTO]]);
++  await showSession();
++  expect(screen.getByRole('header', { name: 'Today, 9:41 AM' })).toBeOnTheScreen();
++  expect(screen.queryByText(/^Session · /)).toBeNull();
++  expect(screen.getByRole('header', { name: '1 to retake' })).toBeOnTheScreen();
++
++  // a scan in it: its count is back
++  await act(async () => void scan('inv_0007', { at: at(9, 42) }));
++  expect(screen.getByText('Session · 1 invoice')).toBeOnTheScreen();
++});
++
++test("Retake on the photos that couldn't be read: the camera, in this session, trying the oldest again", async () => {
++  // ruling T9-5
++  scan('inv_0007', { at: at(9, 41) });
++  failedReadsIn('S1', [
++    [at(9, 42), UNREADABLE_PHOTO],
++    [at(9, 43), SCANNER_STOPPED],
++  ]);
++  await showSession();
++  const failed = currentSession()!.failed;
++  const retry = () => within(screen.getByTestId('failed-reads')).getByRole('button', { name: /^Retake / });
++  expect(retry().props.accessibilityLabel).toBe("Retake a photo that couldn't be read");
++  expect(within(screen.getByTestId('failed-reads')).getByText('Retake')).toHaveStyle({ color: colors.brandText });
++
++  await press(retry());
++  expect(mockNavigate.mock.calls).toEqual([['/camera']]);
++  expect(currentSession()).toMatchObject({ id: 'S1', open: true, failed, replaces: null, retries: failed[0].at });
++  await act(async () => focusAgain());
++
++  // its new read stored: that one goes, and the card counts one less
++  await act(async () => clearFailedRead('S1', failed[0].at));
++  expect(screen.getByRole('header', { name: '1 ready · 1 to retake' })).toBeOnTheScreen();
++  expect(retry().props.accessibilityLabel).toBe("Retake the photo that couldn't be read");
++  expect(screen.getByRole('alert')).toHaveTextContent(
++    `1 photo couldn't be read. Retake it.\n${formatClock(at(9, 43))}: ${SCANNER_STOPPED}`,
++  );
++
++  // failed again: still one, with its new time and words; the oldest is retried next
++  await act(async () => addFailedRead('S1', UNREADABLE_PHOTO, at(9, 50), failed[1].at));
++  expect(screen.getByRole('alert')).toHaveTextContent(
++    `1 photo couldn't be read. Retake it.\n${formatClock(at(9, 50))}: ${UNREADABLE_PHOTO}`,
++  );
++  await act(async () => addFailedRead('S1', SCANNER_STOPPED, at(9, 51)));
++  await act(async () => addFailedRead('S1', SCANNER_STOPPED, at(9, 53), at(9, 50).toISOString())); // first, but 9:53 now
++  mockNavigate.mockClear();
++  await press(retry());
++  expect(currentSession()?.retries).toBe(at(9, 51).toISOString()); // the oldest, not the first listed
++
++  // the last one stored: the banner and its Retake go, and the card says what's left
++  await act(async () => focusAgain());
++  await act(async () => clearFailedRead('S1', at(9, 51).toISOString()));
++  await act(async () => clearFailedRead('S1', at(9, 53).toISOString()));
++  expect(screen.queryByTestId('failed-reads')).toBeNull();
++  expect(screen.getByRole('header', { name: '1 ready' })).toBeOnTheScreen();
++});
++
++test("the failed reads' Retake runs once on a double tap, and waits for another press's open or read", async () => {
++  // Review Focus 5
++  const past = await savedOnly({ at: at(9, 41), edits: { customer_name: 'Bautista Pharmacy' } });
++  failedReadsIn('S1', [[at(9, 42), UNREADABLE_PHOTO]]);
++  await showSession();
++  const retry = () => within(screen.getByTestId('failed-reads')).getByRole('button', { name: /^Retake / });
++  const sessionBefore = currentSession();
++
++  // while a saved scan is read back: nothing
++  const finish = slowOpenSaved();
++  await press(button(/^Bautista Pharmacy, /));
++  await press(retry());
++  expect(currentSession()).toBe(sessionBefore);
++  await finish();
++  expect(opened()).toEqual([{ pathname: '/result', params: { id: past, from: 'session', session: 'S1' } }]);
++  expect(mockNavigate).not.toHaveBeenCalled();
++  // a row opened: nothing until this screen is on top again
++  await press(retry());
++  expect(currentSession()).toBe(sessionBefore);
++  await act(async () => focusAgain());
++
++  await act(async () => {
++    await fireEvent.press(retry());
++    await fireEvent.press(retry());
++  });
++  expect(mockNavigate).toHaveBeenCalledTimes(1);
++  expect(currentSession()?.retries).toBe(at(9, 42).toISOString());
++});
+diff --git a/__tests__/sessions.test.ts b/__tests__/sessions.test.ts
+index c2a66c88..24fc2ffe 100644
+--- a/__tests__/sessions.test.ts
++++ b/__tests__/sessions.test.ts
+@@ -433,6 +433,7 @@ test('the tray: read, retake and reading, in the order taken', () => {
+     testImage: false,
+     name: kind === 'pdf' ? 'a.pdf' : null,
+     replaces: null,
++    retries: null,
+     reading: false,
+   });
+   const waiting = [
+diff --git a/app/(tabs)/camera.tsx b/app/(tabs)/camera.tsx
+index fe6db853..820bb1ce 100644
+--- a/app/(tabs)/camera.tsx
++++ b/app/(tabs)/camera.tsx
+@@ -243,9 +243,14 @@ export default function CameraScreen() {
+     }
+     if (byAuto) confirmHaptic();
+     const now = new Date();
+-    const { session: id, replaces } =
+-      finishingRef.current !== null ? { session: finishingRef.current, replaces: null } : takeCapture(now);
+-    void queuePhoto(uri, { session: id, source: 'camera', testImage: testImages, replaces }, now).catch(() => {});
++    // finishing (Done waits for this photo): it joins that session, with no Retake link to spend
++    const { session: id, replaces, retries } =
++      finishingRef.current !== null
++        ? { session: finishingRef.current, replaces: null, retries: null }
++        : takeCapture(now);
++    void queuePhoto(uri, { session: id, source: 'camera', testImage: testImages, replaces, retries }, now).catch(
++      () => {},
++    );
+   }
+ 
+   /** A picker, one at a time, with the camera off while it's open. A cancel opens no session (ruling P-F9). */
+@@ -264,8 +269,8 @@ export default function CameraScreen() {
+   /** A picked photo joins the session the way the camera's do: takeCapture only once there's a photo. */
+   function queuePicked(uri: string, source: 'gallery' | 'camera_app') {
+     const now = new Date();
+-    const { session: id, replaces } = takeCapture(now);
+-    void queuePhoto(uri, { session: id, source, testImage: testImages, replaces }, now).catch(() => {});
++    const { session: id, replaces, retries } = takeCapture(now);
++    void queuePhoto(uri, { session: id, source, testImage: testImages, replaces, retries }, now).catch(() => {});
+   }
+ 
+   const fromGallery = () =>
+@@ -305,8 +310,8 @@ export default function CameraScreen() {
+       if (picked === 'not_pdf') sayWhy('Choose a PDF file.');
+       else if (picked !== null) {
+         const now = new Date();
+-        const { session: id, replaces } = takeCapture(now);
+-        queuePdf(picked, { session: id, replaces }, now);
++        const { session: id, replaces, retries } = takeCapture(now);
++        queuePdf(picked, { session: id, replaces, retries }, now);
+       }
+     });
+ 
+@@ -409,8 +414,10 @@ export default function CameraScreen() {
+   }, [live]);
+ 
+   // A Retake: the camera opens with the session's link, so Auto stops waiting for the last sheet to leave, and takes
+-  // the one in view (ruling T1-1). Once per link. A build without rearm never crashes the camera for it.
+-  const link = session?.open ? session.replaces : null;
++  // the one in view (ruling T1-1). Once per link: a scan's, or a failed read's (ruling T9-5). A build without rearm
++  // never crashes the camera for it.
++  const retryLink = session?.retries ? `retry:${session.retries}` : null;
++  const link = session?.open ? (session.replaces ?? retryLink) : null;
+   const rearmed = useRef<string | null>(null);
+   useEffect(() => {
+     if (link === null) {
+diff --git a/app/(tabs)/sessions/[id].tsx b/app/(tabs)/sessions/[id].tsx
+index eee11cb2..184427ee 100644
+--- a/app/(tabs)/sessions/[id].tsx
++++ b/app/(tabs)/sessions/[id].tsx
+@@ -17,7 +17,7 @@ import { useOpenOnce } from '../../../lib/navigation';
+ import { openSaved } from '../../../lib/saved';
+ import { getScan } from '../../../lib/scans';
+ import { shownLabel } from '../../../lib/scanState';
+-import { currentSession, type FailedRead, retakeIn, subscribeSession } from '../../../lib/session';
++import { currentSession, type FailedRead, retakeIn, retryIn, subscribeSession } from '../../../lib/session';
+ import {
+   cardLine,
+   countLine,
+@@ -93,7 +93,8 @@ function SessionOf({ id }: { id: string }) {
+       ? sessionTitle(new Date(failed[0].at), new Date())
+       : 'Session';
+   const header = (
+-    <Header title={title} subtitle={members.length > 0 || failed.length > 0 ? `Session · ${countLine(session)}` : null} />
++    // with no scans in it (its photos all failed to read, or were deleted), no count: never "0 invoices" (ruling T9-4)
++    <Header title={title} subtitle={members.length > 0 ? `Session · ${countLine(session)}` : null} />
+   );
+ 
+   if (members.length === 0 && failed.length === 0) {
+@@ -150,6 +151,13 @@ function SessionOf({ id }: { id: string }) {
+     navigate('/camera', undefined, () => retakeIn(id, scanId, new Date()));
+   }
+ 
++  /** Retake for the photos that couldn't be read: the camera, in this session, trying the oldest one again (T9-5). */
++  function retryFailed() {
++    if (reading.current || failed.length === 0) return;
++    const oldest = failed.reduce((a, b) => (Date.parse(b.at) < Date.parse(a.at) ? b : a));
++    navigate('/camera', undefined, () => retryIn(id, oldest.at, new Date()));
++  }
++
+   /** A row's title: a saved scan's party as saved, else the party shown; or the scan's label. */
+   const titleOf = (m: Member) =>
+     m.summary ? m.summary.partyName || shownLabel({ label: m.summary.label }) : scanFields(m, theLists, theSettings).name;
+@@ -179,8 +187,23 @@ function SessionOf({ id }: { id: string }) {
+           />
+         ) : null}
+         {failed.length > 0 ? (
+-          <View style={styles.gutter}>
++          <View testID="failed-reads" style={styles.gutter}>
+             <Banner tone="warning" text={failedWords(failed)} />
++            <View style={styles.retry}>
++              <ButtonRow
++                buttons={[
++                  {
++                    label: 'Retake',
++                    accessibilityLabel:
++                      failed.length === 1
++                        ? "Retake the photo that couldn't be read"
++                        : "Retake a photo that couldn't be read",
++                    variant: 'text',
++                    onPress: retryFailed,
++                  },
++                ]}
++              />
++            </View>
+           </View>
+         ) : null}
+       </View>
+@@ -237,6 +260,7 @@ function SessionOf({ id }: { id: string }) {
+ const styles = StyleSheet.create({
+   top: { gap: space.m, paddingVertical: space.l },
+   gutter: { paddingHorizontal: space.l },
++  retry: { alignItems: 'flex-end' }, // the banner's one button, under it at its end, as under a row
+   // under its row, on the row's panel, on a hairline of its own
+   actions: {
+     alignItems: 'flex-end',
+diff --git a/lib/captureQueue.ts b/lib/captureQueue.ts
+index 1aa008da..b99017ba 100644
+--- a/lib/captureQueue.ts
++++ b/lib/captureQueue.ts
+@@ -4,7 +4,7 @@ import { readPdf, scanPhoto, type ScanResult } from '../modules/scanner';
+ import { letGoOfPdf, type PickedPdf } from './pickers';
+ import { failedReadReason, SCANNER_STOPPED } from './readFailures';
+ import { addScan, deleteScan, recentScans, type ScanSource, scansWritten } from './scans';
+-import { addFailedRead, touchSession } from './session';
++import { addFailedRead, clearFailedRead, touchSession } from './session';
+ 
+ // The capture queue (spec §6.3, the plan's calls 4, 5 and 21): what the camera tab took, waiting to be read. A photo
+ // (the camera's, the camera app's or a gallery pick) moves out of the app's cache, which the scanner clears at every
+@@ -14,7 +14,8 @@ import { addFailedRead, touchSession } from './session';
+ //
+ // Reads go one at a time, in the order taken, through the camera's read path (scanPhoto, readPdf). Each is kept as a
+ // scan in its session, as of when it was taken (ruling P-F2); a Retake's new scan replaces the unsaved one it was taken
+-// for once its form was found (ruling T7-3). A read that throws is the session's failed read, in plain words only (lib/readFailures), with no dialog and
++// for once its form was found (ruling T7-3), and a Retake of a read that failed clears that failed read once its new
++// read is stored, or takes its place when it fails again (ruling T9-5). A read that throws is the session's failed read, in plain words only (lib/readFailures), with no dialog and
+ // nothing logged. A photo is deleted once recent.json holds its scan, or once its read has failed; when recent.json
+ // can't be written, it stays for the next start (ruling T2-2), and a scan recent.json already holds is never read twice
+ // (ruling P-F2). Review Focus 1.
+@@ -37,6 +38,7 @@ export type Capture = {
+   testImage: boolean;
+   name: string | null; // a PDF's file name, as its app gives it
+   replaces: string | null; // Retake: the unsaved scan its scan replaces
++  retries: string | null; // Retake of a read that failed: that failed read's `at` (ruling T9-5)
+   reading: boolean;
+ };
+ 
+@@ -178,14 +180,15 @@ async function moveIn(entry: Entry, from: string, session: string, name: string)
+  */
+ export async function queuePhoto(
+   from: string,
+-  p: { session: string; source: PhotoSource; testImage?: boolean; replaces?: string | null },
++  p: { session: string; source: PhotoSource; testImage?: boolean; replaces?: string | null; retries?: string | null },
+   at: Date,
+ ): Promise<void> {
+   const n = ++seq; // its place, at once: the reading order is the call order
+   const testImage = p.testImage ?? false;
+   const replaces = p.replaces ?? null;
++  const retries = p.retries ?? null;
+   const entry = add(
+-    { session: p.session, at, kind: 'photo', uri: from, source: p.source, testImage, name: null, replaces },
++    { session: p.session, at, kind: 'photo', uri: from, source: p.source, testImage, name: null, replaces, retries },
+     [at.getTime(), n],
+     false,
+   );
+@@ -197,10 +200,25 @@ export async function queuePhoto(
+ }
+ 
+ /** A PDF picked: it waits in memory, as the person's own file, and its access is given up once it has been read. */
+-export function queuePdf(pdf: PickedPdf, p: { session: string; replaces?: string | null }, at: Date): void {
++export function queuePdf(
++  pdf: PickedPdf,
++  p: { session: string; replaces?: string | null; retries?: string | null },
++  at: Date,
++): void {
+   const replaces = p.replaces ?? null;
++  const retries = p.retries ?? null;
+   add(
+-    { session: p.session, at, kind: 'pdf', uri: pdf.uri, source: 'pdf', testImage: false, name: pdf.name, replaces },
++    {
++      session: p.session,
++      at,
++      kind: 'pdf',
++      uri: pdf.uri,
++      source: 'pdf',
++      testImage: false,
++      name: pdf.name,
++      replaces,
++      retries,
++    },
+     [at.getTime(), ++seq],
+     true,
+   );
+@@ -232,7 +250,7 @@ async function read(entry: Entry): Promise<void> {
+       result = c.kind === 'photo' ? await scanPhoto(c.uri, { deletePhoto: false }) : await readPdf(c.uri);
+     } catch (e: unknown) {
+       remove(entry);
+-      addFailedRead(c.session, failedReadReason(c.kind, e), new Date());
++      addFailedRead(c.session, failedReadReason(c.kind, e), new Date(), c.retries); // a retry's takes its place
+       if (c.kind === 'photo') deleteFile(c.uri); // a failed read keeps no scan, and a Retake's old one stays
+       return;
+     } finally {
+@@ -246,11 +264,12 @@ async function read(entry: Entry): Promise<void> {
+       // session shows it as a failed read, so it's never just gone from the tray (ruling T7-1); a Retake's old scan
+       // stays, as after any failed read.
+       remove(entry);
+-      addFailedRead(c.session, SCANNER_STOPPED, new Date());
++      addFailedRead(c.session, SCANNER_STOPPED, new Date(), c.retries);
+       if (c.kind === 'photo') unkept.add(c.uri);
+       return;
+     }
+     remove(entry); // in the same tick: the tray never shows it twice
++    if (c.retries !== null) clearFailedRead(c.session, c.retries); // tried again, and stored: form found or not
+     touchSession(c.session, new Date());
+     // a Retake replaces its scan only with one whose form was found: a new one that wasn't is a retake beside it, and
+     // never costs the person a scan they could use (ruling T7-3)
+@@ -339,6 +358,7 @@ export async function resumeQueue(): Promise<void> {
+         testImage: f.parsed?.testImage ?? false,
+         name: null,
+         replaces: null,
++        retries: null, // a photo from a last run: its link didn't survive the restart, nor did its session
+       },
+       f.parsed ? [f.parsed.at.getTime(), f.parsed.seq] : [Infinity, i],
+       true,
+diff --git a/lib/session.ts b/lib/session.ts
+index c3cc01e7..b73f10be 100644
+--- a/lib/session.ts
++++ b/lib/session.ts
+@@ -3,7 +3,7 @@ import { readJson, writeJson } from './jsonFile';
+ // The session the camera continues (spec §6.3 and §6.9): the invoices taken one after another until Done. The first
+ // capture opens it, and every scan read in it carries its id. It keeps when it last changed (a capture, a read stored or
+ // a read that failed), the reads that failed, which have no scan to show them, and a Retake's link to the scan its next
+-// capture replaces (the plan's call 3). Done ends it: no capture goes in, and its failed reads stay for the session
++// capture replaces (the plan's call 3), or to the failed read it tries again (ruling T9-5). Done ends it: no capture goes in, and its failed reads stay for the session
+ // screen Done opens (call 2). It closes when another one starts, 30 minutes after its last change, or when the app
+ // starts again (call 24); its scans keep its id. It lives in memory, and in session.json, which the next start closes.
+ 
+@@ -15,6 +15,9 @@ export type SessionState = {
+   open: boolean; // false once Done ended it: no capture goes in, its failed reads stay for its screen
+   failed: readonly FailedRead[];
+   replaces: string | null; // Retake: the scan its next capture replaces
++  // Retake for a read that failed: the `at` of the failed read its next capture tries again (ruling T9-5). A session
++  // kept before it has none: read as null.
++  retries: string | null;
+ };
+ 
+ /** A session closes this long after its last change. */
+@@ -53,20 +56,22 @@ export function subscribeSession(listener: () => void): () => void {
+ }
+ 
+ /**
+- * A capture (a photo, a gallery pick or a PDF): the session it goes in, and the scan it replaces after a Retake. An idle
+- * session closes first. An open one is touched, and its Retake's link is spent; otherwise a new session starts in place
++ * A capture (a photo, a gallery pick or a PDF): the session it goes in, the scan it replaces after a Retake, and the
++ * failed read it tries again after a Retake of one (ruling T9-5). An idle session closes first. An open one is touched,
++ * and both of its Retake links are spent; otherwise a new session starts in place
+  * of whatever was there, and an ended one's failed reads go with it.
+  */
+-export function takeCapture(now: Date): { session: string; replaces: string | null } {
++export function takeCapture(now: Date): { session: string; replaces: string | null; retries: string | null } {
+   closeIdleSession(now);
+   if (current?.open) {
+     const { id, replaces } = current;
+-    void set({ ...current, changedAt: now.toISOString(), replaces: null });
+-    return { session: id, replaces };
++    const retries = current.retries ?? null;
++    void set({ ...current, changedAt: now.toISOString(), replaces: null, retries: null });
++    return { session: id, replaces, retries };
+   }
+   const id = newSessionId(now);
+-  void set({ id, changedAt: now.toISOString(), open: true, failed: [], replaces: null });
+-  return { session: id, replaces: null };
++  void set({ id, changedAt: now.toISOString(), open: true, failed: [], replaces: null, retries: null });
++  return { session: id, replaces: null, retries: null };
+ }
+ 
+ /** A read stored in the session: its last change, while it's the current one. */
+@@ -74,16 +79,31 @@ export function touchSession(id: string, now: Date): void {
+   if (current?.id === id) void set({ ...current, changedAt: now.toISOString() });
+ }
+ 
+-/** A read that failed in the session, with its time and plain words, kept while it's the current one: a change too. */
+-export function addFailedRead(id: string, reason: string, now: Date): void {
++/**
++ * A read that failed in the session, with its time and plain words, kept while it's the current one: a change too. A
++ * read that tried a failed one again (replacing: that one's `at`) takes its place, with the new time and words, so the
++ * count stays; one that's gone by then is added as a new one.
++ */
++export function addFailedRead(id: string, reason: string, now: Date, replacing?: string | null): void {
+   if (current?.id !== id) return;
+   const at = now.toISOString();
+-  void set({ ...current, changedAt: at, failed: [...current.failed, { at, reason }] });
++  const i = replacing == null ? -1 : current.failed.findIndex((f) => f.at === replacing);
++  const failed = i < 0 ? [...current.failed, { at, reason }] : current.failed.map((f, j) => (j === i ? { at, reason } : f));
++  void set({ ...current, changedAt: at, failed });
++}
++
++/**
++ * A read that tried a failed one again was stored: that failed read goes (ruling T9-5). Only while it's the current
++ * session, and only when the entry is still there.
++ */
++export function clearFailedRead(id: string, at: string): void {
++  if (current?.id !== id || !current.failed.some((f) => f.at === at)) return;
++  void set({ ...current, failed: current.failed.filter((f) => f.at !== at) });
+ }
+ 
+ /** Done: no capture goes in from now on, and a Retake's link is spent. Its failed reads stay for its screen. */
+ export function endSession(id: string): void {
+-  if (current?.id === id) void set({ ...current, open: false, replaces: null });
++  if (current?.id === id) void set({ ...current, open: false, replaces: null, retries: null });
+ }
+ 
+ /**
+@@ -92,7 +112,17 @@ export function endSession(id: string): void {
+  */
+ export function retakeIn(id: string, scanId: string, now: Date): void {
+   const failed = current?.id === id ? current.failed : [];
+-  void set({ id, changedAt: now.toISOString(), open: true, failed, replaces: scanId });
++  void set({ id, changedAt: now.toISOString(), open: true, failed, replaces: scanId, retries: null });
++}
++
++/**
++ * Retake for a read that failed (ruling T9-5): as retakeIn, the session is the camera's again, open, with its failed
++ * reads; its next capture tries that failed read (its `at`) again. Stored, the failed read goes; failed again, it takes
++ * that one's place.
++ */
++export function retryIn(id: string, at: string, now: Date): void {
++  const failed = current?.id === id ? current.failed : [];
++  void set({ id, changedAt: now.toISOString(), open: true, failed, replaces: null, retries: at });
+ }
+ 
+ /** Closes the session, open or ended, once IDLE_MS have passed since its last change; true when it closed one. */
