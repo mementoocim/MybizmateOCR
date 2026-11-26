@@ -20,8 +20,9 @@ import { colors, space, type } from '../../../lib/theme';
 // with saved scans says how many wait (in figures) with their total, or that all have gone out (in words: a file can
 // go again); then the parties' file once any party came from a scan, needing no saved scan (ruling T19-7). When a
 // waiting scan names a party that hasn't gone out, the parties' file comes first, with why: it goes in before the
-// files that name it. With nothing waiting, "Everything is sent" and when the last file went head the rows, which stay,
-// since "All" can still go again. A row opens its file's step (app/(tabs)/export/[which]), once (ruling T6-1).
+// files that name it. With nothing waiting, new parties included, "Everything is sent" and when the last file went head
+// the rows, which stay, since "All" can still go again: while a new party waits, its row says so, and nothing says
+// everything is sent (the user's word, 2026-11-26). A row opens its file's step (app/(tabs)/export/[which]), once (ruling T6-1).
 
 export default function ExportScreen() {
   const push = usePushOnce();
@@ -47,7 +48,8 @@ export default function ExportScreen() {
     return row(k, mine.length, totalOf(mine));
   });
   const fromScans = newParties(theLists, true).length > 0; // gone out or not: its file can go again
-  const parties = fromScans ? row('parties', newParties(theLists, false).length, null) : null;
+  const partiesWaiting = newParties(theLists, false).length;
+  const parties = fromScans ? row('parties', partiesWaiting, null) : null;
   const rows = newPartiesFirst(waiting, theLists) ? (
     <>
       {parties}
@@ -72,7 +74,7 @@ export default function ExportScreen() {
       }>
       {saved.length === 0 ? (
         <EmptyState title="Nothing saved yet" body="Save a scan and it shows up here, ready to send." />
-      ) : waiting.length === 0 && sent !== null ? (
+      ) : waiting.length === 0 && partiesWaiting === 0 && sent !== null ? (
         <EmptyState title="Everything is sent" body={`Last sent ${prettyDate(localIsoDate(new Date(sent)))}.`} />
       ) : null}
       {rows}

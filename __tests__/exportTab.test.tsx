@@ -420,6 +420,19 @@ test('nothing waiting: Everything is sent, with the last export\'s date, and the
   expect(listed()).toEqual(['Sales, 1 to export, ₱24,377.00', '2307s, All exported']);
 });
 
+test('a new party waiting: no Everything is sent, though every saved scan has gone', async () => {
+  const sale = await saveInvoice();
+  await markExported([sale], new Date(2026, 9, 3, 15, 0));
+  const party = await addFromScan('Bagong Tindahan');
+  await openAt('/export');
+  expect(screen.queryByText('Everything is sent')).toBeNull();
+  expect(listed()).toEqual(['Sales, All exported', 'New customers and suppliers, 1 to export']);
+  // once it has gone too, everything is
+  await act(async () => listsStore.markPartiesExported([party.id], NOW));
+  expect(screen.getByText('Everything is sent')).toBeOnTheScreen();
+  expect(listed()).toEqual(['Sales, All exported', 'New customers and suppliers, All exported']);
+});
+
 test('nothing saved: the empty state, and the parties when they wait', async () => {
   await openAt('/export');
   expect(headerTexts()).toEqual([STEP_1]);
