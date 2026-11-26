@@ -114,8 +114,10 @@ so Android and iPhone will read a photo or a PDF the same way.
   each with its crop, and one opens its editor. Type what the box says, or tap one of the other readings, then Save:
   the checks run again at once. Typing that wasn't saved asks "Discard what you typed?" before it goes, and
   autocorrect is off, since an edit means "the box says this". Terms has its own sheet ("Cash" or "On account").
-- **A sale or a purchase:** the switch "Sale | Purchase", under the status strip. A scan is a sale, to the form's
-  customer. "Purchase" asks who sold it: the business printed at the top of the invoice, which the scanner doesn't
+- **A sale or a purchase:** the switch "Sale | Purchase", under the status strip. A scan just read starts as a
+  purchase when its customer boxes name your own business (Profile › Your business: the TIN's 9 digits, else the name
+  when a TIN isn't there to compare), else as a sale, to the form's customer; it's decided once, as it's read, and the
+  switch changes it. "Purchase" asks who sold it: the business printed at the top of the invoice, which the scanner doesn't
   read, so it's chosen from your suppliers, typed, or "Various suppliers". The form's customer boxes then show as
   "Sold to". Switching between a sale and a purchase drops the party chosen for the other.
 - **Your lists** (Profile › Customers and items, or Home's Get set up): customers, suppliers and items, in tabs with
@@ -175,7 +177,8 @@ so Android and iPhone will read a photo or a PDF the same way.
     exist, **then the Sales and Purchases files.** When a file names a party that hasn't gone out yet, step 1 lists
     the parties' file first and says why, and that file's screen says so too.
 - **Profile** (the bar's right end), in groups:
-  - Your business: whether it's VAT-registered;
+  - Your business: whether it's VAT-registered, and its TIN and name, which start an invoice made out to it as a
+    purchase;
   - Export defaults: the revenue account for sales, the expense account for purchases, the withholding tax ATC and
     the offset account for 2307s, each saved as it's typed. An ATC that isn't 2 letters and 3 digits gets the hint
     "Like WC158: 2 letters, 3 digits", and is saved all the same;

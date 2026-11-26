@@ -85,6 +85,18 @@ test('edits, checked boxes, terms, kind and party are kept, and come back after 
   });
 });
 
+test("a scan just read starts as a purchase when it's made out to the business itself (lib/ownBusiness)", async () => {
+  const { updateSettings } = require('../lib/settings');
+  const { addScan, getScan } = require('../lib/scans');
+  expect(getScan(addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a') })).kind).toBe('sale');
+  await updateSettings({ ownTin: '223-344-556-000' }); // inv_0007's made-up customer
+  expect(getScan(addScan({ label: 'Camera photo', source: 'camera', result: result('/s/b') })).kind).toBe('purchase');
+  // a 2307 is a 2307, whoever it names
+  const cert = parseScanResult(coreJson('bir2307_text_0', '/s/c'));
+  expect(getScan(addScan({ label: 'PDF: bir2307_text_0.pdf', source: 'pdf', result: cert })).kind).toBe('2307');
+  await flush();
+});
+
 test('a change to its edit takes a box out of the checked ones', () => {
   const { addScan, confirmBox, getScan, setEdit } = require('../lib/scans');
   const id = addScan({ label: 'Camera photo', source: 'camera', result: result('/s/a') });

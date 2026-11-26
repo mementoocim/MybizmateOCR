@@ -19,7 +19,8 @@ import { colors, space, touch, type } from '../../lib/theme';
 import { versionLine } from '../../lib/versions';
 
 // Design B §9.10: Settings, in groups, as the Profile tab (camera first, spec §6.8, call 17), so with no Back. Your
-// business: VAT-registered or not, which suggests each sale's tax type. Export defaults: what MyBizMate's imports need
+// business: VAT-registered or not, which suggests each sale's tax type; its TIN and name, which tell a purchase (an
+// invoice made out to it) from a sale. Export defaults: what MyBizMate's imports need
 // that isn't on the paper (lib/settings.ts), in figures. A field is saved as it's typed: going back while a field still
 // has the cursor doesn't blur it (React Native calls no onBlur on unmount), so saving when it's left would lose the
 // change. An ATC that isn't 2 letters and 3 digits gets a warning in place of its helper, and is saved all the same.
@@ -29,6 +30,8 @@ import { versionLine } from '../../lib/versions';
 
 const NOTE =
   "These fill in what MyBizMate's import needs that isn't on the paper. You can change them on each invoice when you save it. Changes save as you type.";
+/** Why the app asks: an invoice issued to the business is a purchase, so a new scan starts as one (lib/ownBusiness). */
+const OWN_HELPER = 'An invoice made out to your business starts as a purchase';
 const ACCOUNT_HELPER = 'Code or name, as in MyBizMate';
 /** An ATC as MyBizMate takes it: 2 letters, then 3 digits (WC158). */
 const ATC_SHAPE = /^[A-Z]{2}\d{3}$/;
@@ -54,6 +57,8 @@ export default function ProfileScreen() {
   const push = usePushOnce(); // one for the screen's every row, the team tools' too
   const s = useSyncExternalStore(subscribeSettings, settings);
   const theLists = useSyncExternalStore(subscribeLists, lists);
+  const [ownTin, setOwnTin] = useState(s.ownTin);
+  const [ownName, setOwnName] = useState(s.ownName);
   const [revenue, setRevenue] = useState(s.revenueAccount);
   const [expense, setExpense] = useState(s.expenseAccount);
   const [atc, setAtc] = useState(s.atc);
@@ -74,6 +79,27 @@ export default function ProfileScreen() {
             value={s.vatRegistered === null ? null : s.vatRegistered ? 'yes' : 'no'}
             onChange={(v) => void updateSettings({ vatRegistered: v === 'yes' })}
             helper="Suggests each sale's tax type"
+          />
+          <TextField
+            label="Your business's TIN"
+            placeholder="e.g. 123-456-789-000"
+            helper={OWN_HELPER}
+            mono
+            {...codeKeyboard('none')}
+            value={ownTin}
+            onChangeText={(t) => {
+              setOwnTin(t);
+              void updateSettings({ ownTin: t.trim() });
+            }}
+          />
+          <TextField
+            label="Your business's name"
+            helper="Used when an invoice's TIN can't be read"
+            value={ownName}
+            onChangeText={(t) => {
+              setOwnName(t);
+              void updateSettings({ ownName: t.trim() });
+            }}
           />
         </View>
 

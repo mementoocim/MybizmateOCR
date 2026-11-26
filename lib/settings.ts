@@ -11,6 +11,8 @@ import { readJson, writeJson } from './jsonFile';
 export type TaxType = 'VAT' | 'NONVAT' | 'ZERO' | 'EXEMPT' | 'NA';
 export type Settings = {
   vatRegistered: boolean | null;
+  ownTin: string; // the business's own TIN, as typed: a purchase names it as the customer (lib/ownBusiness)
+  ownName: string; // and its name, for a purchase whose customer TIN wasn't read
   revenueAccount: string;
   expenseAccount: string;
   atc: string;
@@ -25,6 +27,8 @@ const FILE = 'settings.json';
 // Settings kept by an older version lack the newer fields: these fill them in when they load.
 const DEFAULTS: Settings = {
   vatRegistered: null,
+  ownTin: '',
+  ownName: '',
   revenueAccount: '',
   expenseAccount: '',
   atc: '',

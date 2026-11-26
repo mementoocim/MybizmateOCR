@@ -3,7 +3,8 @@ import { Directory, Paths } from 'expo-file-system';
 import type { BoxRead, ScanResult } from '../modules/scanner';
 import type { Terms } from './checks/finalize';
 import { readJson, writeJson } from './jsonFile';
-import type { TaxType } from './settings';
+import { detectKind } from './ownBusiness';
+import { settings, type TaxType } from './settings';
 import { APP_VERSION, modelVersion } from './versions';
 
 // Recent scans: the newest 100, kept on the phone so they survive closing the app, with what the person did to each:
@@ -150,7 +151,8 @@ export function addScan(
     ...FRESH,
     ...s,
     testImage: s.testImage ?? false,
-    kind: kindOf(s.result),
+    // an invoice starts as what its customer boxes say: a purchase when they name the business itself (lib/ownBusiness)
+    kind: kindOf(s.result, detectKind(s.result, settings())),
     made: { app: APP_VERSION, model: modelVersion() },
     id: `${Date.now()}-${++counter}`,
     at: isTime(s.at) ? s.at : new Date(),

@@ -16,6 +16,8 @@ const PACK = require('../fixtures/checks/scan_pack.json');
 
 const SETTINGS: Settings = {
   vatRegistered: null,
+  ownTin: '',
+  ownName: '',
   revenueAccount: '',
   expenseAccount: '',
   atc: '',

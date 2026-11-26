@@ -12,6 +12,8 @@ beforeEach(() => {
 test('the defaults', () => {
   expect(S().settings()).toEqual({
     vatRegistered: null,
+    ownTin: '',
+    ownName: '',
     revenueAccount: '',
     expenseAccount: '',
     atc: '',
@@ -29,6 +31,8 @@ test('settings kept before 2307s get an empty offset account', async () => {
   await s.loadSettings();
   expect(s.settings()).toEqual({
     vatRegistered: true,
+    ownTin: '',
+    ownName: '',
     revenueAccount: '4010',
     expenseAccount: '',
     atc: '',
@@ -45,13 +49,15 @@ test('settings kept before annotation mode load with it off and no codes', async
   memoryFs.files.set('file:///docs/settings.json', JSON.stringify(kept));
   const s = S();
   await s.loadSettings();
-  expect(s.settings()).toEqual({ ...kept, annotation: false, clientCode: '', writerCode: '', setupDone: false });
+  expect(s.settings()).toEqual({ ...kept, annotation: false, clientCode: '', writerCode: '', setupDone: false, ownTin: '', ownName: '' });
 });
 
 test('settings kept before the UI pass load with setupDone false', async () => {
   // every field milestone 4 kept, and no setupDone: Home's "Get set up" shows until it's done here
   const kept = {
     vatRegistered: true,
+    ownTin: '',
+    ownName: '',
     revenueAccount: '4010',
     expenseAccount: '5010',
     atc: 'WC158',
@@ -103,6 +109,8 @@ test('a change is saved, and comes back after a restart', async () => {
   await again.loadSettings();
   expect(again.settings()).toEqual({
     vatRegistered: false,
+    ownTin: '',
+    ownName: '',
     revenueAccount: '4010',
     expenseAccount: '',
     atc: '',

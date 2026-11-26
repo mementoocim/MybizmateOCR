@@ -48,6 +48,8 @@ jest.mock('expo-file-system', () => require('../test-utils/memoryFs').memoryFs.m
 
 const SETTINGS: Settings = {
   vatRegistered: null,
+  ownTin: '',
+  ownName: '',
   revenueAccount: '',
   expenseAccount: '',
   atc: '',

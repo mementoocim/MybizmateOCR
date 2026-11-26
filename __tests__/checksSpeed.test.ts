@@ -35,6 +35,8 @@ function bigPack(customers: number, items: number): Pack {
 
 const SETTINGS: Settings = {
   vatRegistered: true,
+  ownTin: '',
+  ownName: '',
   revenueAccount: '',
   expenseAccount: '',
   atc: '',
