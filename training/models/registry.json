@@ -1,5 +1,5 @@
 {
-  "active_version": "v1.3.0-wise-ft",
+  "active_version": "v1.4.2-real-lines",
   "versions": {
     "v1.0.0-pretrained": {
       "version": "v1.0.0-pretrained",
@@ -1390,6 +1390,22 @@
             "sample_mistakes": []
           }
         }
+      }
+    },
+    "v1.4.2-real-lines": {
+      "version": "v1.4.2-real-lines",
+      "registered_at_utc": "2026-11-26T01:20:00.036391+00:00",
+      "sha256": "d4d5c372297ebb73a29502eadccf83e49da80dd09080daacf5b1872eedf1e134",
+      "bytes": 12147277,
+      "notes": "Fine-tuned from the shipped v1.3.0-wise-ft in PyTorch (finetune_torch.py) on 85,000 synthetic text lines (release training-data-v14 plus screen, comb-box and ATC-code lines) and 1,080 real client lines labelled by three-AI consensus (kept private). Same ONNX contract.",
+      "metrics": {
+        "real_lines_823_exact": 0.7485,
+        "real_lines_823_char": 0.9663,
+        "real_lines_823_exact_v1.3.0": 0.7011,
+        "synthetic_4300_exact": 0.8158,
+        "synthetic_4300_exact_v1.3.0": 0.5581,
+        "fixture_photos_exact": "97/97 (v1.3.0: 97/97)",
+        "core_tests": "71/73, the same 2 parity tests fail on v1.3.0"
       }
     }
   }
