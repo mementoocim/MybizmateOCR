@@ -660,6 +660,64 @@ Then the camera tab's Import PDF (in the tray) → Downloads. To remove it, dele
 - From `../prototype/training`: `..\..\.venv\Scripts\python.exe -I test_read_scan_exports.py`: the tests of the
   training exports' reader.
 
+## Checked on the emulator (camera first)
+
+Camera first (`../docs/2026-11-24-mybizmate-scan-camera-first-design.md`), as a debug build on `QA_Phone_API_37`, an
+AVD made for this plan with made-up data only (the user's call): Android 17 (API 37), 1080×2400 at 420 dpi, x86_64,
+the virtual-scene back camera, a hardware keyboard; 2026-11-25 and 26. The APK was built from `camera-first` (no native
+change since Task 1); the JavaScript came from Metro at `43042cc6`. On that tree every suite passed: jest (82 suites,
+867 tests), the typecheck and ESLint, and the core's doctest (73 test cases, 9102 assertions; built with NDK 27.1, as
+`check:apk` was). Every scan is synthetic:
+the samples, `?test=` images and the fixtures. The captures sit outside git, with their `index.md`, in
+`../.superpowers/brainstorm/camera-first-2026-11-24/qa/`.
+
+1. **The rebuild and the update** (Task 14): the debug APK grew from 240,979,442 to 242,526,802 bytes. `npm run
+   check:apk` passed (run against NDK 27.1's `llvm-nm`, the NDK the app builds with: the script names 28.2, which isn't
+   installed). The app's data was backed up, the app reinstalled and the data restored, as in "Reinstalling without
+   losing the app's data": 262 files of 262, and the saved scans byte for byte. Data from before is the QA AVD's own:
+   a saved sale, unsaved scans with no session, and a sample 2307 (the user's call; no saved purchase).
+2. **Reading while shooting** (spec §5, the measurement): eight fixture photos queued in `files/queue/` were read as
+   the app started, in about 22 s, with the camera live. Form checks per second, as `MbsCheckRate` logged them: a
+   median of 7.19 while reading (13 lines) and 7.14 after (31 lines). `dumpsys gfxinfo`: 39% janky frames while
+   reading (50th/90th/99th percentile 32/48/101 ms), 55% at rest after (34/53/69 ms); the emulator's software virtual
+   scene is janky on its own. The user watched the preview and saw no stutter. So **approach 1**: the queue reads while
+   the camera shoots (`READ_WHILE_SHOOTING` stays true).
+3. **The launch:** after the splash, the camera with the bar; Android's camera permission is asked there, over the
+   camera. `mybizmatescan://speed` opens Speed test, and Back goes to the camera. Checked with the app loaded: a cold
+   link in a debug build opens the dev client's launcher first (the cold redirect is pinned in `nativeIntent.test.ts`).
+4. **A 10-photo session:** `camera?test=inv_0051` took the first by itself ("Taken · put in the next one"), and the
+   middle button nine more; the tray scrolled and said Done · 10, and Done opened the session: "Session · 10
+   invoices", "10 to check", 10 rows. "Reading N more…" didn't show: every read had ended before Done.
+5. **A failed read and a retake:** `not_an_image.jpg` and `blank_page.png`, picked with the tray's Gallery, each gave a
+   "!". On the session screen the first was a failed read in the banner ("1 photo couldn't be read. Retake it.", with
+   "It isn't a photo the scanner can open."), and the blank page a row with Retake and Remove. Its Retake, then a
+   `?test=` photo, replaced it with the invoice.
+6. **Back:** Home, Sessions, Export and Profile each lead to the camera in one Back; a session screen, a file's step
+   and See invoices go back through their tab's screens to it; on the camera, Back leaves the app.
+7. **The bar** at 200% text, on 3-button navigation and at 360 dp wide: on the camera and each tab scrolled to its end,
+   nothing sits behind it (the end of Sessions, Profile's last row, Home's footer, Share the file, the snackbar). On
+   3-button navigation it rises above the system bar. The status bar is light on the camera and dark on the tabs. Each
+   setting was restored after.
+8. **The keyboard:** Profile's Offset account, with the soft keyboard shown (`show_ime_with_hard_keyboard`, the user's
+   OK, set back to 0 after): the bar is gone and the field sits above the keyboard.
+9. **Accessibility, as text:** the five tabs are named, the selected one marked, "Export, 1 to send", and the middle
+   button "Take photo" on the camera and "Camera" elsewhere; the tray's thumbnails ("Photo 1, read", "Photo 1,
+   retake"); and the session rows' badges in their names ("9:10 AM · 1 PDF, 1 to check"). TalkBack wasn't run.
+10. **The update over data from before:** the old scans show in Sessions as sessions of their own ("Camera photo 9:29
+    PM"); one opened, the old saved sale showed in See invoices, was shared (the share sheet backed out of) and marked
+    ("Everything is sent"), and an old unsaved scan was deleted with ⋮ › Delete this scan. The data was restored after
+    every check that changed it.
+11. **A dev-only error after a restart:** after a display-size change restarted the screen, LogBox showed
+    react-navigation's "Looks like you have configured linking in multiple places": the new root mounts before the old
+    one goes (the UI pass's item 7). The app kept working.
+
+**Still open:**
+- **A real phone:** the feel and speed of reading while shooting, and the real camera on paper: Auto re-arming as one
+  sheet leaves and the next comes in, which a still `?test=` image never does.
+- **TalkBack** at run time, and **iOS** (milestone 9).
+- **The emulator's own prompts:** Google Lens opened by itself once during the checks and asked for the camera; it was
+  left for the user.
+
 ## Checked on the emulator (UI pass)
 
 Design B (`../docs/2026-11-22-mybizmate-scan-ui-ux-design.md`, whose § the items cite), as a debug build on
