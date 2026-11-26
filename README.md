@@ -57,19 +57,20 @@ so Android and iPhone will read a photo or a PDF the same way.
   - **The session screen:** its time ("Today, 9:41 AM") and "Session · 3 invoices" (no such line while it has no
     scans); a card that counts what's left ("1 ready · 1 to check · 1 to retake", or "All saved."), with **Check the
     next one** (the first scan not saved whose form was found); then a row per scan: its party (or its label), number
-    and kind, amount, and one badge (Checks passed, N to check, Retake, Saved, Exported or Changed). A row opens its
-    Scan screen, and a long press asks to delete it.
+    and kind, amount, and one badge (Checks passed, N to check, Can't save yet, Retake, Saved, Exported or Changed). A
+    row opens its Scan screen, and a long press asks to delete it.
   - **A scan whose form wasn't found** is a Retake, not counted as to check, with **Retake** and **Remove** on its
     row. Retake opens the camera in that session, and the next photo replaces the scan once its form is found; a
     Retake whose read finds no form keeps the original, and the new photo joins it as a "!".
-  - **A read that failed** has no scan: the session screen lists those in a banner ("1 photo couldn't be read. Retake
-    it.", each with its time and why), with a **Retake** that takes the next photo into the same session. A read
-    that's stored clears that failure, a retry that fails again keeps the count, and a cancelled pick changes nothing.
+  - **A read that failed** has no scan: while it's still the camera's session, the session screen lists those in a
+    banner ("1 photo couldn't be read. Retake it.", each with its time and why), with a **Retake** that takes the next
+    photo into the same session. A read that's stored clears that failure, a retry that fails again keeps the count,
+    and a cancelled pick changes nothing.
 - **Home's cards,** top to bottom, under a greeting and the date (Home's header has no icons): "Get set up N of 2"
   (import your customers and items, set your export defaults) until both are done; before any scan, "Take your first
   photo", with three tips and Open the camera; "N invoices to check" (and "1 photo to retake"), whose Check now opens
-  the oldest session with something left; "Ready to send to MyBizMate", per kind with its count and total, with Go to
-  Export; "Last session", with its time and count, which opens it; then "Try a sample invoice" and the footer.
+  the oldest session with something left (a scan from before sessions opens its Scan screen); "Ready to send to
+  MyBizMate", per kind with its count and total, with Go to Export; "Last session", with its time and count, which opens it; then "Try a sample invoice" and the footer.
 - **Profile:** what Settings was, as a tab (below, under milestone 3). The old `mybizmatescan://settings` link opens
   it.
 - **Both forms:** the Sales Invoice and the Service Invoice, every box read, with its crop and the other readings it

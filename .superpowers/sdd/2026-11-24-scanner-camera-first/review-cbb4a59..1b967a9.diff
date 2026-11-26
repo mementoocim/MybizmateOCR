@@ -1,0 +1,1080 @@
+diff --git a/README.md b/README.md
+index 165c242f..ef8487d1 100644
+--- a/README.md
++++ b/README.md
+@@ -5,33 +5,73 @@ Invoices, and BIR Form 2307s, on the phone, offline, from a photo or a PDF. Its
+ ONNX Runtime 1.32.0 with PP-OCRv6 small cut to 98 Latin characters, and pdfium for PDFs) inside a local Expo module,
+ so Android and iPhone will read a photo or a PDF the same way.
+ 
+-- Design: `../docs/2026-11-19-expo-scanner-design.md`
+-- Plans: milestone 1, `../docs/superpowers/plans/2026-11-19-scanner-m1-core-reads-a-photo.md`; milestone 2,
+-  `../docs/superpowers/plans/2026-11-20-scanner-m2-camera-and-both-forms.md`; milestone 3,
+-  `../docs/superpowers/plans/2026-11-20-scanner-m3-edit-checks-lists-export.md`; milestone 4,
+-  `../docs/superpowers/plans/2026-11-22-scanner-m4-annotation-and-training-export.md`; milestone 5,
+-  `../docs/superpowers/plans/2026-11-20-scanner-m5-pdf-and-2307.md`
+-- MyBizMate's import templates, and which of the scanner's boxes go in which column: `../docs/mybizmate-templates/`
++- Design: `docs/2026-11-19-expo-scanner-design.md`; camera first (the tabs and the sessions),
++  `docs/2026-11-24-mybizmate-scan-camera-first-design.md`
++- Plans: milestone 1, `docs/superpowers/plans/2026-11-19-scanner-m1-core-reads-a-photo.md`; milestone 2,
++  `docs/superpowers/plans/2026-11-20-scanner-m2-camera-and-both-forms.md`; milestone 3,
++  `docs/superpowers/plans/2026-11-20-scanner-m3-edit-checks-lists-export.md`; milestone 4,
++  `docs/superpowers/plans/2026-11-22-scanner-m4-annotation-and-training-export.md`; milestone 5,
++  `docs/superpowers/plans/2026-11-20-scanner-m5-pdf-and-2307.md`; camera first,
++  `docs/superpowers/plans/2026-11-24-scanner-camera-first.md`
++- MyBizMate's import templates, and which of the scanner's boxes go in which column: `docs/mybizmate-templates/`
+ - The Python reference the core is checked against: `../prototype/benchmark/`
+ - The fine-tuning set, its notebook, and the reader of the app's training exports: `../prototype/training/`
+ 
+ ## What it does
+ 
+-### Reading a form (milestone 2)
+-
+-- **Home:** the logo and "mybizmate.io", with Your lists and Settings as icons on the right. Then Take photo, and
+-  From gallery and Import PDF. On a first run, three tips ("Before your first scan") show until the first scan (a
+-  sample counts), and "Get set up" asks to import your customers and items and to set your export defaults; once
+-  both are done, it goes for good. Then what's waiting to export, per kind (Sales, Purchases, 2307s, each with its
+-  count and total, and "All saved", which opens Saved), or "Everything is exported" once it has all gone; the recent
+-  scans; and "Try a sample invoice".
+-- **The camera:** the live picture in 3:4 with the form's outline (the Sales Invoice by its 4 corner squares, the
+-  Service Invoice by its table), a status line ("MyBizMate Sales Invoice · hold still"), and the photo taken by
+-  itself once the outline holds still and sharp, with one haptic tap as it's taken. The Auto switch turns that off,
+-  for the round button. The flashlight shows on phones that have one, and the gallery sits under the picture. When
+-  the scanner's camera can't be used, a panel says why, with what to do: no permission yet ("Allow the camera"), the
+-  permission refused for good ("Open settings"), or a camera that won't start ("Try again"), each with the phone's own
+-  camera app as a fallback; a phone with no camera gets "Choose from gallery".
++### Reading a form (milestone 2, and camera first)
++
++- **The bar:** a floating white bar at the bottom of every tab, with five icons: Home, Sessions, a raised coral
++  Camera in the middle, Export and Profile. The tab that's open has an ink icon with a coral dot under it. On the
++  camera tab the middle button is the shutter ("Take photo"); on the other tabs it opens the camera. Export's icon
++  carries a count of the invoices and 2307s saved but not sent yet ("Export, 7 to send"; "99+" at most; new parties
++  aren't counted). The bar hides while the keyboard is up. The app opens on the camera; Back on any other tab goes to
++  the camera, and Back on the camera leaves the app. The Scan screen, Your lists, the licenses and the team screens
++  open above the tabs, with no bar.
++- **The camera tab:** the live picture in 3:4 with the form's outline (the Sales Invoice by its 4 corner squares, the
++  Service Invoice by its table), a status line ("MyBizMate Sales Invoice · hold still"), Auto and the flashlight (on
++  phones that have one). With Auto on, the photo is taken by itself once the outline holds still and sharp, with one
++  haptic tap. The camera stays live for the next sheet: shooting goes on, and Auto takes the next one once the last has
++  left the frame for half a second, so it never takes the same sheet twice. The middle button takes a photo any time,
++  Auto on or off. When the scanner's camera can't be used, a panel says why, with what to do: no permission yet ("Allow
++  the camera"), the permission refused for good ("Open settings"), or a camera that won't start ("Try again"), each with
++  the phone's own camera app as a fallback; a phone with no camera gets "Choose from gallery".
++  - **The tray,** above the bar: the gallery on its left, Import PDF on its right, and between them the status line
++    until the session has a photo, then the session's thumbnails in the order taken, and **Done · N** (every photo
++    taken). Each thumbnail's mark shows its state: a ring while it's read, a ✓ once it's read, a "!" for a retake (the
++    form wasn't found, or the read failed).
++  - A read that fails never opens a dialog over the camera: it's a "!" in the tray, and the session screen says why
++    ("Couldn't read that PDF.", say).
++  - **Done** ends the session. It waits for the reads ("Reading 2 more…"), then opens the session screen in the
++    Sessions tab. A one-photo session goes straight to that photo's Scan screen.
++- **Sessions:** a session is the invoices taken one after another until Done. It starts with the first photo,
++  gallery pick or PDF on the camera tab while no session is open, and every scan read in it carries its id. Leaving
++  the camera without Done (another tab, or the app in the background) keeps it open and the reads going; back on the
++  camera, it goes on. A session left for 30 minutes, or across a restart of the app, closes by itself; its scans are
++  kept. Photos wait in `files/queue/<session id>/` until they're read, one at a time, in order: a queued photo is
++  deleted once its scan is stored or its read has failed, and one left by a closed app is read at the next start.
++  - **The Sessions tab:** a row per session, newest first, under day headers (Today, Yesterday, then "Nov 20"):
++    "9:41 AM · 3 invoices" (or "1 PDF"), with at most two badges (N to check, N retake, All saved, Exported). Scans
++    from before sessions, and the samples, are one-scan rows under their own label and time ("Camera photo 4:10 PM").
++    The search (the header's icon) finds a scan by its party's name, its number or its TIN, and lists the scans.
++  - **The session screen:** its time ("Today, 9:41 AM") and "Session · 3 invoices" (no such line while it has no
++    scans); a card that counts what's left ("1 ready · 1 to check · 1 to retake", or "All saved."), with **Check the
++    next one** (the first scan not saved whose form was found); then a row per scan: its party (or its label), number
++    and kind, amount, and one badge (Checks passed, N to check, Retake, Saved, Exported or Changed). A row opens its
++    Scan screen, and a long press asks to delete it.
++  - **A scan whose form wasn't found** is a Retake, not counted as to check, with **Retake** and **Remove** on its
++    row. Retake opens the camera in that session, and the next photo replaces the scan once its form is found; a
++    Retake whose read finds no form keeps the original, and the new photo joins it as a "!".
++  - **A read that failed** has no scan: the session screen lists those in a banner ("1 photo couldn't be read. Retake
++    it.", each with its time and why), with a **Retake** that takes the next photo into the same session. A read
++    that's stored clears that failure, a retry that fails again keeps the count, and a cancelled pick changes nothing.
++- **Home's cards,** top to bottom, under a greeting and the date (Home's header has no icons): "Get set up N of 2"
++  (import your customers and items, set your export defaults) until both are done; before any scan, "Take your first
++  photo", with three tips and Open the camera; "N invoices to check" (and "1 photo to retake"), whose Check now opens
++  the oldest session with something left; "Ready to send to MyBizMate", per kind with its count and total, with Go to
++  Export; "Last session", with its time and count, which opens it; then "Try a sample invoice" and the footer.
++- **Profile:** what Settings was, as a tab (below, under milestone 3). The old `mybizmatescan://settings` link opens
++  it.
+ - **Both forms:** the Sales Invoice and the Service Invoice, every box read, with its crop and the other readings it
+   could be. A reading the scanner was unsure of (a score under 0.90) says "Hard to read"; no percentage is shown.
+ - **The photo checks:** a dark or blurry photo is the first thing to check, with a retake; a photo where no form is
+@@ -39,21 +79,23 @@ so Android and iPhone will read a photo or a PDF the same way.
+ - **The photo viewer:** the photo's thumbnail sits in the Scan screen's header and opens it full screen: the
+   straightened page as Enhanced or B&W, or the Original photo with the found outline. For Enhanced and B&W, "Save to
+   Pictures" copies the page into Pictures/MyBizMate Scan (Android 10 and later). Close, or Back, closes it.
+-- **Recent scans:** the newest 20, kept on the phone between launches; Home says so under them ("The last 20 scans
+-  stay here. Save a scan to keep it."). Each opens its scan again, and its badge says where it stands, the first that
+-  applies: Changed (since it was saved), Saved, Sample, Couldn't find the form, N to check, Can't save yet, or Checks
+-  passed.
++- **Unsaved scans:** the newest 100 are kept on the phone between launches, in their sessions (`KEEP` in
++  `lib/scans.ts` and `KEEP_SCANS` in `ScannerModule.kt`, which must stay equal). Save a scan to keep it for good.
+ - **Samples:** 8 synthetic sample invoices to try without a form ("Try a sample invoice", at the end of Home).
+ - **Brand splash:** the logo and a loading bar while the scanner loads and reads one sample, so the first real scan
+   is quick; it stays at least half a second, so it doesn't flash. A start that fails says "The scanner couldn't
+   start", with Try again; team builds also show the error itself.
+ - **Messages** show in a snackbar at the bottom of the screen, above an open sheet or the photo viewer when one is
+   up, and some carry an action ("View", after a save).
+-- **Privacy:** nothing leaves the phone and nothing is logged. The app's files are kept out of Android's backups. A
+-  camera photo, or the gallery's copy of one, is deleted once read, whether or not it could be; any left by a closed
+-  app are cleared at the next start. Each kept scan's files (its page, crops and original) live in the app's own
+-  storage, the newest 20 only. A JPEG over twice the 2400 px cap is decoded smaller first, so a 50 MP photo doesn't
+-  need 150 MB.
++- **Privacy:** nothing leaves the phone, and nothing about a scan is logged. The app's files are kept out of
++  Android's backups. A camera photo, or the gallery's copy of one, waits in its session's queue and is deleted once
++  read, whether or not it could be. Each kept scan's files (its page, crops and original) live in the app's own
++  storage. A JPEG over twice the 2400 px cap is decoded smaller first, so a 50 MP photo doesn't need 150 MB.
++  - **The 100 unsaved scans** take about 1.2 MB each (measured from the QA backup), so about 120 MB at 100 (the camera
++    first spec, §6.9). Past 100, the oldest unsaved scan goes, checked or not; a later round could ask before
++    dropping scans nobody has checked.
++  - **Debug builds** log the camera's form checks per second to logcat (`MbsCheckRate`: the checks, the window's ms,
++    and whether a read ran), figures only.
+ 
+ ### Checking, saving and exporting (milestone 3)
+ 
+@@ -75,11 +117,11 @@ so Android and iPhone will read a photo or a PDF the same way.
+   customer. "Purchase" asks who sold it: the business printed at the top of the invoice, which the scanner doesn't
+   read, so it's chosen from your suppliers, typed, or "Various suppliers". The form's customer boxes then show as
+   "Sold to". Switching between a sale and a purchase drops the party chosen for the other.
+-- **Your lists** (the list icon in Home's header): customers, suppliers and items, in tabs with their counts,
+-  imported from CSV files and kept on the phone. A search finds a party by its name, TIN or code, and an item by its
+-  name. In MyBizMate, export your parties, open the file in Excel or Google Sheets, save it as CSV, copy it to the
+-  phone, then Import CSV; "How to import" explains the file. The snackbar says what was imported. A tab's Clear, at
+-  the end of its list, says how many it clears and asks first.
++- **Your lists** (Profile › Customers and items, or Home's Get set up): customers, suppliers and items, in tabs with
++  their counts, imported from CSV files and kept on the phone. A search finds a party by its name, TIN or code, and an
++  item by its name. In MyBizMate, export your parties, open the file in Excel or Google Sheets, save it as CSV, copy it
++  to the phone, then Import CSV; "How to import" explains the file. The snackbar says what was imported. A tab's Clear,
++  at the end of its list, says how many it clears and asks first.
+   - Customers and suppliers: MyBizMate's Parties import columns, by their header names: Code, Type, Entity type,
+     Registered name, Last name, First name, Middle name, Trade name, TIN, Sub-street, Street, Barangay, City /
+     Municipality, Province, ZIP, VAT status and Payment terms. Other columns are skipped, and contact numbers and
+@@ -92,24 +134,31 @@ so Android and iPhone will read a photo or a PDF the same way.
+   - Excel's plain "CSV (Comma delimited)" (Windows-1252) and "CSV UTF-8", and Google Sheets' download, all keep their
+     ñ: the file is read as UTF-8 when it is valid UTF-8, else as Windows-1252.
+ - **Saving** ("Save sale" or "Save purchase" at the bottom of a scan, "Save changes" once it's saved): the save sheet
+-  sums up the row it makes (the date, the customer or supplier, marked "New" when it goes out as written, and Gross,
+-  VAT included), then asks the tax type (suggested from the VAT boxes and whether the business is VAT-registered,
+-  which the first save asks), the account (a code or name from your chart of accounts, remembered in Settings), the
+-  terms, and the ATC code when tax was withheld. Things still marked to check don't stop a save: the sheet says how
+-  many are left. Once saved, the snackbar says "Saved as a sale" (or a purchase; "Changes saved" for a scan saved
+-  before), and its "View" opens Saved. A saved scan keeps its own files (page, crops, original), apart from the 20
+-  recent scans. A saved scan changed afterwards says "Changed since it was saved. The export still has the saved
+-  version. Save changes to update it." Samples can't be saved, and their names can't be added to the lists: they're
+-  made up.
+-- **Saved** (Home's To export rows or "All saved", or a save's "View"): the saved sales, purchases and 2307s, with a
+-  chip per kind to show one, grouped by the month of each document's date (an invoice's date, a 2307's period end),
+-  newest first. Each row says "To export" or "Exported" and opens its scan. A saved scan is deleted from its ⋮ menu on
+-  the Scan screen ("Delete saved scan"), or with a long press in Saved, after "Delete this saved scan?".
+-- **The exports** (Saved's "Export…"): .xlsx files in MyBizMate's own import layouts (the "Import" sheet with the
+-  template's header row, word for word), sent with the phone's share sheet (email, Drive, chat). Export… opens one
+-  sheet, in steps: which file (each with how many wait to export, or "All exported", since a file can go again), then
+-  that file (when Saved shows one kind with scans saved, the sheet opens at its file), then the question after
+-  sharing:
++  sums up the row it makes (the date, the customer or supplier, marked "New" when it goes out as written, and Gross, VAT
++  included), then asks the tax type (suggested from the VAT boxes and whether the business is VAT-registered, which the
++  first save asks), the account (a code or name from your chart of accounts, remembered in Profile), the terms, and the
++  ATC code when tax was withheld; its note ends "Send it from the Export tab." Things still marked to check don't stop a
++  save: the sheet says how many are left. Once saved, the snackbar says "Saved as a sale" (or a purchase; "Changes
++  saved" for a scan saved before). Outside a session, its "View" opens See invoices for that kind. In a session it has
++  no View: the Scan screen's bar becomes **Next invoice** (the session's next scan to check, in this screen's place)
++  while one is left, then **Back to session**. A saved scan keeps its own files (page, crops, original), apart from the
++  100 unsaved scans. A saved scan changed afterwards says "Changed since it was saved. The export still has the saved
++  version. Save changes to update it." Samples can't be saved, and their names can't be added to the lists: they're made
++  up.
++- **The Export tab** (the bar's Export, or Home's Go to Export), in steps, as screens in the tab:
++  - Step 1, "Send to MyBizMate": Sales, Purchases and 2307s, each with how many wait and their total, and the New
++    customers and suppliers file, first when it must go in first. When nothing waits: "Everything is sent", with the
++    last export's date (or "Nothing saved yet").
++  - A kind opens its file: what the file is and what it holds, **See invoices**, Which ones, the warnings, and
++    **Share the file**; then the question after sharing.
++  - One file screen at a time, and a link to the tab (Go to Export, a save's View) lands on its first screen, with
++    nothing above it.
++- **See invoices** (a file's row, or a save's View): that kind's saved scans, by each document's date (an invoice's
++  date, a 2307's period end), newest first. Each row says "To export" or "Exported" and opens its scan. A saved scan
++  is deleted from its ⋮ menu on the Scan screen ("Delete saved scan"), or with a long press in See invoices, after
++  "Delete this saved scan?". An unsaved scan's ⋮ has "Delete this scan".
++- **The exports** (the Export tab): .xlsx files in MyBizMate's own import layouts (the "Import" sheet with the
++  template's header row, word for word), sent with the phone's share sheet (email, Drive, chat):
+   - **Sales** (the Sales import) and **Purchases** (the Purchases import): one row per invoice: Date,
+     Customer or Supplier (its code when it's in your list, else the name as written; a blank customer is
+     `VARIOUS-CUST`), Gross (the VAT-inclusive total before the discount and the withholding), Type, the account, the
+@@ -118,20 +167,21 @@ so Android and iPhone will read a photo or a PDF the same way.
+     yet. Before importing it, fill in each one's City / Municipality, Province and ZIP, and its TIN where it's blank.
+   - Sales and purchases go out by the ones not exported yet, this month's, last month's, or all ("Which ones"); new
+     customers and suppliers by the ones not sent yet, or all added from scans. "Share the file" opens the share sheet;
+-    once it closes, the export sheet asks "Did the file go where you wanted?": only "Mark N as exported" marks them,
+-    and the snackbar says so ("Marked 4 sales as exported."), so a share that didn't go through loses nothing. A file
+-    holding invoices exported before says so, since importing them again adds them twice.
++    once it closes, the file's screen asks "Did the file go where you wanted?" (Not yet, or Mark N as exported): only
++    "Mark N as exported" marks them, and the snackbar says so ("Marked 4 sales as exported."), so a share that didn't go
++    through loses nothing. A file holding invoices exported before says so, since importing them again adds them twice.
+   - **In MyBizMate, import the Parties file first** (Masters → Parties → Import), so the new customers and suppliers
+-    exist, **then the Sales and Purchases files.** When a file names a party that hasn't gone out yet, the export
+-    sheet lists the parties' file first and says why, and that file's step says so too.
+-- **Settings** (the gear in Home's header), in groups:
++    exist, **then the Sales and Purchases files.** When a file names a party that hasn't gone out yet, step 1 lists
++    the parties' file first and says why, and that file's screen says so too.
++- **Profile** (the bar's right end), in groups:
+   - Your business: whether it's VAT-registered;
+   - Export defaults: the revenue account for sales, the expense account for purchases, the withholding tax ATC and
+     the offset account for 2307s, each saved as it's typed. An ATC that isn't 2 letters and 3 digits gets the hint
+     "Like WC158: 2 letters, 3 digits", and is saved all the same;
++  - Your lists: Customers and items, with their counts, which opens Your lists;
+   - About: Privacy, in plain words; Open-source licenses (below); and the version;
+   - in team builds, Team tools (milestone 4, below).
+-- **Open-source licenses** (Settings › About): what the app ships, a row each with its license and version, which
++- **Open-source licenses** (Profile › About): what the app ships, a row each with its license and version, which
+   opens the license's full text: the libraries (React Native, React, Expo, react-native-svg, react-native-screens and
+   react-native-safe-area-context), the scanner's native ones (OpenCV, ONNX Runtime, CameraX, PDFium with the
+   notices of the code it holds, and nlohmann/json, which the scanner core compiles in), the reading model (PP-OCRv6
+@@ -140,15 +190,16 @@ so Android and iPhone will read a photo or a PDF the same way.
+   gathers them again after a dependency changes; commit what it changed. A test fails when a dependency in
+   `package.json`, a library the scanner module's `build.gradle` implements, or one its C++ core compiles in has no
+   entry.
+-- **Privacy:** the lists, Settings and saved scans stay in the app's own storage, kept out of Android's backups.
+-  Nothing leaves the phone but the files the person shares. An export is written to the app's cache for the share
+-  sheet, and the next export replaces it.
++- **Privacy:** the lists, Profile's settings and saved scans stay in the app's own storage, kept out of Android's
++  backups. Nothing leaves the phone but the files the person shares. An export is written to the app's cache for the
++  share sheet, and the next export replaces it.
+ 
+ ### PDF import and BIR Form 2307 (milestone 5)
+ 
+-- **Import PDF** (Home): Android's file picker, for PDFs. Page 1 is read; when there are more pages, the result says
+-  "Only page 1 of N was read." The scan is labelled "PDF: <the file's name>", or just "PDF" when the file's app gives
+-  no name. A file that is a PDF neither by its name nor by its type gets "Choose a PDF file."
++- **Import PDF** (the camera tab's tray): Android's file picker, for PDFs, into the session. Page 1 is read; when there
++  are more pages, the result says "Only page 1 of N was read." The scan is labelled "PDF: <the file's name>", or just
++  "PDF" when the file's app gives no name. A file that is a PDF neither by its name nor by its type gets "Choose a PDF
++  file."
+ - **Found like a photo, then read from the text:** page 1 is rendered at the photo pipeline's size, and the form is
+   found and straightened as in a photo, so any faithful copy of the form works, whatever program made the PDF. Each
+   box then takes the PDF's own text inside it (typed text, or a value typed into a fillable PDF's field), exact, with
+@@ -161,7 +212,7 @@ so Android and iPhone will read a photo or a PDF the same way.
+   that app's own OCR, so it is ignored: text that is never painted (render mode 3, invisible, or 7, clip only), and
+   text drawn under an image that covers most of the page (80% of its area or more). Text drawn on top of such an
+   image, as a background, is the page's own.
+-- **Refused, each with its message** (a dialog, and no scan is added):
++- **Refused, each with its message** (no scan is added: the tray shows a "!", and the session screen says why):
+   - over 20 MB (20 × 1024 × 1024 bytes): "That PDF is over 20 MB. Choose a smaller file." It is refused before any
+     of it is copied when its app gives its size, else as soon as the copy passes 20 MB;
+   - a page over 14,400 pt (200 inches, the PDF format's own limit) on its long side: "That PDF's page is too big to
+@@ -201,12 +252,11 @@ so Android and iPhone will read a photo or a PDF the same way.
+   business tax codes for the second table, with their rates), plus the 12 codes only the form's page 2 prints; a code
+   with no rate skips the tax check.
+ - **Save 2307:** the payor, the period, the tax withheld, and the offset account MyBizMate's import needs, asked at the
+-  first save and then kept (Settings › Export defaults › "Offset account for 2307s"). A 2307 can't be saved without
+-  its period ("Add the period first: tap Period."), a payor ("Add the payor first: tap Payor.") or a payment ("No
+-  income payments were read."). Once saved, the snackbar says "Saved as a 2307". Saved 2307s are in Saved ("2307 · Q4
+-  2026" under the payor, with the tax withheld on the right), and a recent scan's badge says "Checks passed" or
+-  "Saved".
+-- **Exporting 2307s** (the 2307s file in Saved's "Export…", beside Sales and Purchases):
++  first save and then kept (Profile › Export defaults › "Offset account for 2307s"). A 2307 can't be saved without its
++  period ("Add the period first: tap Period."), a payor ("Add the payor first: tap Payor.") or a payment ("No income
++  payments were read."). Once saved, the snackbar says "Saved as a 2307". Saved 2307s are in See invoices ("2307 · Q4
++  2026" under the payor, with the tax withheld on the right), and the scan's badge says "Checks passed" or "Saved".
++- **Exporting 2307s** (the 2307s file in the Export tab, beside Sales and Purchases):
+   `MyBizMate 2307-CWT import <date>.xlsx`, in MyBizMate's 2307-CWT import layout (Sheets → CWT → Import), one row
+   per payment: Date * (the period's last day), Customer * (the payor's code when it matched one of your customers,
+   else the name as written), Tax Base (Net) (the payment's total), CWT IT and IT Amt for an income payment or CWT VT
+@@ -220,7 +270,7 @@ so Android and iPhone will read a photo or a PDF the same way.
+ For the reading model's first fine-tune: in team builds, the team checks every box of a scan in the app itself, then
+ sends the checked boxes in one zip. People's own scans aren't sent yet: they wait for consent (milestone 6).
+ 
+-- **Team tools** (Settings › Team tools, team builds only): the Annotation mode switch, Training data and the Speed
++- **Team tools** (Profile › Team tools, team builds only): the Annotation mode switch, Training data and the Speed
+   test.
+ - **The install ID:** a random ID (expo-crypto's version 4 UUID), made at the app's first start and kept in
+   `install.json`. It comes from nothing about the business or the phone, and no client screen shows it. In the
+@@ -372,14 +422,14 @@ sends the checked boxes in one zip. People's own scans aren't sent yet: they wai
+ 
+ Debug builds are team builds. A release is a client build unless it's built with `EXPO_PUBLIC_TEAM_BUILD=1`:
+ 
+-- client: Home's header has Your lists and Settings, and Saved opens from Home's To export (or Saved) rows;
+-- team: Settings also has **Team tools** (Annotation mode, Training data and the Speed test: milestone 4, above), the
++- client: Profile has Your business, Export defaults, Your lists and About;
++- team: Profile also has **Team tools** (Annotation mode, Training data and the Speed test: milestone 4, above), the
+   Scan screen's footnote shows the straighten and read times, and the brand splash and the camera show the error
+   itself when they couldn't start.
+ 
+ A link (`mybizmatescan://speed`, say) opens the Speed test or Training data screen in any build, but outside team
+ builds those screens show only "This is for team builds." A link opened when the app isn't running, to any screen,
+-has Home under it, so Back goes Home.
++has the tabs under it, on the camera, so Back goes to the camera.
+ 
+ Build a team release for a phone (PowerShell, phone connected with USB debugging):
+ 
+@@ -422,14 +472,14 @@ no path is given) checks the first two items and lists the network permissions;
+   `ACCESS_NETWORK_STATE`), and so does the app's own manifest. Whether client release builds remove it (a config
+   plugin's `tools:node="remove"`) is decided here. Debug builds keep it: Metro needs it. Debug builds also carry the
+   dev launcher's ML Kit barcode scanner and Google's `datatransport`, as debug-only dependencies.
+-- **Open-source notices:** the app shows them in Settings › About › Open-source licenses: each library it ships,
++- **Open-source notices:** the app shows them in Profile › About › Open-source licenses: each library it ships,
+   CameraX and nlohmann/json included, with its license, its version and the full text (pdfium's with the notices of
+   the code it holds; see below). After a dependency changes, run `npm run licenses` to gather the texts again into
+   `assets/licenses`, and commit what changed; the tests fail when something the app ships has no entry.
+ - **The notices still missing:** before a client release, the notices also need to cover the libraries OpenCV's `.so`
+   builds in (libjpeg-turbo, OpenJPEG, libwebp, protobuf, ITT, carotene and KleidiCV) and the transitive libraries the
+   app ships (react-navigation, AndroidX, Kotlin's standard library and Hermes). Gather their texts with
+-  `npm run licenses` (or add them to its sources), and check them in Settings › About › Open-source licenses. This was
++  `npm run licenses` (or add them to its sources), and check them in Profile › About › Open-source licenses. This was
+   the user's call on 2026-11-23: "Before release".
+ 
+ ## Run it on the Android emulator
+@@ -447,11 +497,13 @@ The debug APK is about 245 MB (the full OpenCV, ONNX Runtime and pdfium, CameraX
+ If an install fails with `INSUFFICIENT_STORAGE`, remove the core tests' files with
+ `adb shell rm -rf /data/local/tmp/scanner_tests` (in PowerShell as it is; in Git Bash, run `export MSYS_NO_PATHCONV=1`
+ first, or Git Bash turns the path into a Windows one and nothing is removed). If that isn't enough, the old build has
+-to be uninstalled first, and uninstalling deletes the app's data (the lists, Settings, saved scans and recent scans):
++to be uninstalled first, and uninstalling deletes the app's data (the lists, the settings, saved scans, unsaved scans
++and queued photos):
+ to keep it, see "Reinstalling without losing the app's data", below.
+ 
+-In a debug build, the dev client's Tools button starts over the icons in Home's header (Your lists and Settings): drag
+-it aside. On the emulator, a tap sent with `adb shell input` can open Gboard's "Try out your stylus" once; Cancel it.
++In a debug build, the dev client's Tools button floats over the screen. Home's header has no icons now, so it covers
++none there; drag it aside where it covers something. On the emulator, a tap sent with `adb shell input` can open
++Gboard's "Try out your stylus" once; Cancel it.
+ 
+ `uiautomator dump` writes the screen's text to the log: never dump a screen showing a real scan.
+ 
+@@ -521,9 +573,11 @@ Windows paths, the backup fails, and the file holds an error message instead. Th
+ ### The camera's test photo (debug builds only)
+ 
+ `mybizmatescan://camera?test=<sample>` shows a sample (`inv_0051`, say) in place of the camera picture, and
+-`?test=file:///…` any photo in the app's own storage. The camera then finds the form, takes the photo by itself and
+-reads it, as with a real sheet. A scan made this way since milestone 4 is marked as a test image: it can be saved, but
+-never becomes training data. One saved before milestone 4 isn't marked, so don't annotate one. For a Service Invoice:
++`?test=file:///…` any photo in the app's own storage. The link opens the camera tab, which finds the form, takes the
++photo by itself into a session and reads it, as with a real sheet. Auto takes it once, then waits for the sheet to leave
++the frame, which a still never does: the round button takes more of it. A scan made this way since milestone 4 is marked
++as a test image: it can be saved, but never becomes training data. One saved before milestone 4 isn't marked, so don't
++annotate one. For a Service Invoice:
+ 
+ ```powershell
+ adb push fixtures/core/photos/svc_0000.jpg /data/local/tmp/
+@@ -549,8 +603,8 @@ adb push fixtures/core/pdf/bir2307_text_0.pdf /sdcard/Download/
+ adb shell content call --uri content://media --method scan_file --arg /sdcard/Download/bir2307_text_0.pdf
+ ```
+ 
+-Then Home → Import PDF → Downloads. To remove it, delete it (`adb shell rm /sdcard/Download/bir2307_text_0.pdf`) and
+-run the same `scan_file` again.
++Then the camera tab's Import PDF (in the tray) → Downloads. To remove it, delete it
++(`adb shell rm /sdcard/Download/bir2307_text_0.pdf`) and run the same `scan_file` again.
+ 
+ ## pdfium (reading PDFs)
+ 
+@@ -561,7 +615,7 @@ run the same `scan_file` again.
+   (MIT, Copyright 2014-2025 Benoit Blanchon), and `libpdfium.so` also holds third-party code under its own licenses
+   (FreeType, HarfBuzz, ICU, libjpeg-turbo, OpenJPEG, libpng, Little CMS, zlib, Abseil and others). Every text is in
+   each ABI's folder (below): `LICENSE` and `licenses/`. BSD-3-Clause asks for its notice to go with the binary, so a
+-  release has to carry it: the app shows all of them as PDFium's text in Settings › About › Open-source licenses
++  release has to carry it: the app shows all of them as PDFium's text in Profile › About › Open-source licenses
+   (`npm run licenses` gathers them from that folder).
+ - **The fetch script:** `scripts/fetch-pdfium.mjs` downloads the release's four Android archives, checks each against
+   the SHA-256 pinned in the script, and unpacks it into a cache folder outside the repo, one folder per ABI with
+@@ -593,9 +647,9 @@ run the same `scan_file` again.
+   `npm run test:core -- -tc="*parity*"`. They compare the core with the Python on every fixture photo, both forms,
+   and read the 2307s and PDFs against the values written into them. They push about 200 MB to
+   `/data/local/tmp/scanner_tests` (265 MB after a run); remove that folder when the emulator is short of space.
+-- From `android/`: `./gradlew :scanner:testDebugUnitTest`: the module's Kotlin tests (auto capture, image sizes, the
+-  scanner holder, the PDF's size limit and work copy, a refusal's code, a picked file's name, and what of a picked
+-  file's lasting access is given up).
++- From `android/`: `./gradlew :scanner:testDebugUnitTest`: the module's Kotlin tests (auto capture, with its re-arming
++  after a photo and `rearm()`; the checks counter, `CheckRate`; image sizes, the scanner holder, the PDF's size limit
++  and work copy, a refusal's code, a picked file's name, and what of a picked file's lasting access is given up).
+ - `npx tsc --noEmit`: the typecheck. `npm run lint`: ESLint (Expo's config).
+ - `npm run check:apk -- [the APK]`: the release checklist's checks on a built APK (the debug APK by default).
+ - From `../prototype/benchmark`: `..\..\.venv\Scripts\python.exe test_export_check_fixtures.py`: the test of the
+@@ -984,5 +1038,5 @@ adb shell content call --uri content://media --method scan_file --arg /sdcard/Do
+ adb shell content call --uri content://media --method scan_file --arg /sdcard/Download/items.csv
+ ```
+ 
+-Then, on the phone, Your lists (the list icon in Home's header) → Import CSV → Downloads: `parties.csv` on Customers
++Then, on the phone, Your lists (Profile › Customers and items) → Import CSV → Downloads: `parties.csv` on Customers
+ gives 21 customers and 2 suppliers (1 row skipped: no name), and `items.csv` on Items gives 18 items.
+diff --git a/__tests__/exportFile.test.ts b/__tests__/exportFile.test.ts
+index cabee7a3..8d7c024b 100644
+--- a/__tests__/exportFile.test.ts
++++ b/__tests__/exportFile.test.ts
+@@ -78,7 +78,8 @@ test('exportChoice: by invoice date, oldest first; "new" is what was never expor
+ });
+ 
+ test('waitingOf: what never went out in an import file, of one kind or of every kind', () => {
+-  // Ruling T17-3: the one rule Home's To export, Export's files and Saved count by; savedList keeps the newest first
++  // Ruling T17-3: the one rule Home's To export, Export's files and See invoices count by; savedList keeps the
++  // newest first
+   const saved = savedList();
+   expect(ids(waitingOf('sale', saved))).toEqual(['a', 'c']); // b went out
+   expect(ids(waitingOf('purchase', saved))).toEqual(['d']);
+diff --git a/__tests__/format.test.ts b/__tests__/format.test.ts
+index 048d417a..9af999b6 100644
+--- a/__tests__/format.test.ts
++++ b/__tests__/format.test.ts
+@@ -7,7 +7,6 @@ import {
+   longDay,
+   monthDay,
+   monthSpan,
+-  monthYear,
+   peso,
+   prettyDate,
+   qty,
+@@ -23,7 +22,7 @@ test('amount: rows without the peso sign', () => {
+ test('monthDay', () => {
+   expect(monthDay('2026-11-22')).toBe('Nov\u00A022');
+   expect(monthDay('2026-01-05')).toBe('Jan\u00A05');
+-  // an empty or malformed date: a dash, as Saved's prettyDate(…) ?? '—' had it
++  // an empty or malformed date: a dash, as the old Saved screen's prettyDate(…) ?? '—' had it
+   for (const date of ['', '2026-11', '2026-13-01', '2026-00-05', '2026-11-xx', '2026-11-00', 'Nov 22, 2026']) {
+     expect([date, monthDay(date)]).toEqual([date, '—']);
+   }
+@@ -35,19 +34,6 @@ test('a short date keeps its day on its line: a no-break space, never a plain on
+   expect(monthDay('2026-11-23')).not.toContain(' ');
+ });
+ 
+-test('monthYear', () => {
+-  // Saved's month sections: a date's first 7 characters, the month in full
+-  expect(monthYear('2026-11')).toBe('November 2026');
+-  expect(monthYear('2026-03')).toBe('March 2026');
+-  expect(monthYear('2026-01')).toBe('January 2026');
+-  expect(monthYear('2025-12')).toBe('December 2025');
+-  expect(monthYear('2026-09-20'.slice(0, 7))).toBe('September 2026');
+-  // an empty or malformed one: a dash
+-  for (const month of ['', '2026', '2026-13', '2026-00', '2026-1x', 'xxxx-11', 'Nov 202']) {
+-    expect([month, monthYear(month)]).toEqual([month, '—']);
+-  }
+-});
+-
+ test('pesos, quantities and dates as the test app writes them', () => {
+   expect(peso(1575)).toBe('₱1,575.00');
+   expect(peso(1234567.5)).toBe('₱1,234,567.50');
+diff --git a/__tests__/home.test.tsx b/__tests__/home.test.tsx
+index 152a9fd1..2919101c 100644
+--- a/__tests__/home.test.tsx
++++ b/__tests__/home.test.tsx
+@@ -186,7 +186,7 @@ test('the header: the greeting for the time of day, and the date', async () => {
+ 
+   // no Back, no wordmark, no icon buttons: the tabs' bar has Profile, and Get set up has the lists
+   for (const team of [false, true]) {
+-    mockTeam = team; // a team build has the speed test in Settings › Team tools, never on Home
++    mockTeam = team; // a team build has the speed test in Profile › Team tools, never on Home
+     await render(<Home />);
+     const top = within(screen.getByTestId('header'));
+     expect(top.queryAllByRole('button')).toHaveLength(0);
+diff --git a/__tests__/inputs.test.tsx b/__tests__/inputs.test.tsx
+index a5ce5508..3e11b559 100644
+--- a/__tests__/inputs.test.tsx
++++ b/__tests__/inputs.test.tsx
+@@ -262,7 +262,7 @@ test('ChoiceChips: pills that wrap, ink when chosen, a helper under them', async
+   expect(within(group).queryByText(SUGGESTED)).toBeNull();
+   expect(kids(group.parent!)).toEqual([group, screen.getByText(SUGGESTED)]);
+ 
+-  // Saved's filter: the label isn't shown, but it still names the group. Nothing chosen yet: no pill is checked.
++  // showLabel false: the label isn't shown, but it still names the group. Nothing chosen yet: no pill is checked.
+   await screen.rerender(<ChoiceChips label="Show" showLabel={false} options={TAX_TYPES} value={null} onChange={noop} />);
+   expect(screen.queryByText('Show')).toBeNull();
+   expect(screen.getByRole('radiogroup', { name: 'Show' })).toBeOnTheScreen();
+diff --git a/__tests__/licenses.test.ts b/__tests__/licenses.test.ts
+index 7a3f2b6d..11d655a8 100644
+--- a/__tests__/licenses.test.ts
++++ b/__tests__/licenses.test.ts
+@@ -1,6 +1,6 @@
+ import { coveredBy, LICENSES } from '../lib/licenses';
+ 
+-// Design B §9.10: Settings › About › Open-source licenses lists what the app ships, each with its license and its text.
++// Design B §9.10: Profile › About › Open-source licenses lists what the app ships, each with its license and its text.
+ // lib/licenses holds the entries; scripts/collect-licenses.mjs gathers their texts into assets/licenses (`npm run
+ // licenses`). Jest runs from the repo's root, so the files are read from there.
+ 
+diff --git a/__tests__/licensesScreen.test.tsx b/__tests__/licensesScreen.test.tsx
+index ed35f1ad..1b7cfcc1 100644
+--- a/__tests__/licensesScreen.test.tsx
++++ b/__tests__/licensesScreen.test.tsx
+@@ -8,7 +8,7 @@ import { memoryFs } from '../test-utils/memoryFs';
+ import { scrollListToEnd } from '../test-utils/scrollList';
+ import { typeStylesOf } from '../test-utils/typeStyles';
+ 
+-// Design B §9.10: Open-source licenses, from Settings › About. A row per component, with its license and version,
++// Design B §9.10: Open-source licenses, from Profile › About. A row per component, with its license and version,
+ // opens its text: the bundled .txt asset, read from the file expo-asset puts it in, and shown a paragraph at a time.
+ 
+ let mockParams: { i?: string } = {};
+diff --git a/__tests__/nativeIntent.test.ts b/__tests__/nativeIntent.test.ts
+index 4459fa6b..415a96f6 100644
+--- a/__tests__/nativeIntent.test.ts
++++ b/__tests__/nativeIntent.test.ts
+@@ -2,8 +2,9 @@ import { redirectSystemPath } from '../app/+native-intent';
+ 
+ // Camera first (spec §6.1, call 1): a launch with no route of its own, from the launcher or a development build's
+ // launch link, opens the camera, the tabs' anchor, not Home. A link with a route keeps it (mybizmatescan://camera?test=…,
+-// the team's /speed and /training). A link that comes while the app runs goes on as it came, and so does anything it
+-// can't read: the function never throws.
++// the team's /speed and /training). The old /settings opens Profile, where Settings lives now (spec §6.8), cold or
++// warm. Any other link that comes while the app runs goes on as it came, and so does anything it can't read: the
++// function never throws.
+ 
+ const cold = (path: string) => redirectSystemPath({ path, initial: true });
+ 
+@@ -38,7 +39,17 @@ test('a link with a route keeps it', () => {
+   expect(cold(devLink)).toBe(devLink);
+ });
+ 
+-test('a link while the app runs is never changed', () => {
++test('the old settings link opens Profile, cold or while the app runs', () => {
++  for (const path of ['mybizmatescan://settings', 'mybizmatescan:///settings', '/settings', '/settings/']) {
++    expect([path, cold(path)]).toEqual([path, '/profile']);
++    expect([path, redirectSystemPath({ path, initial: false })]).toEqual([path, '/profile']);
++  }
++  const devLink = 'exp+mybizmate-scan://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A8081%2F--%2Fsettings';
++  expect(cold(devLink)).toBe('/profile');
++  expect(cold('/settingsx')).toBe('/settingsx'); // only the route itself
++});
++
++test('any other link while the app runs is never changed', () => {
+   for (const path of ['mybizmatescan:///', '/', 'mybizmatescan://camera?test=inv_0051', '/speed']) {
+     expect(redirectSystemPath({ path, initial: false })).toBe(path);
+   }
+diff --git a/__tests__/result.test.tsx b/__tests__/result.test.tsx
+index 0929daf1..39aad0e4 100644
+--- a/__tests__/result.test.tsx
++++ b/__tests__/result.test.tsx
+@@ -109,7 +109,7 @@ async function show(
+ 
+ const DETAILS = { taxType: 'VAT', account: '4010', terms: 'account', atc: '' } as const;
+ 
+-/** A camera photo of the fixture, saved as a sale, opened again from Saved. */
++/** A camera photo of the fixture, saved as a sale, opened again (from See invoices or a session). */
+ async function showSaved(stem: string): Promise<string> {
+   const id = addScan({ label: 'Camera photo', source: 'camera', result: parseScanResult(coreJson(stem)) });
+   await saveScan(id, DETAILS);
+@@ -149,7 +149,7 @@ afterAll(() => jest.useRealTimers());
+ 
+ beforeEach(async () => {
+   jest.clearAllMocks();
+-  mockNavigation.canGoBack.mockReturnValue(true); // a screen under this one, as when Home or Saved opened it
++  mockNavigation.canGoBack.mockReturnValue(true); // a screen under this one: a session or See invoices opened it
+   memoryFs.reset();
+   mockTeam = false;
+   await updateSettings({ annotation: false });
+@@ -840,7 +840,7 @@ test('deleting from ⋮ when the navigator lets go of the screen at once: still
+ });
+ 
+ test('deleting from ⋮: a delete that fails says so, once the screen has gone back', async () => {
+-  // Saved's long press asks the same and says the same (ruling T19-2)
++  // See invoices' long press asks the same and says the same (ruling T19-2)
+   const remove = jest.spyOn(savedStore, 'deleteSaved').mockRejectedValueOnce(new Error('EACCES: permission denied'));
+   const id = await showSaved('inv_0007');
+   placeMenu();
+@@ -854,11 +854,11 @@ test('deleting from ⋮: a delete that fails says so, once the screen has gone b
+   expect(mockNavigation.goBack.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
+   expect(mockToast).toHaveBeenCalledTimes(1);
+   expect(mockToast).toHaveBeenCalledWith("Couldn't delete the scan.");
+-  expect(savedSummary(id)).toBeDefined(); // still saved, so still in Saved
++  expect(savedSummary(id)).toBeDefined(); // still saved, so still in See invoices
+   remove.mockRestore();
+ });
+ 
+-test('deleting from ⋮ with nothing under the screen goes Home, in the same order (ruling T24-1)', async () => {
++test('deleting from ⋮ with nothing under the screen goes to the camera, in the same order (ruling T24-1)', async () => {
+   // The Stack is anchored on the tabs (app/_layout), so the camera is the fallback, as for the header's Back
+   mockNavigation.canGoBack.mockReturnValue(false);
+   const remove = jest.spyOn(savedStore, 'deleteSaved');
+diff --git a/__tests__/save.test.tsx b/__tests__/save.test.tsx
+index 5b8a7e7e..81a3e8aa 100644
+--- a/__tests__/save.test.tsx
++++ b/__tests__/save.test.tsx
+@@ -671,7 +671,7 @@ test('a 2307 needs its payments first, and its strip says so', async () => {
+   expect(screen.queryByLabelText('Offset account')).toBeNull();
+ });
+ 
+-// Annotation mode (Settings › Team tools, team builds only): each scan is saved with a source tag, a client's and a
++// Annotation mode (Profile › Team tools, team builds only): each scan is saved with a source tag, a client's and a
+ // writer's code.
+ 
+ test('codes are codes', () => {
+diff --git a/__tests__/saved.test.ts b/__tests__/saved.test.ts
+index 99d53eee..eb35afcd 100644
+--- a/__tests__/saved.test.ts
++++ b/__tests__/saved.test.ts
+@@ -153,8 +153,8 @@ test("a delete writes saved.json first: one that can't be written keeps the scan
+   await m.saved.saveScan(id, DETAILS);
+   const listener = jest.fn();
+   m.saved.subscribeSaved(listener);
+-  // a full phone: no file can be written. The caller hears it (the snackbar says so: lib/confirmDelete), and Saved
+-  // still lists it, as saved.json does
++  // a full phone: no file can be written. The caller hears it (the snackbar says so: lib/confirmDelete), and See
++  // invoices still lists it, as saved.json does
+   const write = jest.spyOn(File.prototype, 'write').mockRejectedValue(new Error('No space left on device'));
+   await expect(m.saved.deleteSaved(id)).rejects.toThrow('No space left on device');
+   expect(m.saved.savedSummary(id)).toBeDefined();
+@@ -289,8 +289,8 @@ test("a 2307's summary: checked as a 2307, one import row per payment", async ()
+   ]);
+   // the offset account becomes the next 2307's; an invoice's accounts and ATC stay as they were
+   expect(m.settings.settings()).toMatchObject({ offsetAccount: '1205', revenueAccount: '', expenseAccount: '', atc: '' });
+-  // an unsure match is only the closest customer: no list party, and the name as written goes out; Saved shows that
+-  // name, and the export's sheet asks to check it in MyBizMate first
++  // an unsure match is only the closest customer: no list party, and the name as written goes out; See invoices
++  // shows that name, and the export's sheet asks to check it in MyBizMate first
+   const unsure = m.scans.addScan({ label: 'PDF: 2307.pdf', source: 'pdf', result: parseScanResult(coreJson('bir2307_text_0')) });
+   m.scans.setEdit(unsure, 'payor_name', 'Santos Merchandising');
+   m.scans.setEdit(unsure, 'payor_tin', '99988877700000');
+diff --git a/__tests__/scans.test.ts b/__tests__/scans.test.ts
+index 53cb57b6..f605ff2d 100644
+--- a/__tests__/scans.test.ts
++++ b/__tests__/scans.test.ts
+@@ -196,7 +196,7 @@ test('the reading itself removes the edit', () => {
+   expect(getScan(id).edits).toEqual({});
+ });
+ 
+-test('a saved scan opened from Saved can be found and changed', () => {
++test('a saved scan opened again can be found and changed', () => {
+   const { cacheScan, getScan, updateScan } = require('../lib/scans');
+   cacheScan({ id: 'saved-1', label: 'Camera photo', source: 'camera', at: new Date(), result: result('/s/d'), edits: {},
+     terms: null, kind: 'sale', party: null, saved: null });
+@@ -361,7 +361,7 @@ test('deleting an unsaved scan forgets it and its folder; a saved one is refused
+   expect(filesIn(ELSEWHERE)).toEqual(elsewhereFiles);
+   expect(filesIn(KEPT)).toEqual(keptFiles);
+ 
+-  // a saved one is refused: its folder is under saved/ now, and Saved's own delete is its way out
++  // a saved one is refused: its folder is under saved/ now, and deleteSaved is its way out
+   updateScan(kept, { saved: { savedAt: '2026-11-24T01:41:00.000Z', details: { account: '1205' } } });
+   expect(() => deleteScan(kept)).toThrow('saved');
+   expect(getScan(kept)).toBeDefined();
+diff --git a/__tests__/sessions.test.ts b/__tests__/sessions.test.ts
+index 24fc2ffe..f637c8cb 100644
+--- a/__tests__/sessions.test.ts
++++ b/__tests__/sessions.test.ts
+@@ -516,7 +516,7 @@ test("a scan's sub-line: Sale · SI 0007655, Purchase · Inv 0007655, 2307 · Q1
+     'Sale · 9:41 AM',
+   );
+   expect(scanSub(member(scanOf('blank_page', { at: at(24, 16, 10) })))).toBe(formatClock(at(24, 16, 10)));
+-  // saved: Saved's sub-line
++  // saved: a saved scan's sub-line
+   await saveScan(sale.id, DETAILS);
+   expect(scanSub(member(getScan(sale.id)!, savedSummary(sale.id)!))).toBe(savedSub(savedSummary(sale.id)!));
+ });
+@@ -533,7 +533,7 @@ test("a scan's amount: an invoice's gross, a 2307's tax withheld, a saved one's
+   expect(memberAmount(member(cert))).toBe(tax);
+   expect(memberAmount(member(scanOf('blank_page')))).toBeNull();
+ 
+-  // a saved one: its summary's, even after an edit since the save changed what it reads now (as Saved shows it)
++  // a saved one: its summary's, even after an edit since the save changed what it reads now (as See invoices shows it)
+   await saveScan(sale.id, DETAILS);
+   const kept = savedSummary(sale.id)!;
+   expect(kept.kind === 'sale' && kept.gross).toBe(gross);
+@@ -547,7 +547,7 @@ test("a scan's amount: an invoice's gross, a 2307's tax withheld, a saved one's
+   expect(memberAmount(membersOf([], [certSummary])[0])).toBe(12.5);
+ });
+ 
+-test("Saved's sub-line: kind, date and number; a 2307's quarter", () => {
++test("a saved scan's sub-line: kind, date and number; a 2307's quarter", () => {
+   const scan = scanOf('inv_0007');
+   const day = monthDay('2026-09-20');
+   expect(savedSub(summaryLike(scan))).toBe(`Sale · ${day} · SI 0007655`);
+diff --git a/__tests__/sessionsScreen.test.tsx b/__tests__/sessionsScreen.test.tsx
+index 5ca8a68c..70e1a0ee 100644
+--- a/__tests__/sessionsScreen.test.tsx
++++ b/__tests__/sessionsScreen.test.tsx
+@@ -268,7 +268,7 @@ test('the search finds scans by party, number or TIN, and lists them; a result o
+   // by TIN, without its dashes; two found, newest first
+   await act(async () => fireEvent.changeText(searchField(), '900000'));
+   expect(results().map((r: string) => r.split(',')[0])).toEqual(['Bautista Pharmacy', 'Torres Construction Supply']);
+-  // a saved scan alone: Saved's sub-line, its amount and its badge
++  // a saved scan alone: its saved sub-line, its amount and its badge
+   await act(async () => fireEvent.changeText(searchField(), 'castillo'));
+   expect(results()).toEqual([`Castillo Eatery, Sale · ${monthDay('2026-11-20')} · SI 0042, 1,234.50, Saved`]);
+   await act(async () => fireEvent.changeText(searchField(), '0042'));
+diff --git a/__tests__/snackbar.test.tsx b/__tests__/snackbar.test.tsx
+index c33811f1..c34679c3 100644
+--- a/__tests__/snackbar.test.tsx
++++ b/__tests__/snackbar.test.tsx
+@@ -214,7 +214,7 @@ test('it sits above the bottom bar', async () => {
+     </>
+   );
+   await withInsets(ui(false));
+-  await raise('Saved. Export it from Saved invoices.');
++  await raise('Saved. Send it from the Export tab.');
+   expect(snackbar()).toHaveStyle({ bottom: BOTTOM + space.s }); // no bar: above the navigation bar
+ 
+   await screen.rerender(ui(true));
+@@ -273,17 +273,17 @@ test('a bar that lays out again keeps its place in the order (ruling T25b-1)', a
+       nativeEvent: { layout: { x: 0, y: 0, width: 360, height } },
+     });
+   await withInsets(ui(true));
+-  await relayout(0, 120); // Saved's
++  await relayout(0, 120); // the first bar's, on a screen under the Scan screen
+   await relayout(1, 80); // then the Scan screen's
+   await raise('Saved as a sale');
+   expect(snackbar()).toHaveStyle({ bottom: 80 + space.s });
+ 
+-  await relayout(0, 136); // Saved's lays out again: the Scan screen's bar still counts
++  await relayout(0, 136); // the first bar lays out again: the Scan screen's bar still counts
+   expect(snackbar()).toHaveStyle({ bottom: 80 + space.s });
+   await relayout(1, 96); // and the Scan screen's own new height does
+   expect(snackbar()).toHaveStyle({ bottom: 96 + space.s });
+ 
+-  await screen.rerender(ui(false)); // the Scan screen's bar goes: Saved's, as last laid out
++  await screen.rerender(ui(false)); // the Scan screen's bar goes: the first one, as last laid out
+   expect(snackbar()).toHaveStyle({ bottom: 136 + space.s });
+ });
+ 
+@@ -373,7 +373,7 @@ test('the host stack: the newest host shows the message; the newest bar sets the
+   root.remove();
+   expect(topHost()).toBeNull();
+ 
+-  // Bars in the order they first report: Saved's (with a line over its buttons), then the Scan screen's over it.
++  // Bars in the order they first report: a lower screen's (with a line over its buttons), then the Scan screen's over it.
+   const saved = {};
+   const scan = {};
+   expect(bottomClearance()).toBe(0);
+diff --git a/__tests__/trainingExport.test.ts b/__tests__/trainingExport.test.ts
+index d8d302dc..b1bd7171 100644
+--- a/__tests__/trainingExport.test.ts
++++ b/__tests__/trainingExport.test.ts
+@@ -273,7 +273,7 @@ test('a save in annotation mode sends the scan again, with its labels as now che
+   await first.saved.markExported([sale], SALES_DAY);
+   expect(await first.exp.pendingTraining()).toEqual([]);
+ 
+-  // later: the sale opened from Saved, a box corrected, and saved again in annotation mode
++  // later: the sale opened again, a box corrected, and saved again in annotation mode
+   jest.resetModules();
+   const m = load();
+   await m.settings.loadSettings();
+diff --git a/app/(tabs)/export/invoices.tsx b/app/(tabs)/export/invoices.tsx
+index d0dfce65..1af5ac8e 100644
+--- a/app/(tabs)/export/invoices.tsx
++++ b/app/(tabs)/export/invoices.tsx
+@@ -21,7 +21,7 @@ import { toast } from '../../../lib/toast';
+ // kind's saved scans, those from before the camera-first update too (summary-only, with no session: Review Focus 2).
+ // The header is the kind's plural, with how many wait to export by the export's own rule (lib/exportFile's waitingOf:
+ // ruling T17-3), or that all have gone out. The list (virtualized) goes by each document's date (an invoice's date, a
+-// 2307's period end), newest first, then by the time saved, newest first. A row is Saved's: the party, its kind, date
++// 2307's period end), newest first, then by the time saved, newest first. A row is the party, its kind, date
+ // and number, the amount (a 2307's tax withheld) and To export or Exported. It opens the scan (read back first, as a
+ // saved one may no longer be among the recent ones), and a long press asks to delete it, in the Scan screen's ⋮ words
+ // (lib/confirmDelete). One guard for every press (ruling T6-1); a read in flight blocks the others, and the scan opens
+diff --git a/app/+native-intent.tsx b/app/+native-intent.tsx
+index 8c5ffdba..e0988bff 100644
+--- a/app/+native-intent.tsx
++++ b/app/+native-intent.tsx
+@@ -4,13 +4,15 @@ import { unwrapDevLaunchURL } from 'expo-linking';
+  * Camera first (spec §6.1, call 1): a launch with no route of its own opens the camera, not Home. That's a launch
+  * from the launcher (expo-router asks for the root URL, mybizmatescan:///) or a development build's launch link, which
+  * names the bundler and no route. A link with a route keeps it: mybizmatescan://camera?test=…, and the team's /speed
+- * and /training. A link that comes while the app runs goes on as it came, and so does anything this can't read: it
+- * never throws. expo-router calls it for the initial URL and for each link after.
++ * and /training. The old mybizmatescan://settings, from before Settings moved into the Profile tab (spec §6.8), opens
++ * Profile, cold or while the app runs. Any other link that comes while the app runs goes on as it came, and so does
++ * anything this can't read: it never throws. expo-router calls it for the initial URL and for each link after.
+  */
+ export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }): string {
+-  if (!initial) return path;
+   try {
+-    return routeOf(unwrapDevLaunchURL(path)) === '' ? '/camera' : path;
++    const route = routeOf(unwrapDevLaunchURL(path));
++    if (route === 'settings') return '/profile';
++    return initial && route === '' ? '/camera' : path;
+   } catch {
+     return path; // the link goes on as it came
+   }
+diff --git a/app/_layout.tsx b/app/_layout.tsx
+index c6b87713..c54a5908 100644
+--- a/app/_layout.tsx
++++ b/app/_layout.tsx
+@@ -17,7 +17,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
+ /**
+  * The tabs are always at the bottom of the Stack (ruling T24-1's anchor, moved to the tabs group by camera first,
+  * spec §6.1): a link opened cold (mybizmatescan://speed, mybizmatescan://lists) has the tabs under it, on the camera,
+- * the tabs' own anchor, so Back has somewhere to go. The Scan screen, Saved, Your lists, the licenses and the team
++ * the tabs' own anchor, so Back has somewhere to go. The Scan screen, Your lists, the licenses and the team
+  * screens open above the tabs, with no bar. expo-router 58 calls this the anchor; its older name, initialRouteName,
+  * still works but warns that it's deprecated.
+  */
+diff --git a/components/BottomBar.tsx b/components/BottomBar.tsx
+index b971f7c9..56eef934 100644
+--- a/components/BottomBar.tsx
++++ b/components/BottomBar.tsx
+@@ -7,18 +7,17 @@ import { setBottomClearance } from '../lib/snackbar';
+ import { colors, space } from '../lib/theme';
+ import { Button, type ButtonProps, type ButtonVariant } from './Buttons';
+ 
+-// Design B §5.6 and §8: the fixed bar under Scan and Saved, and the button row it holds (sheets' action rows and
+-// Home's capture row use the row too). The bar is a panel on a hairline, padded 12 and by the navigation bar's inset,
+-// with an optional line (a saved line, say) above its buttons. In the row, buttons sit side by side: primary 1,
+-// secondary and destructive 0.8, text buttons at their own width. A button that's the only one to grow, alone or
+-// beside text buttons, fills what they leave, as a primary does (the supplier sheet's Use this name, beside Add to
+-// your suppliers). When any label wraps (large text, a narrow phone), they stack full width in the given order, which
+-// puts the primary last. A row that stacked stays stacked for those labels at that width and font size: once full
+-// width the labels fit on one line, and flipping back would loop. While its screen is the one on top (focused), the
+-// bar reports its height, so the snackbar sits above it (lib/snackbar). It withdraws it when another screen goes over
+-// it, and reports again when its screen is back on top. So a bar that mounts on a covered screen (Saved's, when a save
+-// on the Scan screen over it gives it something to export) never moves the message on the screen on top (T19-5). A
+-// new height, as it lays out again, keeps its place in the order.
++// Design B §5.6 and §8: the fixed bar under the Scan screen, and the button row it holds (sheets' action rows, the
++// session screen and Export's file screen use the row too). The bar is a panel on a hairline, padded 12 and by the
++// navigation bar's inset, with an optional line (a saved line, say) above its buttons. In the row, buttons sit side by
++// side: primary 1, secondary and destructive 0.8, text buttons at their own width. A button that's the only one to
++// grow, alone or beside text buttons, fills what they leave, as a primary does (the supplier sheet's Use this name,
++// beside Add to your suppliers). When any label wraps (large text, a narrow phone), they stack full width in the given
++// order, which puts the primary last. A row that stacked stays stacked for those labels at that width and font size:
++// once full width the labels fit on one line, and flipping back would loop. While its screen is the one on top
++// (focused), the bar reports its height, so the snackbar sits above it (lib/snackbar). It withdraws it when another
++// screen goes over it, and reports again when its screen is back on top. So a bar that mounts on a covered screen never
++// moves the message on the screen on top (T19-5). A new height, as it lays out again, keeps its place in the order.
+ 
+ export function ButtonRow({ buttons }: { buttons: readonly ButtonProps[] }) {
+   const { width, fontScale } = useWindowDimensions();
+diff --git a/components/ChoiceChips.tsx b/components/ChoiceChips.tsx
+index 13dcb8eb..89e28aef 100644
+--- a/components/ChoiceChips.tsx
++++ b/components/ChoiceChips.tsx
+@@ -4,9 +4,9 @@ import { colors, radius, space, touch, type } from '../lib/theme';
+ import { Tap } from './Tap';
+ 
+ // Design B §5.6 and §7: a labelled choice of one among a few, as pills that wrap to new lines (the tax type, the
+-// terms, Export's ranges, Saved's filter). TalkBack hears a radio group named by `label`, then each pill as a radio
++// terms, Export's ranges). TalkBack hears a radio group named by `label`, then each pill as a radio
+ // button, checked or not. A pill is 40 dp tall with hitSlop to a 48 dp target; chosen, it's filled ink with a paper
+-// label (§5.1: selection is ink). The label shows above the pills unless showLabel is false (Saved's filter, which
++// label (§5.1: selection is ink). The label shows above the pills unless showLabel is false (a group that
+ // only speaks it). A helper line can follow, under the group, so TalkBack reads it after the pills. value null: none
+ // chosen yet.
+ 
+@@ -26,7 +26,7 @@ export function ChoiceChips<T extends string>({
+   value: T | null;
+   onChange: (v: T) => void;
+   helper?: string | null;
+-  showLabel?: boolean; // default true; false: Saved's filter (spoken only)
++  showLabel?: boolean; // default true; false: the label is spoken only
+ }) {
+   return (
+     <View style={styles.field}>
+diff --git a/components/ListRow.tsx b/components/ListRow.tsx
+index 8050b978..399ed902 100644
+--- a/components/ListRow.tsx
++++ b/components/ListRow.tsx
+@@ -6,12 +6,12 @@ import { Badge, type BadgeSpec } from './Badge';
+ import { Check, ChevronRight } from './icons';
+ import { Tap } from './Tap';
+ 
+-// Design B §5.6: a row of a list (Home's recent scans and exports, Saved, Your lists, the pickers, Settings). What
+-// leads (a sample's thumbnail), a title and a sub-line, then on the right an amount with a badge under it (or several,
+-// side by side: Sessions' rows), then a chevron, or a check when the row's step is done. A white row on a hairline.
+-// Pressable or not, it's one stop for TalkBack: its label says the title, the sub-line, the amount and the badges
+-// (§7). Its ref is the row's own view (the pressable, when it has a press): a sheet the row opens gives TalkBack focus
+-// back to it.
++// Design B §5.6: a row of a list (Home's cards, Sessions, a session, Export's steps, See invoices, Your lists, the
++// pickers, Profile). What leads (a sample's thumbnail), a title and a sub-line, then on the right an amount with a
++// badge under it (or several, side by side: Sessions' rows), then a chevron, or a check when the row's step is done. A
++// white row on a hairline. Pressable or not, it's one stop for TalkBack: its label says the title, the sub-line, the
++// amount and the badges (§7). Its ref is the row's own view (the pressable, when it has a press): a sheet the row opens
++// gives TalkBack focus back to it.
+ 
+ export function ListRow({
+   title,
+diff --git a/components/SaveSheet.tsx b/components/SaveSheet.tsx
+index bd698a91..763f15b8 100644
+--- a/components/SaveSheet.tsx
++++ b/components/SaveSheet.tsx
+@@ -28,8 +28,9 @@ import { codeKeyboard, TextField } from './TextField';
+ // mode (team builds; milestone 4's behaviour), the scan's source tag, with M4's two notes. A warning banner counts
+ // what's still marked to check, which saving doesn't wait for. Cancel and the save are the sheet's pinned actions
+ // (ruling T7-4). The save's press returns its promise, so the button loads while the save runs and a double tap saves
+-// once (Review Focus 3). After a save, the sheet closes, and a snackbar says so, with View, which opens Saved for the
+-// kind (none in a session). A save that fails keeps the sheet open, and says so in it, above the scrim (Review Focus 1).
++// once (Review Focus 3). After a save, the sheet closes, and a snackbar says so, with View, which opens See invoices
++// for the kind (none in a session). A save that fails keeps the sheet open, and says so in it, above the scrim (Review
++// Focus 1).
+ 
+ export const TAX_TYPES = [
+   { value: 'VAT', label: 'VAT' },
+diff --git a/lib/cert.ts b/lib/cert.ts
+index db521ee4..df315b67 100644
+--- a/lib/cert.ts
++++ b/lib/cert.ts
+@@ -63,7 +63,7 @@ function checkCert(scan: StoredScan, lists: Lists): CertView {
+   return { cert, problems: problems2307(cert), payor };
+ }
+ 
+-/** The 2307's period as Saved names it: "Q4 2026", or the months it spans when it isn't one quarter. */
++/** The 2307's period as a row's sub-line names it: "Q4 2026", or the months it spans when it isn't one quarter. */
+ export function periodName(cert: Cert2307): string {
+   if (cert.quarter !== null) {
+     const [year, quarter] = cert.quarter.split('-');
+diff --git a/lib/confirmDelete.ts b/lib/confirmDelete.ts
+index b03ac3bf..9db59a2c 100644
+--- a/lib/confirmDelete.ts
++++ b/lib/confirmDelete.ts
+@@ -4,9 +4,9 @@ import { deleteSaved } from './saved';
+ import { deleteScan, type StoredScan } from './scans';
+ import { toast } from './toast';
+ 
+-// Design B §9.5: deleting a saved scan asks first, in the same words from the Scan screen's ⋮ and from Saved's long
+-// press. Delete runs the caller's own step first (the Scan screen starts going back: Review Focus 4), then the delete,
+-// in the same press. A delete that fails says so in the snackbar, in place of failing unseen (ruling T19-2).
++// Design B §9.5: deleting a saved scan asks first, in the same words from the Scan screen's ⋮ and from See invoices'
++// long press. Delete runs the caller's own step first (the Scan screen starts going back: Review Focus 4), then the
++// delete, in the same press. A delete that fails says so in the snackbar, in place of failing unseen (ruling T19-2).
+ // Camera first (spec §6.4): any scan, saved or not, from a session screen's row or its Remove (confirmDeleteScan).
+ 
+ /** Asks before deleting a saved scan; on Delete, runs `before` (if given), then deletes it. */
+diff --git a/lib/format.ts b/lib/format.ts
+index 365047ae..e91784ef 100644
+--- a/lib/format.ts
++++ b/lib/format.ts
+@@ -19,20 +19,6 @@ export function formatClock(d: Date): string {
+ }
+ 
+ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+-const MONTH_NAMES = [
+-  'January',
+-  'February',
+-  'March',
+-  'April',
+-  'May',
+-  'June',
+-  'July',
+-  'August',
+-  'September',
+-  'October',
+-  'November',
+-  'December',
+-];
+ const thousands = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+ 
+ /**
+@@ -75,16 +61,6 @@ export function monthDay(isoDate: string): string {
+   return month && d ? `${month}\u00A0${d}` : '—';
+ }
+ 
+-/**
+- * A month as an ISO date's first 7 characters ("2026-11"), in full: "November 2026" (Saved's month sections); "—" for
+- * an empty or malformed one.
+- */
+-export function monthYear(ym: string): string {
+-  const [y, m] = ym.split('-').map(Number);
+-  const month = MONTH_NAMES[m - 1];
+-  return month && y ? `${month} ${y}` : '—';
+-}
+-
+ /** The months from one ISO date to another: "Oct–Dec 2026", "Oct 2026", "Dec 2025–Feb 2026". */
+ export function monthSpan(from: string, to: string): string {
+   const [fromYear, fromMonth] = from.split('-').map(Number);
+diff --git a/lib/navigation.ts b/lib/navigation.ts
+index a4957c6d..f656bc8b 100644
+--- a/lib/navigation.ts
++++ b/lib/navigation.ts
+@@ -2,8 +2,8 @@ import { type Href, useFocusEffect, useNavigation, useRouter } from 'expo-router
+ import { useCallback, useRef } from 'react';
+ 
+ // Going back, the one way every screen does it: the header's Back, a Retake that goes back (a sample, or a scan opened
+-// from Home or Saved), and a saved scan deleted from the Scan screen's ⋮ (Review Focus 4). And opening a screen or a
+-// tab from a press, once.
++// from a session or See invoices), and a saved scan deleted from the Scan screen's ⋮ (Review Focus 4). And opening a
++// screen or a tab from a press, once.
+ 
+ /**
+  * Back to the screen under this one, or the camera when there's none (rulings T24-1 and T6-2: the root Stack is
+diff --git a/lib/sale.ts b/lib/sale.ts
+index 3ac909ee..c2bbb3aa 100644
+--- a/lib/sale.ts
++++ b/lib/sale.ts
+@@ -128,10 +128,10 @@ export function isInvoice(scan: StoredScan): boolean {
+   return aligned && (form === 'sales_invoice' || form === 'service_invoice');
+ }
+ 
+-// One run of the checks per scan as it stands: Home's row, the scan's screen and Saved share it. The stores replace a
+-// scan or the lists when they change, so the same objects give the same answer. Of the settings, the checks read only
+-// whether the business is VAT-registered, so no other setting's change runs them again: not an account typed in
+-// Settings, nor a save's new defaults (the final review's Important 1).
++// One run of the checks per scan as it stands: a session's rows, the scan's screen and the saves share it. The stores
++// replace a scan or the lists when they change, so the same objects give the same answer. Of the settings, the checks
++// read only whether the business is VAT-registered, so no other setting's change runs them again: not an account typed
++// in Settings, nor a save's new defaults (the final review's Important 1).
+ const views = new WeakMap<StoredScan, { lists: Lists; vatRegistered: Settings['vatRegistered']; view: SaleView }>();
+ 
+ /** The sale of an invoice's scan (isInvoice): a 2307 never goes through a sale's checks. */
+diff --git a/lib/saved.ts b/lib/saved.ts
+index 83ac0c7c..bf980075 100644
+--- a/lib/saved.ts
++++ b/lib/saved.ts
+@@ -24,10 +24,10 @@ import {
+ import { annotationOn, type Settings, settings, updateSettings } from './settings';
+ import { cleanTag } from './training/codes';
+ 
+-// The saved scans, which Saved lists: the scans the person saved as a sale, a purchase or a 2307, each as import rows
+-// (an invoice's one row, a 2307's one per payment). A saved scan's folder moves from the scanner's scans/ (which keeps
+-// only its newest 20) to saved/<id>/, with the whole scan in scan.json; saved.json holds one summary per saved scan,
+-// with its rows and when it was exported: in an import file, and apart from that in the team's training export.
++// The saved scans, which See invoices lists: the scans the person saved as a sale, a purchase or a 2307, each as import
++// rows (an invoice's one row, a 2307's one per payment). A saved scan's folder moves from the scanner's scans/ (which
++// keeps only its newest 100) to saved/<id>/, with the whole scan in scan.json; saved.json holds one summary per saved
++// scan, with its rows and when it was exported: in an import file, and apart from that in the team's training export.
+ 
+ type SummaryBase = {
+   id: string;
+diff --git a/lib/scans.ts b/lib/scans.ts
+index 01f792e2..bd50bcd0 100644
+--- a/lib/scans.ts
++++ b/lib/scans.ts
+@@ -10,7 +10,8 @@ import { APP_VERSION, modelVersion } from './versions';
+ // the boxes they fixed (kept apart from the readings) or checked, the terms they picked, sale or purchase (a BIR 2307
+ // is always a 2307), the customer or supplier they chose, and whether they saved it (in annotation mode, with its
+ // source tag). Each scan's files live in its own folder (the scanner keeps the newest 100 folders too); the list is a
+-// JSON file in the app's documents. A saved scan opened from Saved is kept here too while the app runs.
++// JSON file in the app's documents. A saved scan opened again (from See invoices or a session) is kept here too while
++// the app runs.
+ 
+ /** How the scan came in. Not the result's own source, which is what the scanner read: a photo or a PDF. */
+ export type ScanSource = 'camera' | 'camera_app' | 'gallery' | 'sample' | 'pdf';
+@@ -84,7 +85,7 @@ export function withPdfFields(r: KeptResult): ScanResult {
+ export const KEEP = 100;
+ const FILE = 'recent.json';
+ let recent: readonly StoredScan[] = []; // replaced, never changed in place: screens subscribe to it
+-const opened = new Map<string, StoredScan>(); // saved scans opened from Saved
++const opened = new Map<string, StoredScan>(); // saved scans opened again
+ let counter = 0;
+ const listeners = new Set<() => void>();
+ let written: Promise<boolean> = Promise.resolve(true); // recent.json's latest write: whether it landed (scansWritten)
+@@ -214,7 +215,7 @@ export function confirmBox(id: string, box: string): void {
+   if (!confirmed.includes(box)) updateScan(id, { confirmed: [...confirmed, box] });
+ }
+ 
+-/** Keeps a saved scan opened from Saved, so its screen can find and change it. */
++/** Keeps a saved scan opened again, so its screen can find and change it. */
+ export function cacheScan(scan: StoredScan): void {
+   opened.set(scan.id, scan);
+   changed();
+diff --git a/lib/sessions.ts b/lib/sessions.ts
+index f56f903d..06dcd010 100644
+--- a/lib/sessions.ts
++++ b/lib/sessions.ts
+@@ -238,7 +238,7 @@ export function scanBadge(m: Member, state: ScanState | null, saved: SavedState)
+ }
+ 
+ /**
+- * Saved's row sub-line, in caps by its style: an invoice's kind, date and number ("Sale · Nov 22 · SI 5184138",
++ * A saved scan's row sub-line, in caps by its style: an invoice's kind, date and number ("Sale · Nov 22 · SI 5184138",
+  * "Purchase · Nov 18 · Inv 0007", or without the number when it has none); a 2307's quarter ("2307 · Q1 2026").
+  */
+ export function savedSub(s: SavedSummary): string {
+@@ -249,7 +249,7 @@ export function savedSub(s: SavedSummary): string {
+ }
+ 
+ /**
+- * A scan's sub-line on Sessions and the session screen (ruling P-F11): a saved scan's is Saved's (savedSub); an
++ * A scan's sub-line on Sessions and the session screen (ruling P-F11): a saved scan's is See invoices' (savedSub); an
+  * unsaved one's, its kind and number ("Sale · SI 0000186", "Purchase · Inv 0007", "2307 · Q4 2026"), with its time in
+  * place of a number it hasn't; a scan whose form wasn't found, its time alone.
+  */
+@@ -266,8 +266,8 @@ export function scanSub(m: SessionMember): string {
+ 
+ /**
+  * A scan's amount on Sessions' search and the session screen: an invoice's gross, a 2307's tax withheld. A saved scan's
+- * comes from its summary, so one edited since its save still shows the amount saved, as Saved does. A scan whose form
+- * wasn't found has none.
++ * comes from its summary, so one edited since its save still shows the amount saved, as See invoices does. A scan whose
++ * form wasn't found has none.
+  */
+ export function memberAmount(m: Member): number | null {
+   const s = m.summary;
