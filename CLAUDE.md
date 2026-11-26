@@ -126,7 +126,8 @@ Never `git add -A` without that list.
 - Task 13 is done and reviewed: the leftovers (the old `mybizmatescan://settings` link opens Profile; dead code and stale comments gone) and the README, which describes the app as it is now.
 - Task 14 is done: rebuilt and reinstalled on QA_Phone_API_37 with its data kept. The measurement chose **approach 1** (reads go on while the camera shoots: 7.19 form checks/s reading against 7.14 idle, and the user saw no stutter), so `READ_WHILE_SHOOTING` stays true. `npm run check:apk` wants NDK 28.2's `llvm-nm`; only 27.1 is installed, so it was run from a temporary copy pointed at 27.1.
 - Task 15 is done: every check of spec §7 passed on QA_Phone_API_37, recorded in README's "Checked on the emulator (camera first)"; the captures are outside git in `../.superpowers/brainstorm/camera-first-2026-11-24/`. `npm run test:core` also names NDK 28.2: run it from a temporary copy pointed at 27.1.
-- **The plan is complete** on `camera-first`. Merging into `master` waits for the user's word. Open for the user: react-navigation's dev-only "configured linking in multiple places" after a screen restart (README item 11).
+- **The plan is complete**, and `camera-first` is merged into `master` (2026-11-26, at the user's word). Open for the user: react-navigation's dev-only "configured linking in multiple places" after a screen restart (README item 11).
+- **After the plan (2026-11-26):** a new invoice starts as a sale or a purchase by itself: a purchase when its customer boxes name the business (Profile › Your business: its TIN, else its name; `lib/ownBusiness.ts`). "Everything is sent" no longer shows while a new party waits. An unanswered export question still stays on a return to the same file (T10-2, kept).
 - **QA emulator:** if its system server crashes, don't `adb emu kill` and quick-boot: that saves the broken state. Cold-boot with `-no-snapshot-load`; the app's data survives.
 
 **The user's answers for this plan:**

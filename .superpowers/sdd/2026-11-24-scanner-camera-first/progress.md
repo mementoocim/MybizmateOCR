@@ -275,3 +275,11 @@ Spec: C:/Users/Mico/Desktop/OCR with python model with machine learning/docs/202
 - Task 15 step 2: the data restored a last time (262 = 262; saved.json byte-for-byte), the emulator's settings checked back (font_scale 1.0, density 420, navigation_mode 2 with only the gestural overlay, show_ime_with_hard_keyboard 0), the pushed pictures gone, /tmp/scan-appdata.tar deleted. /data/local/tmp keeps test:core's scanner_tests, as every core run leaves it.
 - Task 15 step 3: README's "Checked on the emulator (camera first)" (11 items and Still open); index.md written beside the 38 captures. Gates: tsc, expo lint, eslint clean; jest 82 / 867 (one console.error on the first run, the known act() flake; clean on the re-run).
 - Task 15: complete. The plan's 15 tasks are done on camera-first. Merging into master and pushing wait for the user's word.
+
+## After the plan (2026-11-26)
+
+- At the user's ask ("add an automatic detection if its sales or if its purchases"; their pick: "Your TIN in Profile"): Profile › Your business gains its TIN and name (settings `ownTin`, `ownName`); `lib/ownBusiness.ts`'s `detectKind` starts a scan just read as a purchase when its customer boxes name the business (the TIN's 9 digits when both have them, else the name at wRatio ≥ 90), else a sale; a 2307 stays a 2307; decided once in `addScan`, the switch still changes it. Checked on QA_Phone_API_37 with samples: TIN set → inv_0007 a purchase; name only (Flores Grocery) → inv_0051 a purchase, inv_0007 a sale; both fields cleared after. Commit 996cb7fb, pushed at the user's word.
+- The user said "just do what you recommend" for the two Task 10 questions and the merge:
+  - "Everything is sent" no longer shows while a new party waits to be sent (export/index.tsx; exportTab test "a new party waiting").
+  - T10-2 stays as ruled: an unanswered question stays on a return to the same file (it asks about a file that really went out).
+  - camera-first merged into master (fast-forward, in place, no branch switch).
